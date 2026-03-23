@@ -72,10 +72,8 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
 ```json
 {
   "source_type": "image",
-  "metadata": {
-    "company": "字节跳动",  
-    "position": "Agent应用开发"
-  },
+  "company": "字节跳动",
+  "position": "Agent应用开发",
   "questions":[
     {
       "question_id": "md5(字节跳动+qlora优化显存)",
@@ -83,7 +81,7 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
       "question_type": "knowledge",
       "requires_async_answer": true,
       "core_entities":["qlora", "显存优化", "模型微调"],
-      "mastery_level": 0 
+      "mastery_level": 0
     },
     {
       "question_id": "md5(字节跳动+项目拷打)",
@@ -91,7 +89,7 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
       "question_type": "project",
       "requires_async_answer": false,
       "core_entities": ["项目经历"],
-      "mastery_level": 0 
+      "mastery_level": 0
     }
   ]
 }
@@ -107,6 +105,21 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
 ### 3.3 存储底层设计 (Qdrant Schema)
 * **Embedding 策略**：Context Enrichment。将 `"公司：字节跳动 | 岗位：Agent应用开发 | 题目：qlora怎么优化显存？"` 作为整体计算向量，防止特征稀释。
 * **Payload 索引**：为 `company`, `mastery_level`, `question_type` 建立标量索引，支撑百万级数据下的毫秒级混合检索（Hybrid Search）。
+
+**Qdrant Payload 结构：**
+```json
+{
+  "question_id": "md5哈希值",
+  "question_text": "qlora怎么优化显存？",
+  "company": "字节跳动",
+  "position": "Agent应用开发",
+  "mastery_level": 0,
+  "question_type": "knowledge",
+  "core_entities": ["qlora", "显存优化"],
+  "question_answer": "生成的答案内容",
+  "created_at": "2024-01-01T00:00:00"
+}
+```
 
 ---
 

@@ -46,11 +46,11 @@ class Settings(BaseSettings):
     )
     openai_base_url: str = Field(
         description="OpenAI API Base URL",
-        default="https://api.openai.com/v1",
+        default="https://api.deepseek.com",
     )
     openai_model: str = Field(
         description="使用的模型名称",
-        default="gpt-4o",
+        default="deepseek-chat",
     )
 
     # Qdrant 配置

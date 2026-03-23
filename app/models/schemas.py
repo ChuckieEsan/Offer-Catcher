@@ -1,5 +1,6 @@
 """核心数据模型定义模块"""
 
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -65,8 +66,11 @@ class QdrantQuestionPayload(BaseModel):
     core_entities: list[str] = Field(
         default_factory=list, description="知识点实体列表"
     )
-    async_answer: Optional[str] = Field(
-        default=None, description="异步生成的标准答案"
+    question_answer: Optional[str] = Field(
+        default=None, description="生成的标准答案"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now, description="创建时间戳"
     )
 
 
@@ -93,8 +97,8 @@ class SearchResult(BaseModel):
     position: str = Field(description="岗位名称")
     mastery_level: int = Field(description="熟练度等级")
     question_type: str = Field(description="题目类型")
-    async_answer: Optional[str] = Field(
-        default=None, description="异步生成的标准答案"
+    question_answer: Optional[str] = Field(
+        default=None, description="生成的标准答案"
     )
     score: float = Field(description="相似度分数")
 

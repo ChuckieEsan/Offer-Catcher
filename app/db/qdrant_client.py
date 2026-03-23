@@ -183,7 +183,7 @@ class QdrantManager:
         question_type: str = "knowledge",
         mastery_level: int = 0,
         core_entities: Optional[list[str]] = None,
-        async_answer: Optional[str] = None,
+        question_answer: Optional[str] = None,
     ) -> bool:
         """单条 Upsert（支持自动生成 question_id）
 
@@ -197,7 +197,7 @@ class QdrantManager:
             question_type: 题目类型
             mastery_level: 熟练度等级
             core_entities: 知识点实体列表
-            async_answer: 异步生成的答案
+            question_answer: 生成的标准答案
 
         Returns:
             是否成功
@@ -212,7 +212,7 @@ class QdrantManager:
             mastery_level=mastery_level,
             question_type=question_type,
             core_entities=core_entities or [],
-            async_answer=async_answer,
+            question_answer=question_answer,
         )
 
         return self.upsert_questions(questions=[payload], vectors=[vector])
@@ -309,7 +309,7 @@ class QdrantManager:
                         position=payload.get("position", ""),
                         mastery_level=payload.get("mastery_level", 0),
                         question_type=payload.get("question_type", ""),
-                        async_answer=payload.get("async_answer"),
+                        question_answer=payload.get("question_answer"),
                         score=r.score,
                     )
                 )
