@@ -87,22 +87,22 @@ class QdrantManager:
                 self.client.create_payload_index(
                     collection_name=collection_name,
                     field_name="company",
-                    field_type=models.PayloadFieldType.KEYWORD,
+                    field_schema=models.KeywordIndexType.KEYWORD,
                 )
                 self.client.create_payload_index(
                     collection_name=collection_name,
                     field_name="position",
-                    field_type=models.PayloadFieldType.KEYWORD,
+                    field_schema=models.KeywordIndexType.KEYWORD,
                 )
                 self.client.create_payload_index(
                     collection_name=collection_name,
                     field_name="question_type",
-                    field_type=models.PayloadFieldType.KEYWORD,
+                    field_schema=models.KeywordIndexType.KEYWORD,
                 )
                 self.client.create_payload_index(
                     collection_name=collection_name,
                     field_name="mastery_level",
-                    field_type=models.PayloadFieldType.INTEGER,
+                    field_schema=models.IntegerIndexType.INTEGER,
                 )
 
                 logger.info(
@@ -287,9 +287,9 @@ class QdrantManager:
                 exact=False,
             )
 
-            results = self.client.search(
+            results = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 query_filter=query_filter,
                 limit=limit,
                 score_threshold=score_threshold,
@@ -299,7 +299,7 @@ class QdrantManager:
 
             # 转换结果
             search_results = []
-            for r in results:
+            for r in results.points:
                 payload = r.payload
                 search_results.append(
                     SearchResult(
@@ -407,10 +407,10 @@ class QdrantManager:
         try:
             info = self.client.get_collection(collection_name=collection_name)
             return {
-                "name": info.name,
-                "vectors_count": info.vectors_count,
+                "name": collection_name,
+                "vectors_count": info.indexed_vectors_count,
                 "points_count": info.points_count,
-                "status": info.status.name,
+                "status": info.status.name if info.status else None,
             }
         except Exception as e:
             logger.error(f"Failed to get collection info: {e}")
