@@ -1,7 +1,7 @@
 """核心数据模型定义模块"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,9 @@ class QuestionItem(BaseModel):
     )
     company: str = Field(description="公司名称")
     position: str = Field(description="岗位名称")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="题目元数据，如面试轮次、来源页码等"
+    )
 
 
 class ExtractedInterview(BaseModel):
@@ -75,6 +78,9 @@ class QdrantQuestionPayload(BaseModel):
     )
     created_at: datetime = Field(
         default_factory=datetime.now, description="创建时间戳"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="题目元数据"
     )
 
 

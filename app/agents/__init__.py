@@ -1,3 +1,8 @@
 """智能体定义层"""
 
-__all__ = []
+from app.agents.vision_extractor import VisionExtractor, get_vision_extractor
+
+__all__ = [
+    "VisionExtractor",
+    "get_vision_extractor",
+]
