@@ -13,6 +13,7 @@
 4. **防御性编程**：在调用 LLM API、Qdrant 数据库和 RabbitMQ 时，必须包含 `try-except` 块，并在合适的地方（如 RabbitMQ Consumer）正确处理 `Nack` 或失败重试逻辑。
 5. **小步快跑（当前阶段限制）**：本项目采用敏捷开发。**目前处于 Phase 1（核心数据流与异步答题阶段）**，请不要过度设计或提前实现 Phase 2 的内容（如图数据库 Neo4j 的连接、打分 Agent 的状态流转）。
 6. **不要在业务代码中使用 Emoji 字符**。在开发 streamlit 前端时，可以适当使用 Emoji。
+7. **软件开发设计应当符合 Langchain/LangGraph 的最佳实践**，你需要尽可能少的重复造轮子，尽可能复用 Langchain 已有的组件
 
 ---
 

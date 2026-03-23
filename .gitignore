@@ -12,3 +12,6 @@ wheels/
 
 # 环境变量配置
 .env
+
+# models
+models/
