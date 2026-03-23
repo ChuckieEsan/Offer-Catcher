@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         description="使用的模型名称",
         default="deepseek-chat",
     )
+    openai_embedding_model: str = Field(
+        description="Embedding 模型名称",
+        default="text-embedding-3-small",
+    )
 
     # Qdrant 配置
     qdrant_host: str = Field(
@@ -67,8 +71,8 @@ class Settings(BaseSettings):
         default="questions",
     )
     qdrant_vector_size: int = Field(
-        description="向量维度（text-embedding-3-small 为 1536）",
-        default=1536,
+        description="向量维度（BGE-M3 为 1024）",
+        default=1024,
     )
 
     # RabbitMQ 配置
