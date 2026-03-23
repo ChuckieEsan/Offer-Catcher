@@ -12,6 +12,7 @@
 3. **日志优先**：禁止使用标准的 `print()` 函数打印业务流。请使用 `app/utils/logger.py`（或 `logging` 模块）进行日志记录，以便后续在生产环境和排查 MQ 消费时追踪。
 4. **防御性编程**：在调用 LLM API、Qdrant 数据库和 RabbitMQ 时，必须包含 `try-except` 块，并在合适的地方（如 RabbitMQ Consumer）正确处理 `Nack` 或失败重试逻辑。
 5. **小步快跑（当前阶段限制）**：本项目采用敏捷开发。**目前处于 Phase 1（核心数据流与异步答题阶段）**，请不要过度设计或提前实现 Phase 2 的内容（如图数据库 Neo4j 的连接、打分 Agent 的状态流转）。
+6. **不要在业务代码中使用 Emoji 字符**。在开发 streamlit 前端时，可以适当使用 Emoji。
 
 ---
 
