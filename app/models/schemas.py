@@ -18,6 +18,8 @@ class QuestionItem(BaseModel):
         requires_async_answer: 是否需要异步生成答案（仅 knowledge 类型为 True）
         core_entities: 考察的知识点实体列表
         mastery_level: 熟练度等级，默认为 0（未掌握）
+        company: 公司名称（从 ExtractedInterview 继承）
+        position: 岗位名称（从 ExtractedInterview 继承）
     """
 
     question_id: str = Field(description="题目唯一标识，MD5哈希值")
@@ -32,6 +34,8 @@ class QuestionItem(BaseModel):
     mastery_level: MasteryLevel = Field(
         default=MasteryLevel.LEVEL_0, description="熟练度等级"
     )
+    company: str = Field(description="公司名称")
+    position: str = Field(description="岗位名称")
 
 
 class ExtractedInterview(BaseModel):

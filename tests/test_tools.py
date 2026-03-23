@@ -18,8 +18,8 @@ class TestEmbeddingTool:
         """测试 Embedding 工具初始化"""
         tool = EmbeddingTool()
         assert tool is not None
-        assert tool.model is not None
-        print(f"Embedding model: {tool.model}")
+        assert tool.embedding_dimension == 1024
+        print(f"Embedding dimension: {tool.embedding_dimension}")
 
     def test_embed_single_text(self):
         """测试单条文本向量化"""

@@ -1,43 +1,103 @@
 """向量检索工具模块
 
-封装 QdrantManager，提供更便捷的向量检索接口。
-支持直接输入文本自动 embedding 后检索，以及带过滤条件的检索。
+使用 LangChain 的 QdrantVectorStore 进行向量检索。
+复用 LangChain 已有组件，避免重复造轮子。
+
+注意：过滤功能采用检索后内存过滤，避免 Qdrant filter 格式问题。
 """
 
-from typing import Optional
+from typing import Optional, List
 
-from app.db.qdrant_client import get_qdrant_manager, QdrantManager
-from app.models.schemas import SearchFilter, SearchResult
-from app.tools.embedding import get_embedding_tool, EmbeddingTool
+from langchain_core.documents import Document
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+
+from app.config.settings import get_settings
+from app.models.schemas import SearchResult
+from app.tools.embedding import get_embedding_tool
 from app.utils.logger import logger
 
 
 class VectorSearchTool:
     """向量检索工具
 
-    封装 QdrantManager，提供更便捷的检索接口。
+    使用 LangChain 的 QdrantVectorStore，提供向量检索功能。
     支持直接输入文本自动 embedding 后检索。
-
-    核心功能：
-    - 直接输入文本检索（自动 embedding）
-    - 带过滤条件的检索
-    - 支持按公司、岗位、熟练度、题目类型过滤
+    过滤功能采用检索后内存过滤。
     """
 
-    def __init__(
+    def __init__(self) -> None:
+        """初始化向量检索工具"""
+        self.settings = get_settings()
+        self.embedding_tool = get_embedding_tool()
+        self._vectorstore: Optional[QdrantVectorStore] = None
+        logger.info("Vector search tool initialized")
+
+    @property
+    def vectorstore(self) -> QdrantVectorStore:
+        """获取 QdrantVectorStore 实例（延迟加载）"""
+        if self._vectorstore is None:
+            client = QdrantClient(url=self.settings.qdrant_url)
+            self._vectorstore = QdrantVectorStore(
+                client=client,
+                collection_name=self.settings.qdrant_collection,
+                embedding=self.embedding_tool.embeddings,
+            )
+            logger.info(
+                f"QdrantVectorStore initialized: collection={self.settings.qdrant_collection}"
+            )
+        return self._vectorstore
+
+    def _filter_results(
         self,
-        embedding_tool: Optional[EmbeddingTool] = None,
-        qdrant_manager: Optional[QdrantManager] = None,
-    ) -> None:
-        """初始化向量检索工具
+        docs: List[Document],
+        company: Optional[str] = None,
+        position: Optional[str] = None,
+        mastery_level: Optional[int] = None,
+        question_type: Optional[str] = None,
+    ) -> List[Document]:
+        """内存过滤结果
 
         Args:
-            embedding_tool: Embedding 工具实例，默认使用全局单例
-            qdrant_manager: Qdrant 管理器实例，默认使用全局单例
+            docs: 检索到的文档列表
+            company: 公司名称过滤
+            position: 岗位名称过滤
+            mastery_level: 熟练度等级过滤
+            question_type: 题目类型过滤
+
+        Returns:
+            过滤后的文档列表
         """
-        self.embedding_tool = embedding_tool or get_embedding_tool()
-        self.qdrant_manager = qdrant_manager or get_qdrant_manager()
-        logger.info("Vector search tool initialized")
+        filtered = []
+        for doc in docs:
+            metadata = doc.metadata
+
+            if company and metadata.get("company") != company:
+                continue
+            if position and metadata.get("position") != position:
+                continue
+            if mastery_level is not None and metadata.get("mastery_level") != mastery_level:
+                continue
+            if question_type and metadata.get("question_type") != question_type:
+                continue
+
+            filtered.append(doc)
+
+        return filtered
+
+    def _convert_to_search_result(self, doc: Document, score: float = 0.0) -> SearchResult:
+        """转换为 SearchResult"""
+        metadata = doc.metadata
+        return SearchResult(
+            question_id=metadata.get("question_id", ""),
+            question_text=metadata.get("question_text", ""),
+            company=metadata.get("company", ""),
+            position=metadata.get("position", ""),
+            mastery_level=metadata.get("mastery_level", 0),
+            question_type=metadata.get("question_type", ""),
+            question_answer=None,
+            score=score,
+        )
 
     def search_similar(
         self,
@@ -48,10 +108,11 @@ class VectorSearchTool:
         mastery_level: Optional[int] = None,
         top_k: int = 10,
         score_threshold: Optional[float] = None,
-    ) -> list[SearchResult]:
+    ) -> List[SearchResult]:
         """相似度检索（带过滤条件）
 
         支持直接输入文本，自动 embedding 后检索。
+        过滤采用检索后内存过滤。
 
         Args:
             query: 查询文本
@@ -65,138 +126,80 @@ class VectorSearchTool:
         Returns:
             检索结果列表
         """
-        # 1. 将查询文本向量化
-        query_vector = self.embedding_tool.embed_text(query)
-        logger.debug(f"Query embedded: {len(query_vector)} dims")
+        # 获取更多结果用于过滤
+        search_k = top_k * 2 if any([company, position, mastery_level, question_type]) else top_k
 
-        # 2. 构建过滤条件
-        filters = None
-        if any([company, position, question_type, mastery_level is not None]):
-            filters = SearchFilter(
-                company=company,
-                position=position,
-                question_type=question_type,
-                mastery_level=mastery_level,
-            )
+        # 构建搜索参数（暂不支持 score_threshold）
+        search_kwargs = {"k": search_k}
 
-        # 3. 执行检索
-        results = self.qdrant_manager.search(
-            query_vector=query_vector,
-            filter_conditions=filters,
-            limit=top_k,
-            score_threshold=score_threshold,
+        # 获取 retriever 并搜索
+        retriever = self.vectorstore.as_retriever(
+            search_kwargs=search_kwargs
         )
+        docs = retriever.invoke(query)
+
+        # 内存过滤
+        if any([company, position, mastery_level, question_type]):
+            docs = self._filter_results(
+                docs, company, position, mastery_level, question_type
+            )
+            docs = docs[:top_k]
 
         logger.info(
             f"Search completed: query='{query[:30]}...', "
-            f"filters={filters}, results={len(results)}"
+            f"results={len(docs)}"
         )
-        return results
 
-    def search_by_company(
+        return [self._convert_to_search_result(doc) for doc in docs]
+
+    def similarity_search_with_score(
         self,
         query: str,
-        company: str,
-        top_k: int = 10,
-    ) -> list[SearchResult]:
-        """按公司检索
-
-        简化接口，专注按公司过滤的场景。
-
-        Args:
-            query: 查询文本
-            company: 公司名称
-            top_k: 返回结果数量
-
-        Returns:
-            检索结果列表
-        """
-        return self.search_similar(
-            query=query,
-            company=company,
-            top_k=top_k,
-        )
-
-    def search_by_position(
-        self,
-        query: str,
-        position: str,
-        top_k: int = 10,
-    ) -> list[SearchResult]:
-        """按岗位检索
-
-        简化接口，专注按岗位过滤的场景。
-
-        Args:
-            query: 查询文本
-            position: 岗位名称
-            top_k: 返回结果数量
-
-        Returns:
-            检索结果列表
-        """
-        return self.search_similar(
-            query=query,
-            position=position,
-            top_k=top_k,
-        )
-
-    def search_by_mastery_level(
-        self,
-        query: str,
-        mastery_level: int,
-        top_k: int = 10,
-    ) -> list[SearchResult]:
-        """按熟练度等级检索
-
-        简化接口，专注按熟练度过滤的场景。
-        用于获取用户未掌握或需要复习的题目。
-
-        Args:
-            query: 查询文本
-            mastery_level: 熟练度等级（0/1/2）
-            top_k: 返回结果数量
-
-        Returns:
-            检索结果列表
-        """
-        return self.search_similar(
-            query=query,
-            mastery_level=mastery_level,
-            top_k=top_k,
-        )
-
-    def get_questions_by_company(
-        self,
-        company: str,
-        question_type: Optional[str] = None,
+        company: Optional[str] = None,
+        position: Optional[str] = None,
         mastery_level: Optional[int] = None,
-        limit: int = 100,
-    ) -> list[SearchResult]:
-        """获取指定公司的题目列表
-
-        不需要向量化，直接按条件过滤获取题目列表。
+        question_type: Optional[str] = None,
+        k: int = 10,
+    ) -> List[SearchResult]:
+        """带分数的相似度搜索
 
         Args:
-            company: 公司名称
-            question_type: 题目类型过滤（可选）
-            mastery_level: 熟练度等级过滤（可选）
-            limit: 返回结果数量
+            query: 查询文本
+            company: 公司名称过滤
+            position: 岗位名称过滤
+            mastery_level: 熟练度等级过滤
+            question_type: 题目类型过滤
+            k: 返回结果数量
 
         Returns:
-            检索结果列表
+            检索结果列表（包含分数）
         """
-        # 使用一个通用查询向量（全零向量）配合过滤条件
-        # 实际上更好的方式是添加一个不存在的 question_id 来触发过滤
-        # 但这里我们简化为使用文本搜索
+        search_k = k * 2 if any([company, position, mastery_level, question_type]) else k
 
-        # 构造一个会匹配所有结果的查询
-        results = self.search_similar(
-            query="*",  # 通用查询
-            company=company,
-            question_type=question_type,
-            mastery_level=mastery_level,
-            top_k=limit,
+        docs_and_scores = self.vectorstore.similarity_search_with_score(
+            query=query,
+            k=search_k,
+        )
+
+        # 转换为结果
+        results = []
+        for doc, score in docs_and_scores:
+            results.append(self._convert_to_search_result(doc, float(score)))
+
+        # 内存过滤
+        if any([company, position, mastery_level, question_type]):
+            results = [
+                r for r in results
+                if (not company or r.company == company)
+                and (not position or r.position == position)
+                and (mastery_level is None or r.mastery_level == mastery_level)
+                and (not question_type or r.question_type == question_type)
+            ]
+            results = results[:k]
+
+        logger.info(
+            f"Similarity search completed: query='{query[:30]}...', "
+            f"results={len(results)}"
         )
 
         return results
@@ -216,3 +219,11 @@ def get_vector_search_tool() -> VectorSearchTool:
     if _vector_search_tool is None:
         _vector_search_tool = VectorSearchTool()
     return _vector_search_tool
+
+
+# 导出 LangChain 组件
+__all__ = [
+    "VectorSearchTool",
+    "get_vector_search_tool",
+    "QdrantVectorStore",
+]
