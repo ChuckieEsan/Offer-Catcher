@@ -84,11 +84,11 @@ class VisionExtractor:
     使用 LangChain 的 with_structured_output 自动解析 JSON。
     """
 
-    def __init__(self, provider: str = "siliconflow", use_structured_output: bool = True):
+    def __init__(self, provider: str = "dashscope", use_structured_output: bool = True):
         """初始化 Vision Extractor
 
         Args:
-            provider: LLM Provider 名称，默认 siliconflow
+            provider: LLM Provider 名称
             use_structured_output: 是否使用 structured output，默认 True
                                  如果模型不支持会自动回退
         """
@@ -103,7 +103,11 @@ class VisionExtractor:
     def base_llm(self):
         """获取基础 LLM"""
         if self._base_llm is None:
-            self._base_llm = create_llm(self.provider, "vision")
+            extra_kwargs = {}
+            if self.provider == "dashscope":
+                extra_kwargs["extra_body"] = {"enable_thinking": False}
+
+            self._base_llm = create_llm(self.provider, "vision", **extra_kwargs)
         return self._base_llm
 
     @property

@@ -20,17 +20,17 @@ class TestVisionExtractor:
 
     def test_vision_extractor_initialization(self):
         """测试 Vision Extractor 初始化"""
-        extractor = VisionExtractor(provider="siliconflow", use_structured_output=True)
+        extractor = VisionExtractor(provider="dashscope", use_structured_output=True)
         assert extractor is not None
-        assert extractor.provider == "siliconflow"
+        assert extractor.provider == "dashscope"
         assert extractor.use_structured_output is True
         print(f"VisionExtractor initialized with provider: {extractor.provider}")
 
     def test_vision_extractor_default_provider(self):
         """测试默认 provider"""
         extractor = VisionExtractor()
-        assert extractor.provider == "siliconflow"
-        print("Default provider is siliconflow")
+        assert extractor.provider == "dashscope"
+        print("Default provider is dashscope")
 
     def test_vision_extractor_without_structured_output(self):
         """测试不使用 structured output"""
@@ -40,8 +40,8 @@ class TestVisionExtractor:
 
     def test_get_vision_extractor_singleton(self):
         """测试单例获取"""
-        extractor1 = get_vision_extractor(provider="siliconflow")
-        extractor2 = get_vision_extractor(provider="siliconflow")
+        extractor1 = get_vision_extractor(provider="dashscope")
+        extractor2 = get_vision_extractor(provider="dashscope")
         assert extractor1 is extractor2
         print("Singleton pattern verified")
 
@@ -82,7 +82,7 @@ class TestExtractFromText:
     @pytest.fixture
     def extractor(self):
         """创建 Extractor 实例"""
-        return VisionExtractor(provider="siliconflow", use_structured_output=True)
+        return VisionExtractor(provider="dashscope", use_structured_output=True)
 
     def test_extract_simple_text(self, extractor):
         """测试简单文本提取"""
@@ -169,7 +169,7 @@ class TestExtractFromImage:
     @pytest.fixture
     def extractor(self):
         """创建 Extractor 实例"""
-        return VisionExtractor(provider="siliconflow", use_structured_output=True)
+        return VisionExtractor(provider="dashscope", use_structured_output=True)
 
     def test_extract_from_image_url(self, extractor):
         """测试从图片 URL 提取"""

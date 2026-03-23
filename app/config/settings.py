@@ -18,7 +18,7 @@ PROVIDERS_CONFIG = {
         "base_url": "https://api.siliconflow.cn/v1",
         "models": {
             "chat": "deepseek-chat",
-            "vision": "Qwen/Qwen2-VL-72B-Instruct",
+            "vision": "Qwen/Qwen3-VL-8B-Instruct",
         }
     },
     "openai": {
@@ -32,6 +32,13 @@ PROVIDERS_CONFIG = {
         "base_url": "https://api.deepseek.com",
         "models": {
             "chat": "deepseek-chat",
+        }
+    },
+    "dashscope": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": {
+            "chat": "qwen3.5-plus",
+            "vision": "qwen3.5-plus",
         }
     },
 }
@@ -75,6 +82,10 @@ class Settings(BaseSettings):
     )
     deepseek_api_key: str = Field(
         description="DeepSeek API Key",
+        default="",
+    )
+    dashscope_api_key: str = Field(
+        description="阿里云百炼 DashScope API Key",
         default="",
     )
 
