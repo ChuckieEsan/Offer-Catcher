@@ -14,8 +14,8 @@ class QuestionItem(BaseModel):
     Attributes:
         question_id: 题目唯一标识，由 MD5(company + question_text) 生成
         question_text: 题目文本内容
-        question_type: 题目类型（knowledge/project/behavioral）
-        requires_async_answer: 是否需要异步生成答案（仅 knowledge 类型为 True）
+        question_type: 题目类型（knowledge/project/behavioral/scenario）
+        requires_async_answer: 是否需要异步生成答案（knowledge/scenario 类型为 True）
         core_entities: 考察的知识点实体列表
         mastery_level: 熟练度等级，默认为 0（未掌握）
         company: 公司名称（从 ExtractedInterview 继承）
@@ -107,6 +107,12 @@ class SearchResult(BaseModel):
     position: str = Field(description="岗位名称")
     mastery_level: int = Field(description="熟练度等级")
     question_type: str = Field(description="题目类型")
+    core_entities: list[str] = Field(
+        default_factory=list, description="知识点实体列表"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="题目元数据"
+    )
     question_answer: Optional[str] = Field(
         default=None, description="生成的标准答案"
     )

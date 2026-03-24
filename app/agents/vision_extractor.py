@@ -30,7 +30,7 @@ PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_extractor.md"
 class ExtractedQuestion(BaseModel):
     """提取的单个题目"""
     question_text: str = Field(description="题目文本内容")
-    question_type: str = Field(description="题目类型: knowledge/project/behavioral")
+    question_type: str = Field(description="题目类型: knowledge/project/behavioral/scenario")
     core_entities: list[str] = Field(
         default_factory=list,
         description="考察的知识点实体列表"
@@ -172,6 +172,8 @@ class VisionExtractor:
                 question_type = QuestionType.PROJECT
             elif q.question_type == "behavioral":
                 question_type = QuestionType.BEHAVIORAL
+            elif q.question_type == "scenario":
+                question_type = QuestionType.SCENARIO
             else:
                 question_type = QuestionType.KNOWLEDGE
 
@@ -182,7 +184,7 @@ class VisionExtractor:
                 question_id=question_id,
                 question_text=q.question_text,
                 question_type=question_type,
-                requires_async_answer=(question_type == QuestionType.KNOWLEDGE),
+                requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO)),
                 core_entities=q.core_entities,
                 mastery_level=MasteryLevel.LEVEL_0,
                 company=schema.company,

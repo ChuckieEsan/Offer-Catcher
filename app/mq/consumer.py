@@ -1,17 +1,33 @@
 """RabbitMQ 消息消费者模块
 
 提供消息消费功能，用于后台 Worker 消费队列中的任务并生成答案。
+支持熔断与降级机制（使用 aiobreaker）：
+- 熔断：连续失败达到阈值后暂停消费
+- 降级：失败消息重新入队到队尾
 """
 
+from datetime import datetime, timedelta
 from typing import Callable, Optional
 import json
+import time
 
+import aiobreaker
+from aiobreaker.state import CircuitOpenState
 import pika
+from pika import BlockingConnection
+from pika.channel import Channel
 from pika.exceptions import AMQPConnectionError, AMQPChannelError
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
 from app.utils.logger import logger
+
+
+# 创建全局熔断器实例
+_message_circuit_breaker = aiobreaker.CircuitBreaker(
+    fail_max=5,  # 连续失败次数达到 5 次后触发熔断
+    timeout_duration=timedelta(seconds=30),  # 30 秒后尝试恢复
+)
 
 
 class RabbitMQConsumer:
@@ -23,9 +39,13 @@ class RabbitMQConsumer:
     - 支持手动 ACK/Nack
     - 可设置 prefetch_count 控制并发
     - 连接管理
+    - 熔断与降级机制（基于 aiobreaker）
     """
 
-    def __init__(self, prefetch_count: int = 1) -> None:
+    def __init__(
+        self,
+        prefetch_count: int = 1,
+    ) -> None:
         """初始化消费者
 
         Args:
@@ -33,9 +53,15 @@ class RabbitMQConsumer:
         """
         self.settings = get_settings()
         self.prefetch_count = prefetch_count
-        self._connection: Optional[pika.BlockingConnection] = None
-        self._channel: Optional[pika.channel.Channel] = None
+        self._connection: Optional[BlockingConnection] = None
+        self._channel: Optional[Channel] = None
         self._consuming = False
+        # 引用全局熔断器
+        self.circuit_breaker = _message_circuit_breaker
+        # 记录熔断打开的时间（用于恢复检查）
+        self._circuit_open_time: Optional[float] = None
+        # 恢复超时时间（秒）
+        self._recovery_timeout = 30
 
     def connect(self) -> bool:
         """建立与 RabbitMQ 的连接
@@ -64,6 +90,12 @@ class RabbitMQConsumer:
             self._channel.queue_declare(
                 queue=self.settings.rabbitmq_queue,
                 durable=True,  # 队列持久化
+            )
+
+            # 声明死信队列
+            self._channel.queue_declare(
+                queue=self.settings.rabbitmq_dlq,
+                durable=True,
             )
 
             # 设置 QoS（预取数量）
@@ -118,6 +150,76 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"Failed to reject message: {e}")
 
+    def republish_to_back(self, body: bytes, question_id: str, retry_count: int = 0) -> bool:
+        """降级处理：将消息重新发布到队尾，或发送到死信队列
+
+        Args:
+            body: 消息体
+            question_id: 题目ID，用于日志
+            retry_count: 当前重试次数
+
+        Returns:
+            是否发布成功
+        """
+        self._ensure_connected()
+
+        # 检查是否超过最大重试次数
+        if retry_count >= self.settings.rabbitmq_max_retries:
+            # 发送到死信队列
+            return self._send_to_dlq(body, question_id)
+
+        # 发送到队尾
+        new_retry_count = retry_count + 1
+        try:
+            self._channel.basic_publish(
+                exchange="",
+                routing_key=self.settings.rabbitmq_queue,
+                body=body,
+                properties=pika.BasicProperties(
+                    delivery_mode=2,  # 消息持久化
+                    content_type="application/json",
+                    headers={"x-retry-count": new_retry_count},
+                ),
+            )
+            logger.info(
+                f"Message republished to back of queue: question_id={question_id}, "
+                f"retry={new_retry_count}/{self.settings.rabbitmq_max_retries}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to republish message: {e}")
+            return False
+
+    def _send_to_dlq(self, body: bytes, question_id: str) -> bool:
+        """发送到死信队列
+
+        Args:
+            body: 消息体
+            question_id: 题目ID，用于日志
+
+        Returns:
+            是否发送成功
+        """
+        self._ensure_connected()
+        try:
+            self._channel.basic_publish(
+                exchange="",
+                routing_key=self.settings.rabbitmq_dlq,
+                body=body,
+                properties=pika.BasicProperties(
+                    delivery_mode=2,  # 消息持久化
+                    content_type="application/json",
+                    headers={"x-dead-letter": True},
+                ),
+            )
+            logger.warning(
+                f"Message sent to DLQ (max retries exceeded): question_id={question_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send message to DLQ: {e}")
+            return False
+
     def _on_message(
         self,
         channel: pika.channel.Channel,
@@ -128,6 +230,12 @@ class RabbitMQConsumer:
     ) -> None:
         """消息回调处理
 
+        集成熔断与降级机制：
+        - 成功处理后重置熔断计数器
+        - 失败处理后记录失败次数
+        - 消息格式错误直接丢弃
+        - 业务异常使用降级处理（重新发布到队尾）
+
         Args:
             channel: 通道
             method: 传递方法
@@ -135,36 +243,57 @@ class RabbitMQConsumer:
             body: 消息体
             callback: 业务处理回调函数
         """
+        question_id = "unknown"
+        # 从消息头获取重试次数
+        retry_count = 0
+        if properties.headers and "x-retry-count" in properties.headers:
+            retry_count = properties.headers["x-retry-count"]
+
         try:
             # 解析消息
             task = MQTaskMessage.model_validate_json(body)
+            question_id = task.question_id
             logger.info(
                 f"Received task: question_id={task.question_id}, "
-                f"company={task.company}, position={task.position}"
+                f"company={task.company}, position={task.position}, retry={retry_count}"
             )
 
             # 调用业务处理函数
             success = callback(task)
 
-            # 根据处理结果进行 ACK 或 Nack
+            # 根据处理结果进行 ACK 或降级处理
             if success:
                 self.acknowledge(method.delivery_tag)
+                self.circuit_breaker.close()  # 成功则关闭熔断器
+                logger.debug(f"Task processed successfully: question_id={question_id}")
             else:
-                # 处理失败，重新入队
-                self.reject(method.delivery_tag, requeue=True)
+                # 业务返回失败，记录失败次数并降级处理
+                self.circuit_breaker.open()  # 打开熔断器
+                self._circuit_open_time = time.time()  # 记录打开时间
+                # 先确认原消息
+                self.acknowledge(method.delivery_tag)
+                # 降级：重新发布到队尾（带重试次数）
+                self.republish_to_back(body, question_id, retry_count)
                 logger.warning(
-                    f"Task processing failed, requeued: question_id={task.question_id}"
+                    f"Task processing failed, degraded: question_id={question_id}"
                 )
 
         except json.JSONDecodeError as e:
-            # 消息格式错误，不再重新入队
-            logger.error(f"Invalid message format: {e}")
-            self.reject(method.delivery_tag, requeue=False)
+            # 消息格式错误，不再重新入队，直接丢弃
+            logger.error(f"Invalid message format: {e}, message discarded")
+            self.acknowledge(method.delivery_tag)
 
         except Exception as e:
-            # 其他异常，重新入队
+            # 其他异常，记录失败并降级处理
+            self.circuit_breaker.open()  # 打开熔断器
             logger.error(f"Error processing message: {e}")
-            self.reject(method.delivery_tag, requeue=True)
+            # 先确认原消息
+            self.acknowledge(method.delivery_tag)
+            # 降级：重新发布到队尾（带重试次数）
+            self.republish_to_back(body, question_id, retry_count)
+            logger.warning(
+                f"Message error, degraded: question_id={question_id}"
+            )
 
     def consume(
         self,
@@ -172,6 +301,8 @@ class RabbitMQConsumer:
         auto_reconnect: bool = True,
     ) -> None:
         """启动消费循环
+
+        支持熔断机制：在连续失败达到阈值后暂停消费。
 
         Args:
             callback: 业务处理回调函数，接收 MQTaskMessage，返回是否处理成功
@@ -194,6 +325,31 @@ class RabbitMQConsumer:
         try:
             # 开始消费
             while self._consuming:
+                # 检查熔断状态
+                if isinstance(self.circuit_breaker.state, CircuitOpenState):
+                    # 检查是否超过恢复时间
+                    if self._circuit_open_time is not None:
+                        elapsed = time.time() - self._circuit_open_time
+                        if elapsed >= self._recovery_timeout:
+                            # 尝试恢复
+                            self.circuit_breaker.close()
+                            self._circuit_open_time = None
+                            logger.info("Circuit breaker recovered after timeout")
+                        else:
+                            remaining = int(self._recovery_timeout - elapsed)
+                            logger.warning(
+                                f"Circuit breaker is open, pausing consumption... "
+                                f"({remaining}s remaining)"
+                            )
+                            time.sleep(5)  # 熔断期间每5秒检查一次
+                            continue
+
+                    logger.warning(
+                        f"Circuit breaker is open, pausing consumption..."
+                    )
+                    time.sleep(5)
+                    continue
+
                 self._connection.process_data_events(time_limit=1)
         except KeyboardInterrupt:
             logger.info("Consumer interrupted by user")
@@ -263,9 +419,9 @@ class RabbitMQConsumer:
 
     def __exit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[object],
+        _exc_type: Optional[type],
+        _exc_val: Optional[BaseException],
+        _exc_tb: Optional[object],
     ) -> None:
         """上下文管理器退出"""
         self.close()

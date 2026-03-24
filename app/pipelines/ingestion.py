@@ -1,23 +1,23 @@
 """入库流水线模块
 
 处理数据入库流程：
-1. 将 ExtractedInterview 转换为 LangChain Document
-2. 存入 QdrantVectorStore
-3. 分类熔断 - knowledge 类型发送到 RabbitMQ 异步生成答案
+1. 将 ExtractedInterview 转换为嵌入向量
+2. 使用 QdrantManager 直接存入 Qdrant（扁平结构）
+3. 分类熔断 - knowledge/scenario 类型发送到 RabbitMQ 异步生成答案
 
-直接使用 app/tools 模块。
+直接使用 app/db 模块。
 """
 
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from langchain_core.documents import Document
-
-from app.models.schemas import ExtractedInterview, QuestionType, MQTaskMessage
+from app.models.schemas import ExtractedInterview, QuestionType, MQTaskMessage, QdrantQuestionPayload
 from app.tools.embedding import get_embedding_tool
-from app.tools.vector_search import get_vector_search_tool
+from app.db.qdrant_client import get_qdrant_manager
 from app.mq.producer import get_producer
 from app.utils.logger import logger
+from app.utils.hasher import generate_question_id
+from app.models.schemas import QuestionItem
 
 
 class IngestionResult(BaseModel):
@@ -42,72 +42,49 @@ class IngestionPipeline:
     负责将面试经验数据入库到向量数据库，并触发异步答案生成任务。
 
     处理流程：
-    1. 遍历每道题目，转换为 Document 格式
-    2. 使用 Context Enrichment 拼接上下文
-    3. 存入 QdrantVectorStore（通过 tools 模块）
-    4. 分类熔断：knowledge 类型发送异步任务
+    1. 遍历每道题目，转换为扁平 Payload 格式
+    2. 使用 QdrantManager 直接存入 Qdrant（扁平结构）
+    3. 分类熔断：knowledge/scenario 类型发送异步任务
     """
 
     def __init__(self) -> None:
         """初始化入库流水线"""
-        # 复用 tools 模块
-        self.vector_search_tool = get_vector_search_tool()
-        self.vectorstore = self.vector_search_tool.vectorstore
         self.embedding_tool = get_embedding_tool()
+        self.qdrant_manager = get_qdrant_manager()
         self.mq_producer = get_producer()
         logger.info("IngestionPipeline initialized")
 
-    def _create_document(self, interview: ExtractedInterview) -> list[Document]:
-        """将 ExtractedInterview 转换为 LangChain Document
+    def _create_context(self, question: QuestionItem) -> str:
+        """创建用于 embedding 的上下文
 
         遵循 CLAUDE.md 中的 Context Enrichment 原则：
         存储时拼接上下文："公司：xxx | 岗位：xxx | 题目：xxx"
-
-        Args:
-            interview: 面试经验数据
-
-        Returns:
-            Document 列表
         """
-        docs = []
+        return (
+            f"公司：{question.company} | "
+            f"岗位：{question.position} | "
+            f"题目：{question.question_text}"
+        )
 
-        for question in interview.questions:
-            # 上下文拼接
-            content = (
-                f"公司：{question.company} | "
-                f"岗位：{question.position} | "
-                f"题目：{question.question_text}"
-            )
-
-            doc = Document(
-                page_content=content,
-                metadata={
-                    "question_id": question.question_id,
-                    "question_text": question.question_text,
-                    "question_type": question.question_type.value,
-                    "requires_async_answer": question.requires_async_answer,
-                    "core_entities": question.core_entities,
-                    "mastery_level": question.mastery_level.value,
-                    "company": question.company,
-                    "position": question.position,
-                },
-            )
-            docs.append(doc)
-
-        return docs
+    def _create_payload(self, question: QuestionItem) -> QdrantQuestionPayload:
+        """创建 Qdrant Payload"""
+        return QdrantQuestionPayload(
+            question_id=question.question_id,
+            question_text=question.question_text,
+            company=question.company,
+            position=question.position,
+            mastery_level=question.mastery_level.value,
+            question_type=question.question_type.value,
+            core_entities=question.core_entities,
+            metadata=question.metadata,
+        )
 
     def _send_async_task(self, interview: ExtractedInterview) -> int:
         """发送异步任务到 RabbitMQ
 
         遵循分类熔断机制：
-        - knowledge 类型：需要异步生成答案
+        - knowledge / scenario 类型：需要异步生成答案
         - project / behavioral 类型：熔断，不生成答案
-
-        Args:
-            interview: 面试经验数据
-
-        Returns:
-            发送的任务数量
         """
         task_count = 0
 
@@ -116,7 +93,8 @@ class IngestionPipeline:
             self.mq_producer.connect()
 
         for question in interview.questions:
-            if question.question_type == QuestionType.KNOWLEDGE:
+            # KNOWLEDGE 和 SCENARIO 需要触发异步答案生成
+            if question.question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO):
                 task = MQTaskMessage(
                     question_id=question.question_id,
                     question_text=question.question_text,
@@ -146,16 +124,29 @@ class IngestionPipeline:
         result = IngestionResult()
 
         try:
-            # 1. 转换为 Document
-            docs = self._create_document(interview)
-            logger.info(f"Created {len(docs)} documents from interview")
+            # 1. 为每道题生成向量和 Payload
+            payloads = []
+            vectors = []
 
-            # 2. 存入 QdrantVectorStore（通过 tools 模块）
-            self.vectorstore.add_documents(docs)
-            result.processed = len(docs)
-            result.question_ids = [d.metadata["question_id"] for d in docs]
+            for question in interview.questions:
+                # 创建上下文用于 embedding
+                context = self._create_context(question)
+                # 生成向量
+                vector = self.embedding_tool.embeddings.embed_query(context)
+                # 创建 Payload
+                payload = self._create_payload(question)
 
-            logger.info(f"Stored {result.processed} questions to vectorstore")
+                payloads.append(payload)
+                vectors.append(vector)
+
+            logger.info(f"Created {len(payloads)} payloads from interview")
+
+            # 2. 存入 Qdrant（使用 QdrantManager 的 upsert_questions）
+            self.qdrant_manager.upsert_questions(payloads, vectors)
+            result.processed = len(payloads)
+            result.question_ids = [p.question_id for p in payloads]
+
+            logger.info(f"Stored {result.processed} questions to Qdrant")
 
             # 3. 分类熔断 - 发送异步任务
             async_count = self._send_async_task(interview)
@@ -182,30 +173,16 @@ class IngestionPipeline:
         """简化接口：入库单条题目
 
         适用于直接调用场景。
-
-        Args:
-            question_text: 题目文本
-            company: 公司名称
-            position: 岗位名称
-            question_type: 题目类型
-            mastery_level: 熟练度等级
-            core_entities: 知识点列表
-
-        Returns:
-            入库结果
         """
-        from app.utils.hasher import generate_question_id
-
         question_id = generate_question_id(company, question_text)
 
         # 创建 QuestionItem
-        from app.models.schemas import QuestionItem
-
         question = QuestionItem(
             question_id=question_id,
             question_text=question_text,
             question_type=question_type,
-            requires_async_answer=(question_type == QuestionType.KNOWLEDGE),
+            # knowledge 和 scenario 的题目可以做异步处理
+            requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO)),
             core_entities=core_entities or [],
             mastery_level=mastery_level,
             company=company,
@@ -227,11 +204,7 @@ _ingestion_pipeline: Optional[IngestionPipeline] = None
 
 
 def get_ingestion_pipeline() -> IngestionPipeline:
-    """获取入库流水线单例
-
-    Returns:
-        IngestionPipeline 实例
-    """
+    """获取入库流水线单例"""
     global _ingestion_pipeline
     if _ingestion_pipeline is None:
         _ingestion_pipeline = IngestionPipeline()

@@ -309,6 +309,8 @@ class QdrantManager:
                         position=payload.get("position", ""),
                         mastery_level=payload.get("mastery_level", 0),
                         question_type=payload.get("question_type", ""),
+                        core_entities=payload.get("core_entities", []),
+                        metadata=payload.get("metadata", {}),
                         question_answer=payload.get("question_answer"),
                         score=r.score,
                     )
@@ -424,6 +426,75 @@ class QdrantManager:
 
         except Exception as e:
             logger.error(f"Failed to delete collection: {e}")
+            raise
+
+    def delete_question(self, question_id: str) -> bool:
+        """删除单个题目
+
+        Args:
+            question_id: 题目 ID
+
+        Returns:
+            是否成功
+        """
+        collection_name = self.settings.qdrant_collection
+
+        try:
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=models.PointIdsList(points=[question_id]),
+            )
+            logger.info(f"Deleted question: {question_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to delete question: {e}")
+            raise
+
+    def update_question(
+        self,
+        question_id: str,
+        question_text: Optional[str] = None,
+        question_type: Optional[str] = None,
+        core_entities: Optional[list[str]] = None,
+    ) -> bool:
+        """更新题目信息
+
+        Args:
+            question_id: 题目 ID
+            question_text: 新题目文本（可选）
+            question_type: 新题目类型（可选）
+            core_entities: 新知识点列表（可选）
+
+        Returns:
+            是否成功
+        """
+        collection_name = self.settings.qdrant_collection
+
+        try:
+            # 构建更新 payload
+            payload = {}
+            if question_text is not None:
+                payload["question_text"] = question_text
+            if question_type is not None:
+                payload["question_type"] = question_type
+            if core_entities is not None:
+                payload["core_entities"] = core_entities
+
+            if not payload:
+                logger.warning("No fields to update")
+                return True
+
+            self.client.set_payload(
+                collection_name=collection_name,
+                points=[question_id],
+                payload=payload,
+            )
+            logger.info(f"Updated question: {question_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update question: {e}")
             raise
 
     def get_collection_info(self) -> dict:

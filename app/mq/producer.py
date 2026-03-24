@@ -7,6 +7,8 @@ from typing import Callable, Optional
 import json
 
 import pika
+from pika import BlockingConnection
+from pika.channel import Channel
 from pika.exceptions import AMQPConnectionError, AMQPChannelError
 
 from app.config.settings import get_settings
@@ -27,8 +29,8 @@ class RabbitMQProducer:
     def __init__(self) -> None:
         """初始化生产者"""
         self.settings = get_settings()
-        self._connection: Optional[pika.BlockingConnection] = None
-        self._channel: Optional[pika.channel.Channel] = None
+        self._connection: Optional[BlockingConnection] = None
+        self._channel: Optional[Channel] = None
 
     def connect(self) -> bool:
         """建立与 RabbitMQ 的连接

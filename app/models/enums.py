@@ -9,11 +9,13 @@ class QuestionType(str, Enum):
     - knowledge: 客观基础题（八股文）
     - project: 项目深挖题（针对个人简历）
     - behavioral: 行为题（软技能）
+    - scenario: 场景题（和企业业务场景相关的题目）
     """
 
     KNOWLEDGE = "knowledge"
     PROJECT = "project"
     BEHAVIORAL = "behavioral"
+    SCENARIO = "scenario"
 
 
 class MasteryLevel(int, Enum):

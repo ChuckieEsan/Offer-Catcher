@@ -15,3 +15,5 @@ wheels/
 
 # models
 models/
+
+!app/models

@@ -72,6 +72,9 @@ def main():
                     with st.spinner("正在提取面经..."):
                         try:
                             result = vision_extractor.extract(text_input, source_type="text")
+                            # 保存到 session state，供后续确认入库使用
+                            st.session_state.extracted_result = result
+                            st.session_state.input_type = "text"
                             st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
 
                             # 显示题目列表
@@ -80,19 +83,25 @@ def main():
                                 with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
                                     st.write(f"**类型**: {q.question_type.value}")
                                     st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
-
-                            # 入库
-                            if st.button("确认入库"):
-                                with st.spinner("正在入库..."):
-                                    try:
-                                        ingestion_result = ingestion_pipeline.process(result)
-                                        st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
-                                        if ingestion_result.async_tasks > 0:
-                                            st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
-                                    except Exception as e:
-                                        st.error(f"入库失败: {e}")
                         except Exception as e:
                             st.error(f"提取失败: {e}")
+
+            # 入库（使用 session state 保存的结果）- 独立于上面的按钮
+            if "extracted_result" in st.session_state and st.session_state.get("input_type") == "text":
+                result = st.session_state.extracted_result
+                if st.button("确认入库", key="text_ingest"):
+                    with st.spinner("正在入库..."):
+                        try:
+                            ingestion_result = ingestion_pipeline.process(result)
+                            st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
+                            if ingestion_result.async_tasks > 0:
+                                st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
+                            # 入库成功后清除缓存
+                            if "extracted_result" in st.session_state:
+                                del st.session_state.extracted_result
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"入库失败: {e}")
 
         else:  # 图片上传
             uploaded_file = st.file_uploader("上传面经图片", type=["png", "jpg", "jpeg"])
@@ -114,28 +123,37 @@ def main():
                     with st.spinner("正在提取图片面经..."):
                         try:
                             result = vision_extractor.extract(tmp_path, source_type="image")
+                            # 保存到 session state，供后续确认入库使用
+                            st.session_state.extracted_result = result
+                            st.session_state.input_type = "image"
                             st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
 
                             # 显示题目
                             st.subheader("提取的题目")
                             for i, q in enumerate(result.questions, 1):
                                 st.write(f"**{i}. [{q.question_type.value}]** {q.question_text[:60]}...")
-
-                            # 入库
-                            if st.button("确认入库", key="img_ingest"):
-                                with st.spinner("正在入库..."):
-                                    try:
-                                        ingestion_result = ingestion_pipeline.process(result)
-                                        st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
-                                        if ingestion_result.async_tasks > 0:
-                                            st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
-                                    except Exception as e:
-                                        st.error(f"入库失败: {e}")
                         except Exception as e:
                             st.error(f"提取失败: {e}")
                         finally:
                             if os.path.exists(tmp_path):
                                 os.unlink(tmp_path)
+
+                # 入库（使用 session state 保存的结果）- 独立于上面的按钮
+                if "extracted_result" in st.session_state and st.session_state.get("input_type") == "image":
+                    result = st.session_state.extracted_result
+                    if st.button("确认入库", key="img_ingest"):
+                        with st.spinner("正在入库..."):
+                            try:
+                                ingestion_result = ingestion_pipeline.process(result)
+                                st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
+                                if ingestion_result.async_tasks > 0:
+                                    st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
+                                # 入库成功后清除缓存
+                                if "extracted_result" in st.session_state:
+                                    del st.session_state.extracted_result
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"入库失败: {e}")
 
     elif page == "🔍 搜索题目":
         st.header("🔍 搜索题目")
@@ -250,6 +268,45 @@ def main():
                         st.markdown("**答案**:")
                         st.markdown(r.question_answer)
 
+                    # 修改题目
+                    st.markdown("---")
+                    with st.expander("✏️ 修改题目"):
+                        new_text = st.text_input(
+                            "题目内容",
+                            value=r.question_text,
+                            key=f"text_{r.question_id}",
+                        )
+                        new_type = st.selectbox(
+                            "题目类型",
+                            ["knowledge", "project", "behavioral", "scenario"],
+                            index=["knowledge", "project", "behavioral", "scenario"].index(r.question_type)
+                            if r.question_type in ["knowledge", "project", "behavioral", "scenario"] else 0,
+                            key=f"type_{r.question_id}",
+                        )
+                        new_entities = st.text_input(
+                            "知识点（逗号分隔）",
+                            value=",".join(r.core_entities) if r.core_entities else "",
+                            key=f"entities_{r.question_id}",
+                        )
+
+                        col_edit, col_del = st.columns(2)
+                        with col_edit:
+                            if st.button("💾 保存修改", key=f"save_{r.question_id}"):
+                                entities_list = [e.strip() for e in new_entities.split(",") if e.strip()]
+                                qdrant_manager.update_question(
+                                    r.question_id,
+                                    question_text=new_text,
+                                    question_type=new_type,
+                                    core_entities=entities_list,
+                                )
+                                st.success("✅ 已保存")
+                                st.rerun()
+                        with col_del:
+                            if st.button("🗑️ 删除题目", key=f"del_{r.question_id}"):
+                                qdrant_manager.delete_question(r.question_id)
+                                st.warning("🗑️ 已删除")
+                                st.rerun()
+
                     # 更新熟练度
                     new_level = st.selectbox(
                         "更新熟练度",
@@ -258,7 +315,7 @@ def main():
                         key=f"manage_{r.question_id}",
                     )
                     if new_level != r.mastery_level:
-                        if st.button("确认更新", key=f"upd_{r.question_id}"):
+                        if st.button("确认更新熟练度", key=f"upd_{r.question_id}"):
                             qdrant_manager.update_mastery_level(r.question_id, new_level)
                             st.success("✅ 已更新")
                             st.rerun()

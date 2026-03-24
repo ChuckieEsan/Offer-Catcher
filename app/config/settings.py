@@ -128,6 +128,14 @@ class Settings(BaseSettings):
         description="队列名称",
         default="answer_tasks",
     )
+    rabbitmq_dlq: str = Field(
+        description="死信队列名称",
+        default="answer_tasks_dlq",
+    )
+    rabbitmq_max_retries: int = Field(
+        description="消息最大重试次数",
+        default=3,
+    )
 
     # 应用配置
     app_name: str = Field(
