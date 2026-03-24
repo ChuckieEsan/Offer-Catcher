@@ -379,6 +379,36 @@ class QdrantManager:
             logger.error(f"Failed to update mastery_level: {e}")
             raise
 
+    def update_answer(
+        self,
+        question_id: str,
+        answer: str,
+    ) -> bool:
+        """更新题目答案
+
+        Args:
+            question_id: 题目 ID
+            answer: 生成的标准答案
+
+        Returns:
+            是否成功
+        """
+        collection_name = self.settings.qdrant_collection
+
+        try:
+            self.client.set_payload(
+                collection_name=collection_name,
+                points=[question_id],
+                payload={"question_answer": answer},
+            )
+
+            logger.info(f"Updated answer for {question_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update answer: {e}")
+            raise
+
     def delete_collection(self) -> bool:
         """删除集合
 
