@@ -18,11 +18,11 @@ def generate_question_id(company: str, question_text: str) -> str:
         question_text: 题目文本内容
 
     Returns:
-        32 位 MD5 哈希字符串
+        UUID 格式的字符串（如 "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6"）
 
     Example:
         >>> generate_question_id("字节跳动", "什么是 RAG？")
-        'a1b2c3d4e5f6...'
+        'a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6'
 
     Note:
         - 输入字符串会自动去除首尾空白
@@ -36,9 +36,10 @@ def generate_question_id(company: str, question_text: str) -> str:
     combined = f"{company_normalized}|{question_normalized}"
 
     # 生成 MD5 哈希
-    md5_hash = hashlib.md5(combined.encode("utf-8"))
+    md5_hash = hashlib.md5(combined.encode("utf-8")).hexdigest()
 
-    return md5_hash.hexdigest()
+    # 转换为 UUID 格式（32位 -> UUID）
+    return f"{md5_hash[:8]}-{md5_hash[8:12]}-{md5_hash[12:16]}-{md5_hash[16:20]}-{md5_hash[20:]}"
 
 
 def generate_short_id(company: str, question_text: str, length: int = 8) -> str:

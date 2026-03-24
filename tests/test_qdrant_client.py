@@ -14,15 +14,17 @@ from app.models.schemas import QdrantQuestionPayload, SearchFilter
 from app.utils.hasher import generate_question_id
 
 
-def generate_random_vector(dim: int = 1536) -> List[float]:
+def generate_random_vector(dim: int = None) -> List[float]:
     """生成随机向量（用于测试）
 
     Args:
-        dim: 向量维度，默认 1536（text-embedding-3-small）
+        dim: 向量维度，默认使用配置中的值
 
     Returns:
         随机向量列表
     """
+    if dim is None:
+        dim = get_settings().qdrant_vector_size
     return [random.random() for _ in range(dim)]
 
 
