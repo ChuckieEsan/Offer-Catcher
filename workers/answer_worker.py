@@ -45,7 +45,7 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant
-        qdrant.update_answer(task.question_id, answer)
+        qdrant.update_question(task.question_id, question_answer=answer)
 
         logger.info(f"Answer generated and saved for: {task.question_id}")
         return True

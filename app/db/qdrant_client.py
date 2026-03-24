@@ -78,32 +78,10 @@ class QdrantManager:
                         size=vector_size,
                         distance=Distance.COSINE,
                     ),
-                    # 创建 Payload 字段索引
-                    # 1. keyword 类型索引（用于精确匹配）
-                    # 2. integer 类型索引（用于范围查询和等值查询）
                 )
 
                 # 创建 Payload 索引
-                self.client.create_payload_index(
-                    collection_name=collection_name,
-                    field_name="company",
-                    field_schema=models.KeywordIndexType.KEYWORD,
-                )
-                self.client.create_payload_index(
-                    collection_name=collection_name,
-                    field_name="position",
-                    field_schema=models.KeywordIndexType.KEYWORD,
-                )
-                self.client.create_payload_index(
-                    collection_name=collection_name,
-                    field_name="question_type",
-                    field_schema=models.KeywordIndexType.KEYWORD,
-                )
-                self.client.create_payload_index(
-                    collection_name=collection_name,
-                    field_name="mastery_level",
-                    field_schema=models.IntegerIndexType.INTEGER,
-                )
+                self._create_payload_indexes(collection_name)
 
                 logger.info(
                     f"Collection '{collection_name}' created with payload indexes"
@@ -116,6 +94,78 @@ class QdrantManager:
         except Exception as e:
             logger.error(f"Failed to create collection: {e}")
             raise
+
+    def _create_payload_indexes(self, collection_name: str) -> None:
+        """创建 Payload 索引（内部方法）
+
+        Args:
+            collection_name: 集合名称
+        """
+        # 定义需要创建索引的字段
+        index_fields = [
+            ("company", models.KeywordIndexType.KEYWORD),
+            ("position", models.KeywordIndexType.KEYWORD),
+            ("question_type", models.KeywordIndexType.KEYWORD),
+            ("mastery_level", models.IntegerIndexType.INTEGER),
+        ]
+
+        for field_name, field_schema in index_fields:
+            self.client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=field_schema,
+            )
+
+    def _build_search_filter(
+        self, filter_conditions: Optional[SearchFilter]
+    ) -> Optional[models.Filter]:
+        """构建搜索过滤条件（内部方法）
+
+        Args:
+            filter_conditions: 过滤条件
+
+        Returns:
+            Qdrant Filter 对象
+        """
+        if not filter_conditions:
+            return None
+
+        must_conditions = []
+
+        # 公司过滤
+        if filter_conditions.company:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="company",
+                    match=models.MatchValue(value=filter_conditions.company),
+                )
+            )
+        # 岗位过滤
+        if filter_conditions.position:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="position",
+                    match=models.MatchValue(value=filter_conditions.position),
+                )
+            )
+        # 熟练度过滤
+        if filter_conditions.mastery_level is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="mastery_level",
+                    match=models.MatchValue(value=filter_conditions.mastery_level),
+                )
+            )
+        # 题目类型过滤
+        if filter_conditions.question_type:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="question_type",
+                    match=models.MatchValue(value=filter_conditions.question_type),
+                )
+            )
+
+        return models.Filter(must=must_conditions) if must_conditions else None
 
     def upsert_questions(
         self,
@@ -241,46 +291,7 @@ class QdrantManager:
 
         try:
             # 构建过滤条件
-            must_conditions = []
-
-            if filter_conditions:
-                if filter_conditions.company:
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key="company",
-                            match=models.MatchValue(value=filter_conditions.company),
-                        )
-                    )
-                if filter_conditions.position:
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key="position",
-                            match=models.MatchValue(value=filter_conditions.position),
-                        )
-                    )
-                if filter_conditions.mastery_level is not None:
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key="mastery_level",
-                            match=models.MatchValue(
-                                value=filter_conditions.mastery_level
-                            ),
-                        )
-                    )
-                if filter_conditions.question_type:
-                    must_conditions.append(
-                        models.FieldCondition(
-                            key="question_type",
-                            match=models.MatchValue(
-                                value=filter_conditions.question_type
-                            ),
-                        )
-                    )
-
-            # 构建查询请求
-            query_filter = (
-                models.Filter(must=must_conditions) if must_conditions else None
-            )
+            query_filter = self._build_search_filter(filter_conditions)
 
             search_params = models.SearchParams(
                 hnsw_ef=128,  # 优化检索精度
@@ -351,66 +362,6 @@ class QdrantManager:
             logger.error(f"Failed to get question: {e}")
             raise
 
-    def update_mastery_level(
-        self,
-        question_id: str,
-        mastery_level: int,
-    ) -> bool:
-        """更新题目熟练度等级
-
-        Args:
-            question_id: 题目 ID
-            mastery_level: 新的熟练度等级
-
-        Returns:
-            是否成功
-        """
-        collection_name = self.settings.qdrant_collection
-
-        try:
-            self.client.set_payload(
-                collection_name=collection_name,
-                points=[question_id],
-                payload={"mastery_level": mastery_level},
-            )
-
-            logger.info(f"Updated mastery_level to {mastery_level} for {question_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to update mastery_level: {e}")
-            raise
-
-    def update_answer(
-        self,
-        question_id: str,
-        answer: str,
-    ) -> bool:
-        """更新题目答案
-
-        Args:
-            question_id: 题目 ID
-            answer: 生成的标准答案
-
-        Returns:
-            是否成功
-        """
-        collection_name = self.settings.qdrant_collection
-
-        try:
-            self.client.set_payload(
-                collection_name=collection_name,
-                points=[question_id],
-                payload={"question_answer": answer},
-            )
-
-            logger.info(f"Updated answer for {question_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to update answer: {e}")
-            raise
-
     def delete_collection(self) -> bool:
         """删除集合
 
@@ -457,6 +408,10 @@ class QdrantManager:
         question_text: Optional[str] = None,
         question_type: Optional[str] = None,
         core_entities: Optional[list[str]] = None,
+        company: Optional[str] = None,
+        position: Optional[str] = None,
+        question_answer: Optional[str] = None,
+        mastery_level: Optional[int] = None,
     ) -> bool:
         """更新题目信息
 
@@ -465,6 +420,10 @@ class QdrantManager:
             question_text: 新题目文本（可选）
             question_type: 新题目类型（可选）
             core_entities: 新知识点列表（可选）
+            company: 新公司名称（可选）
+            position: 新岗位名称（可选）
+            question_answer: 新答案（可选）
+            mastery_level: 新熟练度等级（可选）
 
         Returns:
             是否成功
@@ -480,6 +439,14 @@ class QdrantManager:
                 payload["question_type"] = question_type
             if core_entities is not None:
                 payload["core_entities"] = core_entities
+            if company is not None:
+                payload["company"] = company
+            if position is not None:
+                payload["position"] = position
+            if question_answer is not None:
+                payload["question_answer"] = question_answer
+            if mastery_level is not None:
+                payload["mastery_level"] = mastery_level
 
             if not payload:
                 logger.warning("No fields to update")

@@ -27,6 +27,8 @@ class RetrievalPipeline:
         """初始化检索流水线"""
         self.qdrant_manager = get_qdrant_manager()
         self.embedding_tool = get_embedding_tool()
+        # 确保集合存在
+        self.qdrant_manager.create_collection_if_not_exists()
         logger.info("RetrievalPipeline initialized")
 
     def search(

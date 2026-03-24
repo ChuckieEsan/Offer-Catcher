@@ -52,6 +52,8 @@ class IngestionPipeline:
         self.embedding_tool = get_embedding_tool()
         self.qdrant_manager = get_qdrant_manager()
         self.mq_producer = get_producer()
+        # 确保集合存在
+        self.qdrant_manager.create_collection_if_not_exists()
         logger.info("IngestionPipeline initialized")
 
     def _create_context(self, question: QuestionItem) -> str:

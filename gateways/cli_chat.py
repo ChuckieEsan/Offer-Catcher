@@ -33,27 +33,29 @@ def init_components():
     ingestion_pipeline = get_ingestion_pipeline()
     retrieval_pipeline = get_retrieval_pipeline()
     qdrant_manager = get_qdrant_manager()
+
+    # 确保 Qdrant 集合存在
+    qdrant_manager.create_collection_if_not_exists()
+
     return vision_extractor, ingestion_pipeline, retrieval_pipeline, qdrant_manager
 
 
 def main():
     """主函数"""
-    st.title("📚 Offer-Catcher - 面经智能体系统")
-    st.markdown("面经提取、存储、检索与异步答案生成一体化平台")
-
     # 初始化组件
     vision_extractor, ingestion_pipeline, retrieval_pipeline, qdrant_manager = init_components()
 
     # 侧边栏
     with st.sidebar:
-        st.header("功能导航")
+        st.markdown("### 📚 Offer-Catcher")
+        st.markdown("---")
         page = st.radio(
             "选择功能",
             ["📝 录入面经", "🔍 搜索题目", "📋 题目管理", "📊 仪表盘"]
     )
 
     if page == "📝 录入面经":
-        st.header("📝 录入面经")
+        st.subheader("📝 录入面经")
         st.markdown("上传面经图片或输入文本，系统将自动提取题目并入库，触发异步答案生成")
 
         input_type = st.radio("输入类型", ["文本输入", "图片上传"])
@@ -156,7 +158,7 @@ def main():
                                 st.error(f"入库失败: {e}")
 
     elif page == "🔍 搜索题目":
-        st.header("🔍 搜索题目")
+        st.subheader("🔍 搜索题目")
         st.markdown("支持语义搜索和条件过滤")
 
         col1, col2, col3 = st.columns(3)
@@ -220,108 +222,273 @@ def main():
                                 )
                             with col_b:
                                 if st.button("更新", key=f"btn_{r.question_id}"):
-                                    qdrant_manager.update_mastery_level(r.question_id, new_level)
+                                    qdrant_manager.update_question(r.question_id, mastery_level=new_level)
                                     st.success("✅ 更新成功")
                                     st.rerun()
 
     elif page == "📋 题目管理":
-        st.header("📋 题目管理")
+        st.subheader("📋 题目管理")
 
         # 获取所有题目
         with st.spinner("加载中..."):
-            results = retrieval_pipeline.search(query="", k=200)
+            results = retrieval_pipeline.search(query="", k=500)
 
         if not results:
             st.info("暂无题目数据")
         else:
-            # 统计
-            col1, col2, col3 = st.columns(3)
-            col1.metric("总题目数", len(results))
+            # ==================== 统计区域 ====================
+            st.subheader("📊 数据统计")
 
+            # 按类型统计
             by_type = {}
+            by_mastery = {0: 0, 1: 0, 2: 0}
+            by_answer = {"已生成": 0, "待生成": 0}
+            companies = set()
+            positions = set()
+
             for r in results:
-                t = r.question_type
+                # 类型
+                t = r.question_type or "unknown"
                 by_type[t] = by_type.get(t, 0) + 1
+                # 熟练度
+                by_mastery[r.mastery_level] = by_mastery.get(r.mastery_level, 0) + 1
+                # 答案状态
+                if r.question_answer:
+                    by_answer["已生成"] += 1
+                else:
+                    by_answer["待生成"] += 1
+                # 公司和岗位
+                if r.company:
+                    companies.add(r.company)
+                if r.position:
+                    positions.add(r.position)
 
-            col2.metric("客观题", by_type.get("knowledge", 0))
-            col3.metric("项目题", by_type.get("project", 0))
+            # 统计卡片
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("总题目", len(results))
+            col2.metric("公司数", len(companies))
+            col3.metric("已生成答案", by_answer["已生成"])
+            col4.metric("未掌握", by_mastery.get(0, 0))
+            col5.metric("已掌握", by_mastery.get(2, 0))
 
-            # 列表
-            st.subheader("题目列表")
+            # 按类型分布
+            col_types = st.columns(4)
+            for i, (qtype, count) in enumerate(sorted(by_type.items())):
+                type_name = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题"}.get(qtype, qtype)
+                col_types[i % 4].metric(type_name, count)
 
-            # 过滤
-            filter_company = st.selectbox("按公司筛选", ["全部"] + sorted(list(set(r.company for r in results))))
+            st.markdown("---")
 
-            filtered = results if filter_company == "全部" else [r for r in results if r.company == filter_company]
+            # ==================== 筛选区域 ====================
+            st.subheader("🔍 筛选条件")
 
-            for r in filtered:
-                mastery_str = ["❌ 未掌握", "⚠️ 熟悉", "✅ 已掌握"][r.mastery_level] if r.mastery_level < 3 else "?"
-                with st.expander(f"[{r.company}] {r.question_text[:40]}... ({mastery_str})"):
-                    st.write(f"**ID**: `{r.question_id}`")
-                    st.write(f"**岗位**: {r.position}")
-                    st.write(f"**类型**: {r.question_type}")
-                    st.write(f"**答案**: {'✅ 已生成' if r.question_answer else '⏳ 待生成'}")
+            # 横向排列筛选条件
+            f1, f2, f3, f4, f5 = st.columns(5)
 
-                    # 查看答案
-                    if r.question_answer:
+            with f1:
+                filter_company = st.selectbox(
+                    "按公司",
+                    ["全部"] + sorted(list(companies)),
+                    key="filter_company"
+                )
+
+            with f2:
+                filter_position = st.selectbox(
+                    "按岗位",
+                    ["全部"] + sorted(list(positions)),
+                    key="filter_position"
+                )
+
+            with f3:
+                filter_type = st.selectbox(
+                    "按类型",
+                    ["全部", "knowledge", "project", "behavioral", "scenario"],
+                    key="filter_type"
+                )
+                type_map = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题"}
+
+            with f4:
+                filter_mastery = st.selectbox(
+                    "按熟练度",
+                    ["全部", "0", "1", "2"],
+                    key="filter_mastery"
+                )
+                mastery_map = {"0": "未掌握", "1": "熟悉", "2": "已掌握"}
+
+            with f5:
+                filter_answer = st.selectbox(
+                    "按答案",
+                    ["全部", "已生成", "待生成"],
+                    key="filter_answer"
+                )
+
+            # 关键词搜索
+            search_keyword = st.text_input("🔎 关键词搜索（题目内容）", placeholder="输入关键词...")
+
+            # ==================== 过滤数据 ====================
+            filtered = results
+
+            if filter_company != "全部":
+                filtered = [r for r in filtered if r.company == filter_company]
+
+            if filter_position != "全部":
+                filtered = [r for r in filtered if r.position == filter_position]
+
+            if filter_type != "全部":
+                filtered = [r for r in filtered if r.question_type == filter_type]
+
+            if filter_mastery != "全部":
+                filtered = [r for r in filtered if r.mastery_level == int(filter_mastery)]
+
+            if filter_answer == "已生成":
+                filtered = [r for r in filtered if r.question_answer]
+            elif filter_answer == "待生成":
+                filtered = [r for r in filtered if not r.question_answer]
+
+            if search_keyword:
+                keyword = search_keyword.lower()
+                filtered = [r for r in filtered if keyword in (r.question_text or "").lower()]
+
+            st.markdown("---")
+
+            # ==================== 题目列表 ====================
+            st.subheader(f"📋 题目列表 ({len(filtered)} 条)")
+
+            if not filtered:
+                st.info("没有符合条件的题目")
+            else:
+                # 分页显示，每页 20 条
+                page_size = 20
+                total_pages = (len(filtered) - 1) // page_size + 1
+
+                if total_pages > 1:
+                    page_num = st.number_input("页码", min_value=1, max_value=total_pages, value=1, key="page_num")
+                    start_idx = (page_num - 1) * page_size
+                    end_idx = min(start_idx + page_size, len(filtered))
+                    display_results = filtered[start_idx:end_idx]
+                    st.caption(f"显示第 {start_idx + 1}-{end_idx} 条，共 {len(filtered)} 条")
+                else:
+                    display_results = filtered
+
+                for r in display_results:
+                    mastery_str = ["❌ 未掌握", "⚠️ 熟悉", "✅ 已掌握"][r.mastery_level] if r.mastery_level < 3 else "?"
+                    type_str = type_map.get(r.question_type, r.question_type)
+
+                    with st.expander(f"[{r.company}] {r.question_text[:40]}... ({mastery_str})"):
+                        # 基本信息
+                        col_info1, col_info2 = st.columns(2)
+                        with col_info1:
+                            st.write(f"**ID**: `{r.question_id}`")
+                            st.write(f"**公司**: {r.company}")
+                            st.write(f"**岗位**: {r.position}")
+                        with col_info2:
+                            st.write(f"**类型**: {type_str}")
+                            st.write(f"**熟练度**: {mastery_str}")
+                            st.write(f"**答案**: {'✅ 已生成' if r.question_answer else '⏳ 待生成'}")
+
+                        # 知识点
+                        if r.core_entities:
+                            st.write(f"**知识点**: {', '.join(r.core_entities)}")
+
+                        # 查看答案
+                        if r.question_answer:
+                            st.markdown("---")
+                            st.markdown("**答案**:")
+                            st.markdown(r.question_answer)
+                        else:
+                            st.info("⏳ 答案待生成")
+
+                        # 操作按钮
                         st.markdown("---")
-                        st.markdown("**答案**:")
-                        st.markdown(r.question_answer)
-
-                    # 修改题目
-                    st.markdown("---")
-                    with st.expander("✏️ 修改题目"):
-                        new_text = st.text_input(
-                            "题目内容",
-                            value=r.question_text,
-                            key=f"text_{r.question_id}",
-                        )
-                        new_type = st.selectbox(
-                            "题目类型",
-                            ["knowledge", "project", "behavioral", "scenario"],
-                            index=["knowledge", "project", "behavioral", "scenario"].index(r.question_type)
-                            if r.question_type in ["knowledge", "project", "behavioral", "scenario"] else 0,
-                            key=f"type_{r.question_id}",
-                        )
-                        new_entities = st.text_input(
-                            "知识点（逗号分隔）",
-                            value=",".join(r.core_entities) if r.core_entities else "",
-                            key=f"entities_{r.question_id}",
-                        )
-
                         col_edit, col_del = st.columns(2)
                         with col_edit:
-                            if st.button("💾 保存修改", key=f"save_{r.question_id}"):
-                                entities_list = [e.strip() for e in new_entities.split(",") if e.strip()]
-                                qdrant_manager.update_question(
-                                    r.question_id,
-                                    question_text=new_text,
-                                    question_type=new_type,
-                                    core_entities=entities_list,
-                                )
-                                st.success("✅ 已保存")
-                                st.rerun()
+                            if st.button("✏️ 修改", key=f"edit_{r.question_id}"):
+                                st.session_state[f"editing_{r.question_id}"] = True
                         with col_del:
-                            if st.button("🗑️ 删除题目", key=f"del_{r.question_id}"):
+                            if st.button("🗑️ 删除", key=f"del_{r.question_id}"):
                                 qdrant_manager.delete_question(r.question_id)
                                 st.warning("🗑️ 已删除")
                                 st.rerun()
 
-                    # 更新熟练度
-                    new_level = st.selectbox(
-                        "更新熟练度",
-                        [0, 1, 2],
-                        index=r.mastery_level,
-                        key=f"manage_{r.question_id}",
-                    )
-                    if new_level != r.mastery_level:
-                        if st.button("确认更新熟练度", key=f"upd_{r.question_id}"):
-                            qdrant_manager.update_mastery_level(r.question_id, new_level)
-                            st.success("✅ 已更新")
-                            st.rerun()
+                        # 修改表单
+                        if st.session_state.get(f"editing_{r.question_id}", False):
+                            st.markdown("---")
+                            st.markdown("✏️ 修改题目")
+
+                            col_row1, col_row2 = st.columns(2)
+                            with col_row1:
+                                new_company = st.text_input(
+                                    "公司",
+                                    value=r.company or "",
+                                    key=f"company_{r.question_id}",
+                                )
+                            with col_row2:
+                                new_position = st.text_input(
+                                    "岗位",
+                                    value=r.position or "",
+                                    key=f"position_{r.question_id}",
+                                )
+
+                            new_text = st.text_area(
+                                "题目内容",
+                                value=r.question_text,
+                                key=f"text_{r.question_id}",
+                            )
+
+                            col_row3, col_row4 = st.columns(2)
+                            with col_row3:
+                                new_type = st.selectbox(
+                                    "题目类型",
+                                    ["knowledge", "project", "behavioral", "scenario"],
+                                    index=["knowledge", "project", "behavioral", "scenario"].index(r.question_type)
+                                    if r.question_type in ["knowledge", "project", "behavioral", "scenario"] else 0,
+                                    key=f"type_{r.question_id}",
+                                )
+                            with col_row4:
+                                new_level = st.selectbox(
+                                    "熟练度",
+                                    [0, 1, 2],
+                                    index=r.mastery_level,
+                                    key=f"level_{r.question_id}",
+                                )
+
+                            new_entities = st.text_input(
+                                "知识点（逗号分隔）",
+                                value=",".join(r.core_entities) if r.core_entities else "",
+                                key=f"entities_{r.question_id}",
+                            )
+
+                            new_answer = st.text_area(
+                                "答案",
+                                value=r.question_answer or "",
+                                height=150,
+                                key=f"answer_{r.question_id}",
+                            )
+
+                            col_save, col_cancel = st.columns(2)
+                            with col_save:
+                                if st.button("💾 保存", key=f"save_{r.question_id}"):
+                                    entities_list = [e.strip() for e in new_entities.split(",") if e.strip()]
+                                    qdrant_manager.update_question(
+                                        r.question_id,
+                                        question_text=new_text,
+                                        question_type=new_type,
+                                        core_entities=entities_list,
+                                        company=new_company,
+                                        position=new_position,
+                                        question_answer=new_answer if new_answer.strip() else None,
+                                        mastery_level=new_level,
+                                    )
+                                    st.success("✅ 已保存")
+                                    st.session_state[f"editing_{r.question_id}"] = False
+                                    st.rerun()
+                            with col_cancel:
+                                if st.button("❌ 取消", key=f"cancel_{r.question_id}"):
+                                    st.session_state[f"editing_{r.question_id}"] = False
+                                    st.rerun()
 
     elif page == "📊 仪表盘":
-        st.header("📊 数据仪表盘")
+        st.subheader("📊 数据仪表盘")
 
         with st.spinner("加载数据..."):
             results = retrieval_pipeline.search(query="", k=500)
