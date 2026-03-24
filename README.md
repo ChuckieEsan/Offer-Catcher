@@ -157,7 +157,73 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
 
 ---
 
-## 六、快速开始 (Quick Start)
+## 六、项目结构
+
+```
+offer_catcher/
+├── app/
+│   ├── agents/                 # 智能体层
+│   │   ├── vision_extractor.py # 视觉提取 Agent
+│   │   └── answer_specialist.py # 答题专员 Agent
+│   │
+│   ├── tools/                  # 工具箱
+│   │   ├── embedding.py         # 向量嵌入工具
+│   │   └── web_search.py        # 联网搜索工具
+│   │
+│   ├── pipelines/               # 业务流水线
+│   │   ├── ingestion.py         # 入库流水线
+│   │   └── retrieval.py         # 检索流水线
+│   │
+│   ├── db/                     # 数据库层
+│   │   └── qdrant_client.py    # Qdrant 客户端
+│   │
+│   ├── mq/                     # 消息队列层
+│   │   ├── producer.py         # RabbitMQ 生产者
+│   │   └── consumer.py         # RabbitMQ 消费者
+│   │
+│   ├── models/                 # 数据模型
+│   │   ├── schemas.py          # Pydantic 模型
+│   │   └── enums.py            # 枚举类
+│   │
+│   ├── prompts/                # Prompt 模板
+│   │   ├── vision_extractor.md
+│   │   └── answer_specialist.md
+│   │
+│   ├── config/                 # 配置
+│   │   └── settings.py
+│   │
+│   └── utils/                  # 工具
+│       ├── hasher.py           # MD5 哈希工具
+│       └── logger.py           # 日志工具
+│
+├── workers/                    # 后台进程
+│   └── answer_worker.py        # 异步答案生成 Worker
+│
+├── gateways/                   # 接入层
+│   └── cli_chat.py            # Streamlit Web 界面
+│
+├── tests/                      # 测试用例
+└── pyproject.toml             # 项目配置
+```
+
+### 技术栈
+
+- **Python 3.10+** - 核心语言
+- **Qdrant** - 向量数据库
+- **RabbitMQ** - 消息队列
+- **LangChain** - Agent 开发框架
+- **DashScope** - 阿里云大模型
+- **Streamlit** - Web UI 框架
+
+### 预留接口（Phase 2）
+
+- `app/agents/router.py` - 意图路由 Agent
+- `app/agents/scorer.py` - 打分 Agent
+- `app/db/graph_client.py` - 图数据库客户端
+
+---
+
+## 七、快速开始 (Quick Start)
 
 ### 环境要求
 
@@ -170,16 +236,28 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
 ```bash
 # 启动 Qdrant 和 RabbitMQ
 docker-compose up -d
+
+# 验证服务启动
+# Qdrant: http://localhost:6333
+# RabbitMQ: http://localhost:15672 (guest/guest)
 ```
 
-### 2. 启动异步 Worker（后台运行）
+### 2. 配置环境变量
+
+```bash
+# 复制并编辑 .env 文件
+cp .env.example .env
+# 编辑 .env 填入你的 API Keys
+```
+
+### 3. 启动异步 Worker（后台运行）
 
 ```bash
 # 启动 RabbitMQ Consumer，处理异步答案生成任务
 PYTHONPATH=. uv run python workers/answer_worker.py &
 ```
 
-### 3. 启动 Web 界面
+### 4. 启动 Web 界面
 
 ```bash
 # 启动 Streamlit Web 界面
@@ -192,5 +270,30 @@ PYTHONPATH=. uv run streamlit run gateways/cli_chat.py --server.port 8501
 
 - **📝 录入面经**：输入文本或上传图片，自动提取题目并入库，触发异步答案生成
 - **🔍 搜索题目**：语义搜索 + 公司/熟练度过滤
-- **📋 题目管理**：查看所有题目，更新熟练度
+- **📋 题目管理**：查看所有题目，编辑修改，删除
 - **📊 仪表盘**：数据统计图表
+
+---
+
+## 八、开发指南
+
+### 运行测试
+
+```bash
+# 运行所有测试
+uv run pytest tests/ -v
+
+# 运行特定测试
+uv run pytest tests/test_qdrant_client.py -v
+```
+
+### 项目结构说明
+
+- `app/agents/` - AI 智能体（Vision Extractor, Answer Specialist）
+- `app/pipelines/` - 业务流水线（Ingestion, Retrieval）
+- `app/db/` - 数据库客户端（Qdrant）
+- `app/mq/` - 消息队列（Producer, Consumer）
+- `app/tools/` - 工具（Embedding, Web Search）
+- `workers/` - 后台 Worker
+- `gateways/` - Web 入口（Streamlit）
+- `tests/` - 测试用例
