@@ -154,3 +154,43 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
    > 采用了**基于 LLM 意图的前置分类熔断机制**。对于通用客观题，调度带联网工具的子 Agent 生成最新答案；对于“项目深挖”类极具特异性的问题，直接触发熔断不予生成，为系统节省了大量 Token 开销，并保证了知识库数据的纯净度。
 3. **Qdrant 向量库的数据粒度是如何设计的？**
    > 抛弃了粗暴的 Document-level 切分，采用 **Question-level Chunking + 上下文拼接** 的策略，并结合 Qdrant 强大的 Payload 标量索引机制，实现了先条件过滤（Pre-filtering）再向量比对的高效混合检索（Hybrid Search）。
+
+---
+
+## 六、快速开始 (Quick Start)
+
+### 环境要求
+
+- Python 3.10+
+- Docker (用于运行 Qdrant 和 RabbitMQ)
+- uv (包管理工具)
+
+### 1. 启动依赖服务
+
+```bash
+# 启动 Qdrant 和 RabbitMQ
+docker-compose up -d
+```
+
+### 2. 启动异步 Worker（后台运行）
+
+```bash
+# 启动 RabbitMQ Consumer，处理异步答案生成任务
+PYTHONPATH=. uv run python workers/answer_worker.py &
+```
+
+### 3. 启动 Web 界面
+
+```bash
+# 启动 Streamlit Web 界面
+PYTHONPATH=. uv run streamlit run gateways/cli_chat.py --server.port 8501
+```
+
+然后在浏览器访问 http://localhost:8501
+
+### 功能说明
+
+- **📝 录入面经**：输入文本或上传图片，自动提取题目并入库，触发异步答案生成
+- **🔍 搜索题目**：语义搜索 + 公司/熟练度过滤
+- **📋 题目管理**：查看所有题目，更新熟练度
+- **📊 仪表盘**：数据统计图表

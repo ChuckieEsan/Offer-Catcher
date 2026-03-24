@@ -3,8 +3,8 @@
 提供消息消费功能，用于后台 Worker 消费队列中的任务并生成答案。
 """
 
-import json
 from typing import Callable, Optional
+import json
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPChannelError

@@ -3,8 +3,8 @@
 提供消息发布功能，用于将需要异步生成答案的题目发送到队列。
 """
 
-import json
 from typing import Callable, Optional
+import json
 
 import pika
 from pika.exceptions import AMQPConnectionError, AMQPChannelError
@@ -106,6 +106,7 @@ class RabbitMQProducer:
                     properties=pika.BasicProperties(
                         delivery_mode=2,  # 消息持久化
                         content_type="application/json",
+                        message_id=task.question_id,  # 使用 question_id 作为消息ID，用于去重
                     ),
                 )
 

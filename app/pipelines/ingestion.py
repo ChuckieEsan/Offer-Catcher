@@ -8,7 +8,7 @@
 直接使用 app/tools 模块。
 """
 
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 from typing import Optional
 
 from langchain_core.documents import Document
@@ -20,8 +20,7 @@ from app.mq.producer import get_producer
 from app.utils.logger import logger
 
 
-@dataclass
-class IngestionResult:
+class IngestionResult(BaseModel):
     """入库结果
 
     Attributes:
@@ -31,14 +30,10 @@ class IngestionResult:
         question_ids: 入库成功的 question_id 列表
     """
 
-    processed: int = 0
-    failed: int = 0
-    async_tasks: int = 0
-    question_ids: list[str] = None
-
-    def __post_init__(self):
-        if self.question_ids is None:
-            self.question_ids = []
+    processed: int = Field(default=0, description="处理成功的题目数量")
+    failed: int = Field(default=0, description="处理失败的数量")
+    async_tasks: int = Field(default=0, description="触发的异步任务数量")
+    question_ids: list[str] = Field(default_factory=list, description="入库成功的 question_id 列表")
 
 
 class IngestionPipeline:

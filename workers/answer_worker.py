@@ -21,6 +21,13 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         是否成功
     """
     try:
+        # 0. 幂等性检查：先判断答案是否已存在
+        qdrant = get_qdrant_manager()
+        existing = qdrant.get_question(task.question_id)
+        if existing and existing.question_answer:
+            logger.info(f"Answer already exists for: {task.question_id}, skipping")
+            return True
+
         # 1. 创建 QuestionItem 对象
         question = QuestionItem(
             question_id=task.question_id,
@@ -38,7 +45,6 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant
-        qdrant = get_qdrant_manager()
         qdrant.update_answer(task.question_id, answer)
 
         logger.info(f"Answer generated and saved for: {task.question_id}")

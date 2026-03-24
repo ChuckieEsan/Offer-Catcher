@@ -4,7 +4,7 @@
 """
 
 from typing import Optional
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 
 from langchain_community.tools.ddg_search import DuckDuckGoSearchRun
 from langchain_core.tools import BaseTool  # noqa: F401
@@ -12,8 +12,7 @@ from langchain_core.tools import BaseTool  # noqa: F401
 from app.utils.logger import logger
 
 
-@dataclass
-class WebSearchResult:
+class WebSearchResult(BaseModel):
     """Web 搜索结果
 
     Attributes:
@@ -22,9 +21,9 @@ class WebSearchResult:
         content: 结果内容摘要
     """
 
-    title: str
-    url: str
-    content: str
+    title: str = Field(description="结果标题")
+    url: str = Field(description="结果链接")
+    content: str = Field(default="", description="结果内容摘要")
 
 
 class WebSearchTool:
