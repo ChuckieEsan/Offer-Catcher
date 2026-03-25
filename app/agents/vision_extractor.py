@@ -20,6 +20,7 @@ from app.config.settings import create_llm, get_settings
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
+from app.utils.retry import retry
 
 
 # Prompt 模板路径
@@ -152,6 +153,19 @@ class VisionExtractor:
 
             json_str = response[json_start:json_end]
             data = json.loads(json_str)
+
+            # 处理 questions 字段可能是字符串的情况
+            if "questions" in data and isinstance(data["questions"], str):
+                # LLM 可能返回了字符串形式的列表，尝试解析
+                try:
+                    data["questions"] = json.loads(data["questions"])
+                except json.JSONDecodeError:
+                    # 如果还是失败，尝试提取数组
+                    import re
+                    match = re.search(r'\[.*\]', data["questions"])
+                    if match:
+                        data["questions"] = json.loads(match.group())
+
             return ExtractedInterviewSchema(**data)
 
         except json.JSONDecodeError as e:
@@ -199,11 +213,13 @@ class VisionExtractor:
             questions=questions,
         )
 
+    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def _extract_with_structured_output(self, message: HumanMessage) -> ExtractedInterview:
         """使用 structured output 提取"""
         result = self.structured_llm.invoke([message])
         return self._convert_to_extracted_interview(result)
 
+    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def _extract_with_parsing(self, message: HumanMessage) -> ExtractedInterview:
         """使用手动解析提取"""
         response = self.base_llm.invoke([message])

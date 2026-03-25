@@ -5,6 +5,7 @@
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from langchain_openai import ChatOpenAI
@@ -54,6 +55,8 @@ class Settings(BaseSettings):
         SILICONFLOW_API_KEY: SiliconFlow API Key
         OPENAI_API_KEY: OpenAI API Key
         DEEPSEEK_API_KEY: DeepSeek API Key
+        DASHSCOPE_API_KEY: 阿里云百炼 DashScope API Key
+        TAVILY_API_KEY: Tavily Web Search API Key
         QDRANT_HOST: Qdrant 服务地址（可选，默认 localhost）
         QDRANT_PORT: Qdrant 端口（可选，默认 6333）
         QDRANT_COLLECTION: Qdrant 集合名称（可选，默认 questions）
@@ -65,7 +68,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).parent.parent.parent / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -86,6 +89,10 @@ class Settings(BaseSettings):
     )
     dashscope_api_key: str = Field(
         description="阿里云百炼 DashScope API Key",
+        default="",
+    )
+    tavily_api_key: str = Field(
+        description="Tavily Web Search API Key",
         default="",
     )
 

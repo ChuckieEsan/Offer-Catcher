@@ -1,14 +1,15 @@
 """Web 搜索工具模块
 
-为异步 Worker 提供联网搜索能力，使用 DuckDuckGo 搜索最新资料。
+为异步 Worker 提供联网搜索能力，使用 Tavily 搜索最新资料。
 """
 
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from langchain_community.tools.ddg_search import DuckDuckGoSearchRun
+from langchain_tavily import TavilySearch
 from langchain_core.tools import BaseTool  # noqa: F401
 
+from app.config.settings import get_settings
 from app.utils.logger import logger
 
 
@@ -29,7 +30,7 @@ class WebSearchResult(BaseModel):
 class WebSearchTool:
     """Web 搜索工具
 
-    使用 DuckDuckGo 搜索网页，为异步 Worker 提供联网搜索能力。
+    使用 Tavily 搜索网页，为异步 Worker 提供联网搜索能力。
     用于在生成答案时搜索最新资料。
 
     核心功能：
@@ -47,14 +48,18 @@ class WebSearchTool:
             max_results: 最大返回结果数，默认 5
         """
         self.max_results = max_results
-        self._tool: Optional[DuckDuckGoSearchRun] = None
+        self._tool: Optional[TavilySearch] = None
         logger.info(f"Web search tool initialized, max_results={max_results}")
 
     @property
-    def tool(self) -> DuckDuckGoSearchRun:
-        """获取 DuckDuckGo 工具实例（延迟加载）"""
+    def tool(self) -> TavilySearch:
+        """获取 Tavily 工具实例（延迟加载）"""
         if self._tool is None:
-            self._tool = DuckDuckGoSearchRun()
+            settings = get_settings()
+            self._tool = TavilySearch(
+                max_results=self.max_results,
+                tavily_api_key=settings.tavily_api_key,
+            )
         return self._tool
 
     def search(
@@ -74,12 +79,12 @@ class WebSearchTool:
         max_results = max_results or self.max_results
 
         try:
-            # 使用 DuckDuckGo 搜索
-            results = self.tool.invoke(query)
-            logger.debug(f"Search query: {query}, raw results: {results}")
+            # 使用 Tavily 搜索
+            raw_results = self.tool.invoke(query)
+            logger.debug(f"Search query: {query}, raw results: {raw_results}")
 
             # 解析结果
-            parsed_results = self._parse_results(results, max_results)
+            parsed_results = self._parse_results(raw_results, max_results)
 
             logger.info(
                 f"Web search completed: query='{query}', results={len(parsed_results)}"
@@ -92,13 +97,12 @@ class WebSearchTool:
 
     def _parse_results(
         self,
-        raw_results: str,
+        raw_results,
         max_results: int,
     ) -> list[WebSearchResult]:
         """解析搜索结果
 
-        DuckDuckGo 返回的结果格式需要解析。
-        结果通常以 "Title | URL | Description" 的格式返回。
+        Tavily 返回 dict，结构为 {'results': [dict(...), ...]}。
 
         Args:
             raw_results: 原始搜索结果
@@ -110,33 +114,17 @@ class WebSearchTool:
         if not raw_results:
             return []
 
-        results = []
-        lines = raw_results.strip().split("\n")
+        # Tavily 返回 dict，需要从 results 字段提取列表
+        items = raw_results.get("results", []) if isinstance(raw_results, dict) else raw_results
 
-        for line in lines[:max_results]:
-            # 尝试解析每一行
-            # 格式：Title | URL | Description
-            parts = line.split("|")
-            if len(parts) >= 3:
-                title = parts[0].strip()
-                url = parts[1].strip()
-                content = parts[2].strip()
+        results = []
+        for item in items[:max_results]:
+            if isinstance(item, dict):
                 results.append(
                     WebSearchResult(
-                        title=title,
-                        url=url,
-                        content=content,
-                    )
-                )
-            elif len(parts) == 2:
-                # 只有标题和 URL
-                title = parts[0].strip()
-                url = parts[1].strip()
-                results.append(
-                    WebSearchResult(
-                        title=title,
-                        url=url,
-                        content="",
+                        title=item.get("title", ""),
+                        url=item.get("url", ""),
+                        content=item.get("content", ""),
                     )
                 )
 
