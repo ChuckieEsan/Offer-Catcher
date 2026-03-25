@@ -1,18 +1,15 @@
 """RabbitMQ 消息消费者模块
 
 提供消息消费功能，用于后台 Worker 消费队列中的任务并生成答案。
-支持熔断与降级机制（使用 aiobreaker）：
-- 熔断：连续失败达到阈值后暂停消费
+支持断路器与降级机制（基于 app/utils/circuit_breaker）：
+- 断路器：连续失败达到阈值后暂停消费
 - 降级：失败消息重新入队到队尾
 """
 
-from datetime import datetime, timedelta
 from typing import Callable, Optional
 import json
 import time
 
-import aiobreaker
-from aiobreaker.state import CircuitOpenState
 import pika
 from pika import BlockingConnection
 from pika.channel import Channel
@@ -21,12 +18,14 @@ from pika.exceptions import AMQPConnectionError, AMQPChannelError
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
 from app.utils.logger import logger
+from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
 
-# 创建全局熔断器实例
-_message_circuit_breaker = aiobreaker.CircuitBreaker(
-    fail_max=5,  # 连续失败次数达到 5 次后触发熔断
-    timeout_duration=timedelta(seconds=30),  # 30 秒后尝试恢复
+# 创建消费者专用的断路器
+_message_breaker = create_circuit_breaker(
+    fail_max=5,
+    timeout_duration=30.0,
+    name="rabbitmq_consumer",
 )
 
 
@@ -56,8 +55,8 @@ class RabbitMQConsumer:
         self._connection: Optional[BlockingConnection] = None
         self._channel: Optional[Channel] = None
         self._consuming = False
-        # 引用全局熔断器
-        self.circuit_breaker = _message_circuit_breaker
+        # 引用断路器
+        self.circuit_breaker = _message_breaker
         # 记录熔断打开的时间（用于恢复检查）
         self._circuit_open_time: Optional[float] = None
         # 恢复超时时间（秒）
@@ -325,7 +324,6 @@ class RabbitMQConsumer:
         try:
             # 开始消费
             while self._consuming:
-                # 检查熔断状态
                 if isinstance(self.circuit_breaker.state, CircuitOpenState):
                     # 检查是否超过恢复时间
                     if self._circuit_open_time is not None:
