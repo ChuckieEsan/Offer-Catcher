@@ -99,8 +99,8 @@ class IngestionPipeline:
         mq_producer = await self._get_producer()
 
         for question in interview.questions:
-            # KNOWLEDGE 和 SCENARIO 需要触发异步答案生成
-            if question.question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO):
+            # KNOWLEDGE、SCENARIO 和 ALGORITHM 需要触发异步答案生成
+            if question.question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO, QuestionType.ALGORITHM):
                 task = MQTaskMessage(
                     question_id=question.question_id,
                     question_text=question.question_text,
@@ -237,8 +237,8 @@ class IngestionPipeline:
             question_id=question_id,
             question_text=question_text,
             question_type=question_type,
-            # knowledge 和 scenario 的题目可以做异步处理
-            requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO)),
+            # knowledge、scenario 和 algorithm 的题目可以做异步处理
+            requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO, QuestionType.ALGORITHM)),
             core_entities=core_entities or [],
             mastery_level=mastery_level,
             company=company,

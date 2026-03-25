@@ -10,13 +10,15 @@ class QuestionType(str, Enum):
     - project: 项目深挖题（针对个人简历）
     - behavioral: 行为题（软技能）
     - scenario: 场景题（和企业业务场景相关的题目）
+    - algorithm: 算法题（Leetcode 的手撕题目，或者是面试官出的算法题）
     """
 
     KNOWLEDGE = "knowledge"
     PROJECT = "project"
     BEHAVIORAL = "behavioral"
     SCENARIO = "scenario"
-
+    ALGORITHM = "algorithm"
+    
 
 class MasteryLevel(int, Enum):
     """熟练度等级枚举

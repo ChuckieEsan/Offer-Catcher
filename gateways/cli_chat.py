@@ -506,7 +506,7 @@ async def main():
             # 按类型分布
             col_types = st.columns(4)
             for i, (qtype, count) in enumerate(sorted(by_type.items())):
-                type_name = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题"}.get(qtype, qtype)
+                type_name = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题", "algorithm": "算法题"}.get(qtype, qtype)
                 col_types[i % 4].metric(type_name, count)
 
             st.markdown("---")
@@ -534,10 +534,10 @@ async def main():
             with f3:
                 filter_type = st.selectbox(
                     "按类型",
-                    ["全部", "knowledge", "project", "behavioral", "scenario"],
+                    ["全部", "knowledge", "project", "behavioral", "scenario", "algorithm"],
                     key="filter_type"
                 )
-                type_map = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题"}
+                type_map = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题", "algorithm": "算法题"}
 
             with f4:
                 filter_mastery = st.selectbox(
@@ -671,9 +671,9 @@ async def main():
                             with col_row3:
                                 new_type = st.selectbox(
                                     "题目类型",
-                                    ["knowledge", "project", "behavioral", "scenario"],
-                                    index=["knowledge", "project", "behavioral", "scenario"].index(r.question_type)
-                                    if r.question_type in ["knowledge", "project", "behavioral", "scenario"] else 0,
+                                    ["knowledge", "project", "behavioral", "scenario", "algorithm"],
+                                    index=["knowledge", "project", "behavioral", "scenario", "algorithm"].index(r.question_type)
+                                    if r.question_type in ["knowledge", "project", "behavioral", "scenario", "algorithm"] else 0,
                                     key=f"type_{r.question_id}",
                                 )
                             with col_row4:

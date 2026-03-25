@@ -160,14 +160,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         questions = []
 
         for q in schema.questions:
-            # 转换 question_type
-            if q.question_type == "project":
-                question_type = QuestionType.PROJECT
-            elif q.question_type == "behavioral":
-                question_type = QuestionType.BEHAVIORAL
-            elif q.question_type == "scenario":
-                question_type = QuestionType.SCENARIO
-            else:
+            # 转换 question_type（使用 Enum 直接转换，更简洁）
+            try:
+                question_type = QuestionType(q.question_type)
+            except ValueError:
                 question_type = QuestionType.KNOWLEDGE
 
             # 生成 question_id
@@ -177,7 +173,7 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
                 question_id=question_id,
                 question_text=q.question_text,
                 question_type=question_type,
-                requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO)),
+                requires_async_answer=(question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO, QuestionType.ALGORITHM)),
                 core_entities=q.core_entities,
                 mastery_level=MasteryLevel.LEVEL_0,
                 company=schema.company,

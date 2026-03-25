@@ -125,7 +125,7 @@ class TestExtractFromText:
 
         # 验证题目类型分类
         for q in result.questions:
-            assert q.question_type.value in ["knowledge", "project", "behavioral"]
+            assert q.question_type.value in ["knowledge", "project", "behavioral", "scenario", "algorithm"]
         print("Question types verified")
 
     def test_extract_question_types(self, extractor):

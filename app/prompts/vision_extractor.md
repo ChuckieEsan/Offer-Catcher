@@ -10,11 +10,12 @@
 - **岗位名称**：提取核心岗位，如："Agent应用开发"、"大模型算法工程师"、"后端开发"等。
 
 ### 2. 题目智能分类 (Categorization)
-请为每一道题严格打上以下三种类型之一的标签：
+请为每一道题严格打上以下五种类型之一的标签：
 - `knowledge` (客观题/八股文)：考察技术原理、框架对比、编程基础等（如：RAG原理、MCP通信方式）。
 - `project` (项目深挖题)：针对候选人简历项目的定制化提问（如：你的Agent项目背景、项目中AI代码占比、项目拷打）。
 - `behavioral` (行为/开放题)：考察软技能、职业规划（如：离职原因、对Agent的预期）。
 - `scenario` (场景题)：考察候选人对企业某个业务场景的优化思路或者解决方案（如：如果 token 消耗过多，你会如何优化 Agent 项目）
+- `algorithm`（算法题）：考察候选人的编码能力和算法能力，通常是 Leetcode 的手撕题目或者是面试官自己出的题目（如：两数之和、反转链表）
 *注：如无法确定，默认归类为 `knowledge`。*
 
 ### 3. 题目专业改写 (Professional Rewriting - CRITICAL)
@@ -37,7 +38,7 @@
   "questions":[
     {
       "question_text": "经过专业改写后的完整面试提问",
-      "question_type": "knowledge / project / behavioral / scenario",
+      "question_type": "knowledge / project / behavioral / scenario / algorithm",
       "core_entities": ["核心技术名词1", "核心技术名词2"],
       "metadata": {
         "interview_round": "一面/二面/三面/HR面 (无法识别则不填)",

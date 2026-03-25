@@ -36,18 +36,18 @@ async def resend_unanswered_questions(dry_run: bool = True):
         limit=1000,
     )
 
-    # 过滤出没有答案的题目，且只处理 knowledge 和 scenario 类型
+    # 过滤出没有答案的题目，且只处理 knowledge、scenario 和 algorithm 类型
     unanswered = [
         r for r in results
         if not r.question_answer
-        and r.question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO)
+        and r.question_type in (QuestionType.KNOWLEDGE, QuestionType.SCENARIO, QuestionType.ALGORITHM)
     ]
 
     if not unanswered:
-        logger.info("没有需要重新处理的 knowledge/scenario 题目")
+        logger.info("没有需要重新处理的 knowledge/scenario/algorithm 题目")
         return
 
-    logger.info(f"找到 {len(unanswered)} 条没有答案的 knowledge/scenario 题目")
+    logger.info(f"找到 {len(unanswered)} 条没有答案的 knowledge/scenario/algorithm 题目")
 
     # 显示要重发的题目
     print("\n将重发的题目:")
