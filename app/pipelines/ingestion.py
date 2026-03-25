@@ -8,6 +8,7 @@
 直接使用 app/db 模块。
 """
 
+import asyncio
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -117,7 +118,7 @@ class IngestionPipeline:
 
         return task_count
 
-    def process(self, interview: ExtractedInterview) -> IngestionResult:
+    async def process(self, interview: ExtractedInterview) -> IngestionResult:
         """处理入库流水线
 
         Args:
@@ -204,7 +205,7 @@ class IngestionPipeline:
             logger.info(f"Stored {result.processed} questions to Qdrant")
 
             # 3. 分类熔断 - 发送异步任务（只在 requires_async_answer 为 True 时发送）
-            async_count = self._send_async_task(interview)
+            async_count = await self._send_async_task(interview)
             result.async_tasks = async_count
             logger.info(f"Sent {async_count} async tasks to MQ")
 
@@ -216,7 +217,7 @@ class IngestionPipeline:
             result.processed = 0
             raise
 
-    def ingest_single_question(
+    async def ingest_single_question(
         self,
         question_text: str,
         company: str,
@@ -251,7 +252,7 @@ class IngestionPipeline:
             questions=[question],
         )
 
-        return self.process(interview)
+        return await self.process(interview)
 
 
 # 全局单例

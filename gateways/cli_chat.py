@@ -8,6 +8,7 @@
 - 仪表盘展示
 """
 
+import asyncio
 import streamlit as st
 from PIL import Image
 
@@ -105,7 +106,7 @@ def confirm_text_ingest(result):
         st.rerun()
 
 
-def main():
+async def main():
     """主函数"""
     # 初始化组件
     vision_extractor, ingestion_pipeline, retrieval_pipeline, qdrant_manager = init_components()
@@ -188,7 +189,7 @@ def main():
                 result = st.session_state.confirm_data
                 with st.spinner("正在入库..."):
                     try:
-                        ingestion_result = ingestion_pipeline.process(result)
+                        ingestion_result = await ingestion_pipeline.process(result)
                         st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
                         if ingestion_result.async_tasks > 0:
                             st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
@@ -672,4 +673,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

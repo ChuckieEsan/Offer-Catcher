@@ -22,7 +22,8 @@ class TestEndToEnd:
         self.ingestion = get_ingestion_pipeline()
         self.retrieval = get_retrieval_pipeline()
 
-    def test_complete_flow(self):
+    @pytest.mark.asyncio
+    async def test_complete_flow(self):
         """测试完整流程：入库 -> 检索"""
         # ========== 1. 入库 ==========
         # 创建面试数据
@@ -55,7 +56,7 @@ class TestEndToEnd:
         )
 
         # 执行入库
-        result = self.ingestion.process(interview)
+        result = await self.ingestion.process(interview)
 
         print(f"\n=== Ingestion Result ===")
         print(f"Processed: {result.processed}")
@@ -107,11 +108,12 @@ class TestEndToEnd:
 class TestIngestionPipeline:
     """入库流水线测试"""
 
-    def test_ingest_single_question(self):
+    @pytest.mark.asyncio
+    async def test_ingest_single_question(self):
         """测试单条题目入库"""
         ingestion = get_ingestion_pipeline()
 
-        result = ingestion.ingest_single_question(
+        result = await ingestion.ingest_single_question(
             question_text='LangChain 是什么？',
             company='阿里',
             position='大模型开发',
