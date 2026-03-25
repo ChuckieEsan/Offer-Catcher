@@ -51,11 +51,18 @@ async def process_answer_task(task: MQTaskMessage) -> bool:
         )
 
         # 2. 生成答案
+        
         agent = get_answer_specialist(provider="dashscope")
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant
         qdrant.update_question(task.question_id, question_answer=answer)
+        
+        # 这里的协程模式并不是真并发，因为这些操作是阻塞的
+        # 如果要求协程模式下真并发，可以采用如下策略
+        # answer = await asyncio.to_thread(agent.generate_answer, question)
+        # 写入 Qdrant（同步阻塞调用 -> 放到线程池）
+        # await asyncio.to_thread(qdrant.update_question, task.question_id, answer)
 
         logger.info(f"Answer generated and saved for: {task.question_id}")
         return True

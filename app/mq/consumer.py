@@ -152,62 +152,69 @@ class AsyncRabbitMQConsumer:
     ) -> None:
         """单条消息的并发协程处理逻辑"""
 
-        # 使用 process() 上下文，ignore_processed=True 允许我们手动控制 ack/reject
-        async with message.process(ignore_processed=True):
+        # 不使用 process() 上下文，手动控制 ACK/Reject
+        # 避免程序中断时消息被意外 ACK
 
-            # --- 1. 熔断器拦截逻辑 ---
-            if isinstance(self.circuit_breaker.state, CircuitOpenState):
-                if self._circuit_open_time and (
-                    time.time() - self._circuit_open_time >= self._recovery_timeout
-                ):
-                    self.circuit_breaker.close()
-                    self._circuit_open_time = None
-                    logger.info("Circuit breaker recovered after timeout.")
-                else:
-                    # 正在熔断中：拒绝该消息使其重新排队，并短暂休眠防止 CPU 狂转
-                    logger.warning("Circuit breaker is OPEN. Rejecting and requeueing...")
-                    await asyncio.sleep(2)
-                    await message.reject(requeue=True)
-                    return
+        # --- 1. 熔断器拦截逻辑 ---
+        if isinstance(self.circuit_breaker.state, CircuitOpenState):
+            if self._circuit_open_time and (
+                time.time() - self._circuit_open_time >= self._recovery_timeout
+            ):
+                self.circuit_breaker.close()
+                self._circuit_open_time = None
+                logger.info("Circuit breaker recovered after timeout.")
+            else:
+                # 正在熔断中：拒绝该消息使其重新排队
+                logger.warning("Circuit breaker is OPEN. Rejecting and requeueing...")
+                await asyncio.sleep(2)
+                await message.reject(requeue=True)
+                return
 
-            # --- 2. 正常业务逻辑 ---
-            question_id = "unknown"
-            retry_count = (
-                message.headers.get("x-retry-count", 0) if message.headers else 0
+        # --- 2. 正常业务逻辑 ---
+        question_id = "unknown"
+        retry_count = (
+            message.headers.get("x-retry-count", 0) if message.headers else 0
+        )
+
+        try:
+            task = MQTaskMessage.model_validate_json(message.body)
+            question_id = task.question_id
+            logger.info(
+                f"Received task: q_id={question_id}, retry={retry_count}"
             )
 
-            try:
-                task = MQTaskMessage.model_validate_json(message.body)
-                question_id = task.question_id
-                logger.info(
-                    f"Received task: q_id={question_id}, retry={retry_count}"
-                )
+            # 执行异步的大模型调用回调
+            success = await callback(task)
 
-                # 执行异步的大模型调用回调
-                success = await callback(task)
-
-                if success:
-                    await message.ack()
-                    self.circuit_breaker.close()
-                else:
-                    # 业务明确返回失败：打开熔断器，原消息ACK，重新投递到队尾
-                    self.circuit_breaker.open()
-                    self._circuit_open_time = time.time()
-
-                    await message.ack()
-                    await self.republish_to_back(message, question_id, retry_count)
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON format: {e}. Message discarded.")
-                await message.ack()  # 脏数据直接丢弃，不重试
-
-            except Exception as e:
-                logger.error(f"Unexpected error processing message: {e}")
+            if success:
+                await message.ack()
+                self.circuit_breaker.close()
+            else:
+                # 业务明确返回失败：打开熔断器，原消息ACK，重新投递到队尾
                 self.circuit_breaker.open()
                 self._circuit_open_time = time.time()
 
                 await message.ack()
                 await self.republish_to_back(message, question_id, retry_count)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON format: {e}. Message discarded.")
+            await message.ack()  # 脏数据直接丢弃，不重试
+
+        except asyncio.CancelledError:
+            # 处理程序被中断的情况：不 ACK，消息会重新入队
+            logger.warning("Task cancelled, rejecting message to requeue...")
+            await message.reject(requeue=True)
+            raise  # 重新抛出 CancelledError
+
+        except Exception as e:
+            logger.error(f"Unexpected error processing message: {e}")
+            self.circuit_breaker.open()
+            self._circuit_open_time = time.time()
+
+            # 异常情况下拒绝消息，让其重新入队
+            await message.reject(requeue=True)
+            await self.republish_to_back(message, question_id, retry_count)
 
     async def consume(
         self, callback: Callable[[MQTaskMessage], Awaitable[bool]]

@@ -5,6 +5,7 @@ aio-pika 连接和 channel 来消费消息队列中的数据。
 """
 
 import asyncio
+import inspect
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
@@ -12,6 +13,7 @@ from typing import Callable, Optional, List
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
+from aio_pika.exceptions import QueueEmpty
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
@@ -121,10 +123,11 @@ class ThreadPoolRabbitMQConsumer:
 
             # 消费循环
             while self._running:
+                current_message = None
                 try:
-                    # 获取消息（阻塞等待）
-                    incoming_message = await queue.get()
-
+                    # 获取消息
+                    current_message = await queue.get()
+                    
                     # 熔断器逻辑
                     if isinstance(circuit_breaker.state, CircuitOpenState):
                         if circuit_open_time and (
@@ -135,32 +138,50 @@ class ThreadPoolRabbitMQConsumer:
                             logger.info(f"Thread-{thread_id}: Circuit breaker recovered")
                         else:
                             logger.warning(f"Thread-{thread_id}: Circuit breaker OPEN, requeue message")
-                            await incoming_message.reject(requeue=True)
+                            await current_message.reject(requeue=True)
                             await asyncio.sleep(1)
                             continue
 
                     # 处理消息
                     success = await self._process_message(
-                        incoming_message, callback, circuit_breaker, thread_id
+                        current_message, callback, circuit_breaker, thread_id
                     )
 
                     if success:
-                        await incoming_message.ack()
+                        await current_message.ack()
                         circuit_breaker.close()
                     else:
                         circuit_breaker.open()
                         circuit_open_time = time.time()
-                        await incoming_message.ack()
+                        await current_message.ack()
                         # 重新入队
-                        await self._republish_to_back(incoming_message, channel)
+                        await self._republish_to_back(current_message, channel)
+
+                except QueueEmpty:
+                    # 队列为空，等待后重试
+                    await asyncio.sleep(1)
+                    continue
 
                 except asyncio.CancelledError:
                     logger.info(f"Thread-{thread_id}: Task cancelled")
+                    # 拒绝当前消息让其重新入队
+                    if current_message is not None:
+                        try:
+                            await current_message.reject(requeue=True)
+                        except Exception:
+                            pass
                     break
                 except Exception as e:
-                    logger.error(f"Thread-{thread_id}: Error in consume loop: {e}")
+                    import traceback
+                    logger.error(f"Thread-{thread_id}: Error in consume loop: {e}\n{traceback.format_exc()}")
                     circuit_breaker.open()
                     circuit_open_time = time.time()
+                    # 拒绝当前消息让其重新入队
+                    if current_message is not None:
+                        try:
+                            await current_message.reject(requeue=True)
+                        except Exception:
+                            pass
                     await asyncio.sleep(1)
 
         except Exception as e:
@@ -182,13 +203,15 @@ class ThreadPoolRabbitMQConsumer:
 
         Args:
             message: 接收到的消息
-            callback: 处理回调
+            callback: 处理回调（可以是同步或异步函数）
             circuit_breaker: 熔断器
             thread_id: 线程 ID
 
         Returns:
             处理是否成功
         """
+
+
         question_id = "unknown"
         retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
 
@@ -197,9 +220,14 @@ class ThreadPoolRabbitMQConsumer:
             question_id = task.question_id
             logger.info(f"Thread-{thread_id}: Processing task {question_id}, retry={retry_count}")
 
-            # 调用回调函数（同步版本，需要在线程池中执行）
-            # 由于回调可能是同步的，我们直接调用
-            success = callback(task)
+            # 调用回调函数 - 支持同步和异步回调
+            result = callback(task)
+
+            # 如果返回的是协程，需要 await
+            if inspect.iscoroutine(result):
+                success = await result
+            else:
+                success = result
 
             return success if success is not None else True
 
