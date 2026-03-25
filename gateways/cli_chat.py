@@ -3,19 +3,30 @@
 基于 Streamlit 的 Web 界面，支持以下功能：
 - 文本/图片输入 -> Vision Extractor -> 入库 -> 发送异步任务
 - 搜索题目（支持按公司、熟练度过滤）
+- 练习答题（使用 Scorer Agent 评分）
 - 查看题目的标准答案
 - 更新题目熟练度
-- 仪表盘展示
+- 仪表盘展示（图数据库统计）
 """
 
 import asyncio
+import os
+import tempfile
+
+import nest_asyncio
 import streamlit as st
 from PIL import Image
 
+# 修复 Streamlit 在 Jupyter 环境下的兼容性问题
+nest_asyncio.apply()
+
 from app.agents.vision_extractor import get_vision_extractor
+from app.agents.router import get_router_agent
+from app.agents.scorer import get_scorer_agent
 from app.pipelines.ingestion import get_ingestion_pipeline
 from app.pipelines.retrieval import get_retrieval_pipeline
 from app.db.qdrant_client import get_qdrant_manager
+from app.db.graph_client import get_graph_client
 from app.utils.logger import logger
 
 
@@ -31,14 +42,20 @@ st.set_page_config(
 def init_components():
     """初始化组件（缓存）"""
     vision_extractor = get_vision_extractor(provider="dashscope")
+    router_agent = get_router_agent(provider="dashscope")
+    scorer_agent = get_scorer_agent(provider="dashscope")
     ingestion_pipeline = get_ingestion_pipeline()
     retrieval_pipeline = get_retrieval_pipeline()
     qdrant_manager = get_qdrant_manager()
+    graph_client = get_graph_client()
 
     # 确保 Qdrant 集合存在
     qdrant_manager.create_collection_if_not_exists()
 
-    return vision_extractor, ingestion_pipeline, retrieval_pipeline, qdrant_manager
+    # 尝试连接 Neo4j
+    graph_client.connect()
+
+    return vision_extractor, router_agent, scorer_agent, ingestion_pipeline, retrieval_pipeline, qdrant_manager, graph_client
 
 
 def get_ingestion_strategy(question_text: str, core_entities: list[str], qdrant_manager) -> dict:
@@ -106,10 +123,43 @@ def confirm_text_ingest(result):
         st.rerun()
 
 
+def display_extracted_questions(result, qdrant_manager):
+    """显示提取的题目列表（文本输入和图片上传共用）
+
+    Args:
+        result: VisionExtractor 的提取结果
+        qdrant_manager: Qdrant 管理器实例
+    """
+    # 显示题目列表
+    st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
+    st.info("💡 点击题目可查看入库策略")
+
+    st.subheader("提取的题目")
+    for i, q in enumerate(result.questions, 1):
+        # 延迟加载：仅在展开时计算入库策略
+        with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
+            st.write(f"**完整题目**: {q.question_text}")
+            st.write(f"**类型**: {q.question_type.value}")
+            st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
+
+            # 延迟加载入库策略
+            with st.spinner("计算入库策略..."):
+                strategy = get_ingestion_strategy(
+                    q.question_text,
+                    q.core_entities,
+                    qdrant_manager
+                )
+
+            st.write("---")
+            st.write(f"**入库策略**: {strategy['message']}")
+            if strategy.get("similar_text"):
+                st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
+
+
 async def main():
     """主函数"""
     # 初始化组件
-    vision_extractor, ingestion_pipeline, retrieval_pipeline, qdrant_manager = init_components()
+    vision_extractor, router_agent, scorer_agent, ingestion_pipeline, retrieval_pipeline, qdrant_manager, graph_client = init_components()
 
     # 侧边栏
     with st.sidebar:
@@ -117,7 +167,7 @@ async def main():
         st.markdown("---")
         page = st.radio(
             "选择功能",
-            ["📝 录入面经", "🔍 搜索题目", "📋 题目管理", "📊 仪表盘"]
+            ["📝 录入面经", "🔍 搜索题目", "📝 练习答题", "📋 题目管理", "📊 仪表盘"]
     )
 
     if page == "📝 录入面经":
@@ -158,31 +208,7 @@ async def main():
             # 入库（使用 session state 保存的结果）
             if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "text":
                 result = st.session_state.extracted_result
-
-                # 显示题目列表
-                st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
-                st.info("💡 点击题目可查看入库策略")
-
-                st.subheader("提取的题目")
-                for i, q in enumerate(result.questions, 1):
-                    # 延迟加载：仅在展开时计算入库策略
-                    with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
-                        st.write(f"**完整题目**: {q.question_text}")
-                        st.write(f"**类型**: {q.question_type.value}")
-                        st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
-
-                        # 延迟加载入库策略
-                        with st.spinner("计算入库策略..."):
-                            strategy = get_ingestion_strategy(
-                                q.question_text,
-                                q.core_entities,
-                                qdrant_manager
-                            )
-
-                        st.write("---")
-                        st.write(f"**入库策略**: {strategy['message']}")
-                        if strategy.get("similar_text"):
-                            st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
+                display_extracted_questions(result, qdrant_manager)
 
             # 处理确认入库结果
             if st.session_state.get("confirm_result") and st.session_state.get("confirm_data"):
@@ -207,9 +233,6 @@ async def main():
             uploaded_file = st.file_uploader("上传面经图片", type=["png", "jpg", "jpeg"])
 
             if uploaded_file:
-                import tempfile
-                import os
-
                 # 保存上传的图片到临时文件
                 suffix = f".{uploaded_file.name.split('.')[-1]}" if '.' in uploaded_file.name else ".jpg"
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -245,30 +268,7 @@ async def main():
                 if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "image":
                     result = st.session_state.extracted_result
 
-                    # 显示题目列表
-                    st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
-                    st.info("💡 点击题目可查看入库策略")
-
-                    st.subheader("提取的题目")
-                    for i, q in enumerate(result.questions, 1):
-                        # 延迟加载：仅在展开时计算入库策略
-                        with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
-                            st.write(f"**完整题目**: {q.question_text}")
-                            st.write(f"**类型**: {q.question_type.value}")
-                            st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
-
-                            # 延迟加载入库策略
-                            with st.spinner("计算入库策略..."):
-                                strategy = get_ingestion_strategy(
-                                    q.question_text,
-                                    q.core_entities,
-                                    qdrant_manager
-                                )
-
-                            st.write("---")
-                            st.write(f"**入库策略**: {strategy['message']}")
-                            if strategy.get("similar_text"):
-                                st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
+                    display_extracted_questions(result, qdrant_manager)
 
                     # 显示确认信息
                     st.info(f"共提取 {len(result.questions)} 道题目，确认无误后点击下方按钮入库")
@@ -346,6 +346,117 @@ async def main():
                                     qdrant_manager.update_question(r.question_id, mastery_level=new_level)
                                     st.success("✅ 更新成功")
                                     st.rerun()
+
+    elif page == "📝 练习答题":
+        st.subheader("📝 练习答题")
+        st.markdown("选择一道题目进行练习，提交答案后获取 AI 评分和改进建议")
+
+        # 获取题目列表供选择
+        with st.spinner("加载题目..."):
+            practice_questions = retrieval_pipeline.search(query="", k=100)
+
+        if not practice_questions:
+            st.info("暂无题目数据，请先录入题目")
+        else:
+            # 过滤有答案的题目才能练习
+            available_questions = [q for q in practice_questions if q.question_answer]
+
+            if not available_questions:
+                st.warning("暂无带答案的题目，请等待异步答案生成完成")
+            else:
+                # 题目选择器
+                question_options = {
+                    f"[{q.company}] {q.question_text[:40]}...": q
+                    for q in available_questions
+                }
+                selected_label = st.selectbox(
+                    "选择题目",
+                    list(question_options.keys()),
+                    key="practice_select"
+                )
+
+                if selected_label:
+                    selected_q = question_options[selected_label]
+
+                    # 显示题目
+                    st.markdown("---")
+                    st.markdown("### 题目")
+                    st.write(f"**公司**: {selected_q.company}")
+                    st.write(f"**岗位**: {selected_q.position}")
+                    st.write(f"**类型**: {selected_q.question_type}")
+
+                    with st.expander("查看题目详情"):
+                        st.write(selected_q.question_text)
+                        if selected_q.core_entities:
+                            st.write(f"**知识点**: {', '.join(selected_q.core_entities)}")
+
+                    # 答案输入
+                    st.markdown("### 你的答案")
+                    user_answer = st.text_area(
+                        "请在此输入你的答案",
+                        height=200,
+                        placeholder="请用自己的话回答这道题目...",
+                        key="practice_answer"
+                    )
+
+                    # 提交评分
+                    if st.button("提交评分", type="primary", key="submit_score"):
+                        if not user_answer.strip():
+                            st.error("请输入答案")
+                        else:
+                            with st.spinner("AI 评分中..."):
+                                try:
+                                    score_result = asyncio.run(
+                                        scorer_agent.score(
+                                            question_id=selected_q.question_id,
+                                            user_answer=user_answer
+                                        )
+                                    )
+
+                                    # 显示评分结果
+                                    st.markdown("---")
+                                    st.markdown("### 评分结果")
+
+                                    # 分数和等级
+                                    col_score1, col_score2, col_score3 = st.columns(3)
+                                    with col_score1:
+                                        st.metric("得分", f"{score_result.score}/100")
+                                    with col_score2:
+                                        level_emoji = ["❌", "⚠️", "✅"]
+                                        level_name = ["未掌握", "熟悉", "已掌握"]
+                                        st.metric(
+                                            "熟练度",
+                                            f"{level_emoji[score_result.mastery_level.value]} {level_name[score_result.mastery_level.value]}"
+                                        )
+                                    with col_score3:
+                                        st.metric("标准答案", "已提供" if score_result.standard_answer else "待生成")
+
+                                    # 优点
+                                    if score_result.strengths:
+                                        st.markdown("#### 优点")
+                                        for s in score_result.strengths:
+                                            st.success(f"✓ {s}")
+
+                                    # 改进建议
+                                    if score_result.improvements:
+                                        st.markdown("#### 改进建议")
+                                        for imp in score_result.improvements:
+                                            st.warning(f"→ {imp}")
+
+                                    # 综合反馈
+                                    if score_result.feedback:
+                                        st.markdown("#### 综合反馈")
+                                        st.info(score_result.feedback)
+
+                                    # 显示标准答案（可选）
+                                    with st.expander("查看标准答案"):
+                                        if score_result.standard_answer:
+                                            st.markdown(score_result.standard_answer)
+                                        else:
+                                            st.info("标准答案待生成")
+
+                                except Exception as e:
+                                    st.error(f"评分失败: {e}")
 
     elif page == "📋 题目管理":
         st.subheader("📋 题目管理")
@@ -670,6 +781,44 @@ async def main():
             })
 
         st.table(company_data)
+
+        # 图数据库统计
+        st.markdown("---")
+        st.subheader("📈 图数据库统计（考频分析）")
+
+        if not graph_client.is_connected:
+            st.warning("Neo4j 图数据库未连接，请在 .env 中配置 NEO4J 相关环境变量")
+            st.info("提示：可通过 Docker 启动 Neo4j 容器")
+        else:
+            # 记录考点到图数据库
+            with st.spinner("同步考点数据到图数据库..."):
+                for r in results:
+                    if r.core_entities:
+                        graph_client.record_question_entities(r.company, r.core_entities)
+                st.success("考点数据已同步")
+
+            # 全局热门考点
+            st.markdown("#### 热门考点 TOP 10")
+            top_entities = graph_client.get_top_entities(limit=10)
+            if top_entities:
+                entity_data = {
+                    e["entity"]: e["count"] for e in top_entities
+                }
+                st.bar_chart(entity_data)
+            else:
+                st.info("暂无考点数据")
+
+            # 按公司查看考点
+            st.markdown("#### 各公司热门考点")
+            companies_with_data = list(by_company.keys())[:5]  # 最多显示5个公司
+            for company in companies_with_data:
+                with st.expander(f"{company} 的热门考点"):
+                    company_top = graph_client.get_top_entities(company=company, limit=5)
+                    if company_top:
+                        for e in company_top:
+                            st.write(f"- {e['entity']}: {e['count']} 次")
+                    else:
+                        st.info("暂无数据")
 
 
 if __name__ == "__main__":

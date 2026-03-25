@@ -30,7 +30,7 @@ class Neo4jGraphClient:
     @property
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        return self._driver is not None and not self._driver.is_closed()
+        return self._driver is not None and not self._driver._closed
 
     def connect(self) -> bool:
         """建立与 Neo4j 的连接
@@ -58,7 +58,7 @@ class Neo4jGraphClient:
 
     def close(self) -> None:
         """关闭连接"""
-        if self._driver and not self._driver.is_closed():
+        if self._driver and not self._driver._closed:
             self._driver.close()
             self._driver = None
             logger.info("Neo4j connection closed")
@@ -117,7 +117,7 @@ class Neo4jGraphClient:
             logger.error(f"Failed to create entity node: {e}")
             return False
 
-    def create考频关系(
+    def create_exam_frequency_relationship(
         self,
         company: str,
         entity: str,
@@ -258,7 +258,7 @@ class Neo4jGraphClient:
 
         success = True
         for entity in entities:
-            if not self.create考频关系(company, entity, 1):
+            if not self.create_exam_frequency_relationship(company, entity, 1):
                 success = False
 
         return success
