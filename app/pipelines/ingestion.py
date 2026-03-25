@@ -128,41 +128,65 @@ class IngestionPipeline:
             vectors = []
 
             for question in interview.questions:
-                # 1.1 创建上下文用于 embedding
-                context = self._create_context(question)
+                # 1.0 唯一键检查：使用 question_id 检查是否已存在
+                existing_question = self.qdrant_manager.get_question(question.question_id)
 
-                # 1.2 写时复制：查重并复用答案
-                query_vector = self.embedding_tool.embed_text(context)
-                similar_docs = self.qdrant_manager.search(
-                    query_vector=query_vector,
-                    limit=1,
-                    score_threshold=0.95,  # 高阈值查重
-                )
-
-                # 如果命中且已有答案，复用答案并关闭 MQ 任务
-                if similar_docs:
-                    existing = similar_docs[0]
-                    if existing.question_answer:
+                if existing_question:
+                    # 题目已存在
+                    if existing_question.question_answer:
+                        # 已有答案 → 复用答案，跳过 MQ 任务
                         logger.info(
-                            f"触发白嫖机制！题目【{question.question_text}】复用了库中已有标准答案。"
+                            f"题目 {question.question_id} 已存在且有答案，复用已有答案"
                         )
-                        # 复制答案并关闭异步任务
-                        # 注意：QuestionItem 没有 question_answer 字段，需要通过 payload 传递
                         question.requires_async_answer = False
-                        # 在 payload 中设置答案
                         payload = self._create_payload(question)
-                        payload.question_answer = existing.question_answer
-                        logger.info(f"Question {question.question_id} will reuse existing answer")
+                        payload.question_answer = existing_question.question_answer
+                    else:
+                        # 无答案 → 跳过入库（MQ 中有待处理的任务）
+                        logger.info(
+                            f"题目 {question.question_id} 已存在但无答案，跳过入库（避免重复）"
+                        )
+                        continue
+                else:
+                    # 1.1 创建上下文用于 embedding
+                    context = self._create_context(question)
+
+                    # 1.2 写时复制：查重并复用答案（针对相似题目，非 exact match）
+                    query_vector = self.embedding_tool.embed_text(context)
+                    similar_docs = self.qdrant_manager.search(
+                        query_vector=query_vector,
+                        limit=1,
+                        score_threshold=0.95,  # 高阈值查重
+                    )
+
+                    # 如果命中且已有答案，复用答案并关闭 MQ 任务
+                    if similar_docs:
+                        existing = similar_docs[0]
+                        if existing.question_answer:
+                            logger.info(
+                                f"触发白嫖机制！题目【{question.question_text}】复用了库中已有标准答案。"
+                            )
+                            # 复制答案并关闭异步任务
+                            # 注意：QuestionItem 没有 question_answer 字段，需要通过 payload 传递
+                            question.requires_async_answer = False
+                            # 在 payload 中设置答案
+                            payload = self._create_payload(question)
+                            payload.question_answer = existing.question_answer
+                            logger.info(f"Question {question.question_id} will reuse existing answer")
+                        else:
+                            payload = self._create_payload(question)
                     else:
                         payload = self._create_payload(question)
-                else:
-                    payload = self._create_payload(question)
 
-                # 1.3 生成向量
-                vector = self.embedding_tool.embed_text(context)
+                    # 1.3 生成向量
+                    vector = self.embedding_tool.embed_text(context)
 
-                payloads.append(payload)
-                vectors.append(vector)
+                    payloads.append(payload)
+                    vectors.append(vector)
+
+            if not payloads:
+                logger.info("没有新题目需要入库")
+                return result
 
             logger.info(f"Created {len(payloads)} payloads from interview")
 
