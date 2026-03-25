@@ -51,10 +51,17 @@ class IngestionPipeline:
         """初始化入库流水线"""
         self.embedding_tool = get_embedding_tool()
         self.qdrant_manager = get_qdrant_manager()
-        self.mq_producer = get_producer()
         # 确保集合存在
         self.qdrant_manager.create_collection_if_not_exists()
         logger.info("IngestionPipeline initialized")
+
+    async def _get_producer(self):
+        """获取或创建异步生产者"""
+        if not hasattr(self, '_mq_producer') or self._mq_producer is None:
+            self._mq_producer = await get_producer()
+        elif self._mq_producer._connection is None or self._mq_producer._connection.is_closed:
+            await self._mq_producer.connect()
+        return self._mq_producer
 
     def _create_context(self, question: QuestionItem) -> str:
         """创建用于 embedding 的上下文（静态前缀策略）
@@ -78,7 +85,7 @@ class IngestionPipeline:
             metadata=question.metadata,
         )
 
-    def _send_async_task(self, interview: ExtractedInterview) -> int:
+    async def _send_async_task(self, interview: ExtractedInterview) -> int:
         """发送异步任务到 RabbitMQ
 
         遵循分类熔断机制：
@@ -87,9 +94,8 @@ class IngestionPipeline:
         """
         task_count = 0
 
-        # 确保生产者已连接
-        if self.mq_producer._connection is None or self.mq_producer._connection.is_closed:
-            self.mq_producer.connect()
+        # 获取生产者
+        mq_producer = await self._get_producer()
 
         for question in interview.questions:
             # KNOWLEDGE 和 SCENARIO 需要触发异步答案生成
@@ -102,7 +108,7 @@ class IngestionPipeline:
                     core_entities=question.core_entities,
                 )
 
-                self.mq_producer.publish_task(task)
+                await mq_producer.publish_task(task)
                 task_count += 1
                 logger.info(
                     f"Async task sent: question_id={question.question_id}, "

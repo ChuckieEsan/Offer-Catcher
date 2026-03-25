@@ -1,17 +1,27 @@
 """Answer Worker 入口脚本
 
-启动 Worker 进程，消费 RabbitMQ 消息并生成答案。
+支持两种消费模式：
+1. 异步模式（默认）：基于协程的异步消费
+2. 线程池模式：基于 ThreadPoolExecutor，每个线程独立 channel
+
+可通过环境变量 WORKER_MODE 选择：
+- async: 异步协程模式（默认）
+- thread_pool: 线程池模式
 """
+
+import asyncio
+import os
 
 from app.agents.answer_specialist import get_answer_specialist
 from app.db.qdrant_client import get_qdrant_manager
-from app.mq.consumer import RabbitMQConsumer
+from app.mq.consumer import get_consumer
+from app.mq.thread_pool_consumer import get_thread_pool_consumer
 from app.models.schemas import MQTaskMessage
 from app.models.schemas import QuestionItem, QuestionType, MasteryLevel
 from app.utils.logger import logger
 
 
-def process_answer_task(task: MQTaskMessage) -> bool:
+async def process_answer_task(task: MQTaskMessage) -> bool:
     """处理答案生成任务
 
     Args:
@@ -55,14 +65,44 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         return False
 
 
-def main():
+async def main():
     """主函数"""
-    logger.info("Starting Answer Worker...")
+    worker_mode = os.getenv("WORKER_MODE", "async").lower()
 
-    with RabbitMQConsumer(prefetch_count=1) as consumer:
-        logger.info("Worker started, waiting for messages...")
-        consumer.consume(process_answer_task)
+    logger.info(f"Starting Answer Worker in {worker_mode} mode...")
+
+    if worker_mode == "thread_pool":
+        await run_thread_pool_mode()
+    else:
+        await run_async_mode()
+
+
+async def run_async_mode():
+    """异步协程模式（默认）"""
+    logger.info("Using async coroutine consumer (prefetch=5)")
+    consumer = await get_consumer(prefetch_count=5)
+    logger.info("Worker started, waiting for messages...")
+    await consumer.consume(process_answer_task)
+
+
+async def run_thread_pool_mode():
+    """线程池模式"""
+    num_threads = int(os.getenv("WORKER_THREADS", "4"))
+    logger.info(f"Using thread pool consumer ({num_threads} threads)")
+
+    consumer = await get_thread_pool_consumer(
+        num_threads=num_threads, prefetch_count=1
+    )
+    await consumer.start(process_answer_task)
+    logger.info(f"Thread pool worker started with {num_threads} threads, waiting for messages...")
+
+    # 保持主线程运行
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logger.info("Worker cancelled, stopping...")
+        await consumer.stop()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

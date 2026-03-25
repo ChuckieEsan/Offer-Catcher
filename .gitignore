@@ -6,6 +6,8 @@ dist/
 wheels/
 *.egg-info
 
+.pytest_cache
+
 # Virtual environments
 .venv
 .claude
@@ -17,3 +19,6 @@ wheels/
 models/
 
 !app/models
+
+# 备份数据
+backups
