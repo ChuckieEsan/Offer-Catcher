@@ -37,13 +37,13 @@
 请输出 JSON 格式的结果：
 
 ```json
-{
+{{
   "score": 85,
   "mastery_level": "LEVEL_2",
   "strengths": ["优点1", "优点2"],
   "improvements": ["改进建议1", "改进建议2"],
   "feedback": "综合反馈"
-}
+}}
 ```
 
 ## 题目信息

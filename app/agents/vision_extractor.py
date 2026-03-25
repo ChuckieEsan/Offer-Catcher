@@ -7,26 +7,18 @@
 - image: 分析图片（支持 Base64、文件路径、URL）
 """
 
-import base64
 import json
 import re
-from pathlib import Path
 from typing import Any, Optional
-from urllib.request import urlopen
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from app.config.settings import create_llm, get_settings
+from app.agents.base import BaseAgent
+from app.config.settings import create_llm
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
-from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
-from app.utils.retry import retry
-
-
-# Prompt 模板路径
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "vision_extractor.md"
+from app.utils.image import encode_image_to_base64
 
 
 # 用于 with_structured_output 的 Pydantic 模型
@@ -54,38 +46,15 @@ class ExtractedInterviewSchema(BaseModel):
     )
 
 
-def load_prompt() -> str:
-    """加载 Prompt 模板"""
-    if PROMPT_PATH.exists():
-        return PROMPT_PATH.read_text(encoding="utf-8")
-    return ""
-
-
-def encode_image_to_base64(image_source: str) -> str:
-    """将图片转换为 Base64 编码"""
-    if image_source.startswith("data:image"):
-        return image_source
-
-    if image_source.startswith("http://") or image_source.startswith("https://"):
-        with urlopen(image_source) as response:
-            image_data = response.read()
-            return base64.b64encode(image_data).decode("utf-8")
-
-    image_path = Path(image_source)
-    if image_path.exists():
-        with open(image_path, "rb") as f:
-            image_data = f.read()
-            return base64.b64encode(image_data).decode("utf-8")
-
-    raise ValueError(f"Invalid image source: {image_source}")
-
-
-class VisionExtractor:
+class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
     """Vision Extractor
 
     从文本或图片中提取面经题目信息。
     使用 LangChain 的 with_structured_output 自动解析 JSON。
     """
+
+    _prompt_filename = "vision_extractor.md"
+    _structured_output_schema = ExtractedInterviewSchema
 
     def __init__(self, provider: str = "dashscope", use_structured_output: bool = True):
         """初始化 Vision Extractor
@@ -95,45 +64,52 @@ class VisionExtractor:
             use_structured_output: 是否使用 structured output，默认 True
                                  如果模型不支持会自动回退
         """
-        self.provider = provider
+        super().__init__(provider)
         self.use_structured_output = use_structured_output
-        self._structured_llm = None
-        self._base_llm = None
-        self.prompt = load_prompt()
-        logger.info(f"VisionExtractor initialized with provider: {provider}")
+        # Vision 需要专门的 vision model，不使用父类的 chat model
+        self._vision_llm = None
+        self._vision_structured_llm = None
 
     @property
-    def base_llm(self) -> ChatOpenAI:
-        """获取基础 LLM"""
-        if self._base_llm is None:
+    def llm(self):
+        """获取 Vision LLM"""
+        if self._vision_llm is None:
             extra_kwargs = {}
             if self.provider == "dashscope":
                 extra_kwargs["extra_body"] = {"enable_thinking": False}
 
-            self._base_llm = create_llm(self.provider, "vision", **extra_kwargs)
-        return self._base_llm
+            self._vision_llm = create_llm(self.provider, "vision", **extra_kwargs)
+        return self._vision_llm
 
     @property
-    def structured_llm(self) -> Optional[ChatOpenAI]:
-        """获取支持 structured output 的 LLM"""
-        if self._structured_llm is None:
+    def structured_llm(self):
+        """获取支持 structured output 的 Vision LLM"""
+        if self._vision_structured_llm is None:
+            if not self.use_structured_output:
+                return None
+
             try:
-                self._structured_llm = self.base_llm.with_structured_output(ExtractedInterviewSchema, method="function_calling")
+                self._vision_structured_llm = self.llm.with_structured_output(
+                    ExtractedInterviewSchema,
+                    method="function_calling"
+                )
             except Exception as e:
+                from app.utils.logger import logger
                 logger.warning(f"Model does not support structured output: {e}")
-                self._structured_llm = None
-        return self._structured_llm
+                self._vision_structured_llm = None
+
+        return self._vision_structured_llm
 
     def _build_message(self, source: str, source_type: str) -> HumanMessage:
         """构建消息"""
         if source_type == "text":
             content = [
-                {"type": "text", "text": self.prompt + "\n\n" + "以下是需要分析的内容：\n" + source}
+                {"type": "text", "text": self.prompt_template + "\n\n" + "以下是需要分析的内容：\n" + source}
             ]
         elif source_type == "image":
             image_base64 = encode_image_to_base64(source)
             content = [
-                {"type": "text", "text": self.prompt},
+                {"type": "text", "text": self.prompt_template},
                 {
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
@@ -146,6 +122,8 @@ class VisionExtractor:
 
     def _parse_json_response(self, response: str) -> ExtractedInterviewSchema:
         """手动解析 JSON 响应"""
+        import app.utils.logger as logger_module
+
         try:
             # 查找 JSON 块
             json_start = response.find("{")
@@ -170,8 +148,8 @@ class VisionExtractor:
             return ExtractedInterviewSchema(**data)
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}")
-            logger.error(f"Response: {response}")
+            logger_module.logger.error(f"Failed to parse JSON: {e}")
+            logger_module.logger.error(f"Response: {response}")
             raise ValueError(f"Invalid JSON response: {e}")
 
     def _convert_to_extracted_interview(
@@ -214,16 +192,14 @@ class VisionExtractor:
             questions=questions,
         )
 
-    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def _extract_with_structured_output(self, message: HumanMessage) -> ExtractedInterview:
         """使用 structured output 提取"""
         result = self.structured_llm.invoke([message])
         return self._convert_to_extracted_interview(result)
 
-    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def _extract_with_parsing(self, message: HumanMessage) -> ExtractedInterview:
         """使用手动解析提取"""
-        response = self.base_llm.invoke([message])
+        response = self.llm.invoke([message])
         schema = self._parse_json_response(response.content)
         return self._convert_to_extracted_interview(schema)
 
@@ -237,6 +213,7 @@ class VisionExtractor:
         Returns:
             ExtractedInterview 结构化数据
         """
+        from app.utils.logger import logger
         logger.info(f"Extracting from {source_type}: {source[:50]}...")
 
         # 构建消息

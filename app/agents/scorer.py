@@ -3,35 +3,23 @@
 负责对用户提交的答案进行打分，生成改进建议，并更新熟练度等级。
 """
 
-import json
-from pathlib import Path
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
-
+from app.agents.base import BaseAgent
 from app.config.settings import create_llm
 from app.db.qdrant_client import get_qdrant_manager
 from app.models.enums import MasteryLevel
 from app.models.schemas import ScoreResult
 from app.utils.logger import logger
-
-
-# Prompt 模板路径
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "scorer.md"
-
-
-def load_prompt() -> str:
-    """加载 Prompt 模板"""
-    if PROMPT_PATH.exists():
-        return PROMPT_PATH.read_text(encoding="utf-8")
-    return ""
+from app.utils.agent import load_prompt, parse_json_response
 
 
 def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel:
     """根据分数计算新的熟练度等级
 
     状态机规则：
-    - LEVEL_0 -> LEVEL_1: score >= 60
+    - LEVEL_0 -> LEVEL_2: score >= 85 (优秀答案直接跳到 LEVEL_2)
+    - LEVEL_0 -> LEVEL_1: score >= 60 (及格答案升级到 LEVEL_1)
     - LEVEL_1 -> LEVEL_2: score >= 85
     - LEVEL_2 保持不变
     - score < 60 保持当前等级
@@ -44,7 +32,9 @@ def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel
         新的熟练度等级
     """
     if current_level == MasteryLevel.LEVEL_0:
-        if score >= 60:
+        if score >= 85:
+            return MasteryLevel.LEVEL_2
+        elif score >= 60:
             return MasteryLevel.LEVEL_1
     elif current_level == MasteryLevel.LEVEL_1:
         if score >= 85:
@@ -54,11 +44,14 @@ def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel
     return current_level
 
 
-class ScorerAgent:
+class ScorerAgent(BaseAgent[ScoreResult]):
     """Scorer Agent - 答题评分与状态机
 
     对用户提交的答案进行评分，生成反馈，并更新熟练度等级。
     """
+
+    _prompt_filename = "scorer.md"
+    _structured_output_schema = ScoreResult
 
     def __init__(self, provider: str = "dashscope") -> None:
         """初始化 Scorer Agent
@@ -66,18 +59,8 @@ class ScorerAgent:
         Args:
             provider: LLM Provider 名称，默认 dashscope
         """
-        self.provider = provider
-        self._llm = None
-        self.prompt_template = load_prompt()
+        super().__init__(provider)
         self._qdrant_manager = get_qdrant_manager()
-        logger.info(f"ScorerAgent initialized with provider: {provider}")
-
-    @property
-    def llm(self) -> ChatOpenAI:
-        """获取 LLM"""
-        if self._llm is None:
-            self._llm = create_llm(self.provider, "chat")
-        return self._llm
 
     def _build_prompt(
         self,
@@ -98,22 +81,45 @@ class ScorerAgent:
             position=position,
         )
 
-    def _parse_response(self, response: str) -> dict:
-        """解析 LLM 响应"""
+    def _parse_response_fallback(
+        self,
+        response: str,
+        question_id: str,
+        question_text: str,
+        standard_answer: Optional[str],
+        user_answer: str,
+    ) -> ScoreResult:
+        """手动解析 LLM 响应（降级方案）"""
+        data = parse_json_response(
+            response,
+            required_fields=["score", "mastery_level"],
+            default_values={
+                "score": 0,
+                "mastery_level": "LEVEL_0",
+                "strengths": [],
+                "improvements": [],
+                "feedback": "",
+            },
+        )
+
+        # 解析 mastery_level
+        mastery_level_str = data.get("mastery_level", "LEVEL_0")
         try:
-            # 尝试提取 JSON
-            json_start = response.find("{")
-            json_end = response.rfind("}") + 1
+            mastery_level = MasteryLevel[mastery_level_str]
+        except KeyError:
+            mastery_level = MasteryLevel.LEVEL_0
 
-            if json_start == -1 or json_end == 0:
-                raise ValueError("No JSON found in response")
-
-            json_str = response[json_start:json_end]
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}")
-            logger.error(f"Response: {response}")
-            raise
+        return ScoreResult(
+            question_id=question_id,
+            question_text=question_text,
+            standard_answer=standard_answer,
+            user_answer=user_answer,
+            score=data.get("score", 0),
+            mastery_level=mastery_level,
+            strengths=data.get("strengths", []),
+            improvements=data.get("improvements", []),
+            feedback=data.get("feedback", ""),
+        )
 
     async def score(
         self,
@@ -144,69 +150,69 @@ class ScorerAgent:
         company = question.company
         position = question.position
 
-        try:
-            # 构建 Prompt
-            prompt = self._build_prompt(
-                question_text=question_text,
-                standard_answer=standard_answer,
-                user_answer=user_answer,
-                current_level=current_level,
-                company=company,
-                position=position,
-            )
+        # 构建 Prompt
+        prompt = self._build_prompt(
+            question_text=question_text,
+            standard_answer=standard_answer,
+            user_answer=user_answer,
+            current_level=current_level,
+            company=company,
+            position=position,
+        )
 
-            # 调用 LLM
-            response = self.llm.invoke(prompt)
-            result = self._parse_response(response.content)
-
-            # 解析结果
-            score = result.get("score", 0)
-            mastery_level_str = result.get("mastery_level", current_level.name)
-
-            # 将字符串转换为枚举
-            try:
-                mastery_level = MasteryLevel[mastery_level_str]
-            except KeyError:
-                mastery_level = calculate_new_level(current_level, score)
+        # 优先尝试使用 structured output
+        result = self.invoke_structured(prompt)
+        if result is not None:
+            # 补充业务字段
+            result.question_id = question_id
+            result.question_text = question_text
+            result.standard_answer = standard_answer
+            result.user_answer = user_answer
 
             # 计算新的等级
-            new_level = calculate_new_level(current_level, score)
+            new_level = calculate_new_level(current_level, result.score)
+            if new_level != result.mastery_level:
+                logger.info(f"Level adjusted: LLM={result.mastery_level.name}, calculated={new_level.name}")
+                result.mastery_level = new_level
 
-            # 如果 LLM 返回的等级和计算的不一致，以计算为准
-            if new_level != mastery_level:
-                logger.info(
-                    f"Level adjusted: LLM={mastery_level.name}, calculated={new_level.name}"
-                )
-                mastery_level = new_level
-
-            # 构建结果
-            score_result = ScoreResult(
-                question_id=question_id,
-                question_text=question_text,
-                standard_answer=standard_answer,
-                user_answer=user_answer,
-                score=score,
-                mastery_level=mastery_level,
-                strengths=result.get("strengths", []),
-                improvements=result.get("improvements", []),
-                feedback=result.get("feedback", ""),
-            )
-
-            # 更新 Qdrant 中的熟练度等级
-            if mastery_level != current_level:
+            # 更新 Qdrant
+            if result.mastery_level != current_level:
                 self._qdrant_manager.update_question(
                     question_id=question_id,
-                    mastery_level=mastery_level.value,
+                    mastery_level=result.mastery_level.value,
                 )
-                logger.info(
-                    f"Updated mastery_level: {current_level.name} -> {mastery_level.name}"
-                )
+                logger.info(f"Updated mastery_level: {current_level.name} -> {result.mastery_level.name}")
 
-            logger.info(
-                f"Scoring completed: score={score}, level={mastery_level.name}"
+            logger.info(f"Scoring completed (structured): score={result.score}, level={result.mastery_level.name}")
+            return result
+
+        # 降级到手动解析
+        try:
+            response = self.invoke_llm(prompt)
+            result = self._parse_response_fallback(
+                response,
+                question_id,
+                question_text,
+                standard_answer,
+                user_answer,
             )
-            return score_result
 
+            # 计算新的等级
+            new_level = calculate_new_level(current_level, result.score)
+            if new_level != result.mastery_level:
+                logger.info(f"Level adjusted: LLM={result.mastery_level.name}, calculated={new_level.name}")
+                result.mastery_level = new_level
+
+            # 更新 Qdrant
+            if result.mastery_level != current_level:
+                self._qdrant_manager.update_question(
+                    question_id=question_id,
+                    mastery_level=result.mastery_level.value,
+                )
+                logger.info(f"Updated mastery_level: {current_level.name} -> {result.mastery_level.name}")
+
+            logger.info(f"Scoring completed (fallback): score={result.score}, level={result.mastery_level.name}")
+            return result
         except Exception as e:
             logger.error(f"Scoring failed: {e}")
             raise

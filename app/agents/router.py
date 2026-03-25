@@ -3,153 +3,81 @@
 负责用户意图分类与路由，将用户输入分类为不同的意图并提取关键参数。
 """
 
-import json
-from pathlib import Path
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
-
-from app.config.settings import create_llm
-from app.models.schemas import RoutingResult
+from app.agents.base import BaseAgent
+from app.models.schemas import RouterResult
 from app.utils.logger import logger
+from app.utils.agent import parse_json_response
 
 
-# Prompt 模板路径
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "router.md"
-
-# 公司名称标准化映射
-COMPANY_ALIASES = {
-    "鹅厂": "腾讯",
-    "大厂": "阿里",
-    "阿里": "阿里巴巴",
-    "字节": "字节跳动",
-    "百度": "百度",
-    "腾讯": "腾讯",
-    "美团": "美团",
-    "京东": "京东",
-    "拼多多": "拼多多",
-    "滴滴": "滴滴",
-    "快手": "快手",
-    "小红书": "小红书",
-    "b站": "哔哩哔哩",
-    "bilibili": "哔哩哔哩",
-}
-
-
-def load_prompt() -> str:
-    """加载 Prompt 模板"""
-    if PROMPT_PATH.exists():
-        return PROMPT_PATH.read_text(encoding="utf-8")
-    return ""
-
-
-def normalize_company(company: str) -> str:
-    """标准化公司名称
-
-    Args:
-        company: 公司名称（可能是别名）
-
-    Returns:
-        标准化后的公司名称
-    """
-    if not company:
-        return company
-
-    # 去除首尾空白
-    company = company.strip()
-
-    # 查表转换
-    for alias, standard in COMPANY_ALIASES.items():
-        if alias in company:
-            return standard
-
-    return company
-
-
-class RouterAgent:
+class RouterAgent(BaseAgent[RouterResult]):
     """Router Agent - 意图分类与路由
 
     分析用户输入，确定意图类型并提取关键参数。
     """
 
-    def __init__(self, provider: str = "dashscope") -> None:
-        """初始化 Router Agent
+    _prompt_filename = "router.md"
+    _structured_output_schema = RouterResult
 
-        Args:
-            provider: LLM Provider 名称，默认 dashscope
-        """
-        self.provider = provider
-        self._llm = None
-        self.prompt_template = load_prompt()
-        logger.info(f"RouterAgent initialized with provider: {provider}")
+    def _parse_response_fallback(self, response: str) -> RouterResult:
+        """手动解析 LLM 响应（降级方案）"""
+        data = parse_json_response(
+            response,
+            required_fields=["intent"],
+            default_values={
+                "intent": "query",
+                "params": {},
+                "confidence": 1.0,
+            },
+        )
 
-    @property
-    def llm(self) -> ChatOpenAI:
-        """获取 LLM"""
-        if self._llm is None:
-            self._llm = create_llm(self.provider, "chat")
-        return self._llm
+        # 手动构建 params
+        params = {}
+        if "company" in data:
+            params["company"] = data["company"]
+        if "position" in data:
+            params["position"] = data["position"]
+        if "question" in data:
+            params["question"] = data["question"]
 
-    def _build_prompt(self, user_input: str) -> str:
-        """构建 Prompt"""
-        return self.prompt_template.format(user_input=user_input)
+        return RouterResult(
+            intent=data.get("intent", "query"),
+            params=params,
+            confidence=data.get("confidence", 1.0),
+            original_text="",
+        )
 
-    def _parse_response(self, response: str) -> dict:
-        """解析 LLM 响应"""
-        try:
-            # 尝试提取 JSON
-            json_start = response.find("{")
-            json_end = response.rfind("}") + 1
-
-            if json_start == -1 or json_end == 0:
-                raise ValueError("No JSON found in response")
-
-            json_str = response[json_start:json_end]
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}")
-            logger.error(f"Response: {response}")
-            raise
-
-    def route(self, user_input: str) -> RoutingResult:
+    def route(self, user_input: str) -> RouterResult:
         """执行路由
 
         Args:
             user_input: 用户输入
 
         Returns:
-            RoutingResult 包含意图和参数
+            RouterResult 包含意图和参数
         """
         logger.info(f"Routing input: {user_input[:50]}...")
 
+        # 构建 Prompt
+        prompt = self._build_prompt(user_input=user_input)
+
+        # 优先尝试使用 structured output
+        result = self.invoke_structured(prompt)
+        if result is not None:
+            logger.info(f"Routing result (structured): intent={result.intent}, params={result.params}")
+            return result
+
+        # 降级到手动解析
         try:
-            # 构建 Prompt
-            prompt = self._build_prompt(user_input)
-
-            # 调用 LLM
-            response = self.llm.invoke(prompt)
-            result = self._parse_response(response.content)
-
-            # 标准化公司名称
-            params = result.get("params", {})
-            if "company" in params and params["company"]:
-                params["company"] = normalize_company(params["company"])
-
-            # 构建结果
-            routing_result = RoutingResult(
-                intent=result.get("intent", "query"),
-                params=params,
-                confidence=result.get("confidence", 1.0),
-                original_text=user_input,
-            )
-
-            logger.info(f"Routing result: intent={routing_result.intent}, params={routing_result.params}")
-            return routing_result
-
+            response = self.invoke_llm(prompt)
+            result = self._parse_response_fallback(response)
+            result.original_text = user_input
+            return result
         except Exception as e:
             logger.error(f"Routing failed: {e}")
             # 返回默认结果
-            return RoutingResult(
+            return RouterResult(
                 intent="query",
                 params={},
                 confidence=0.0,

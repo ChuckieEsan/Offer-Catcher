@@ -21,15 +21,15 @@
 请输出 JSON 格式的结果，包含以下字段：
 
 ```json
-{
+{{
   "intent": "意图类型",
-  "params": {
+  "params": {{
     "company": "公司名称（如果有）",
     "position": "岗位名称（如果有）",
     "question": "题目内容（如果有）"
-  },
+  }},
   "confidence": 0.95
-}
+}}
 ```
 
 ## 注意事项

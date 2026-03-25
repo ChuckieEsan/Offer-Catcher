@@ -1,6 +1,6 @@
 """Base Agent 模块
 
-提供 Agent 的基类，包含 LLM 初始化、Structured Output、单例模式等通用能力。
+提供 Agent 的基类，包含 LLM 初始化、Structured Output、单例模式、重试机制等通用能力。
 """
 
 from pathlib import Path
@@ -12,6 +12,7 @@ from app.config.settings import create_llm
 from app.models.schemas import RouterResult, ScoreResult
 from app.utils.logger import logger
 from app.utils.agent import load_prompt
+from app.utils.retry import retry
 
 # 泛型：Agent 返回的结果类型
 T = TypeVar("T")
@@ -25,6 +26,7 @@ class BaseAgent(Generic[T]):
     - Structured Output 支持
     - Prompt 模板加载
     - 单例模式
+    - 重试机制（默认启用）
     """
 
     # 子类必须覆盖
@@ -88,8 +90,9 @@ class BaseAgent(Generic[T]):
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
         return self.prompt_template.format(**filtered_kwargs)
 
+    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def invoke_llm(self, prompt: str) -> str:
-        """调用 LLM 获取文本响应
+        """调用 LLM 获取文本响应（带重试）
 
         Args:
             prompt: 格式化后的 Prompt
@@ -100,8 +103,9 @@ class BaseAgent(Generic[T]):
         response = self.llm.invoke(prompt)
         return response.content
 
+    @retry(max_retries=3, delay=1.0, backoff=2.0)
     def invoke_structured(self, prompt: str) -> Optional[T]:
-        """调用 LLM 获取结构化响应
+        """调用 LLM 获取结构化响应（带重试）
 
         优先使用 structured output，失败时返回 None。
 
@@ -114,11 +118,7 @@ class BaseAgent(Generic[T]):
         if self.structured_llm is None:
             return None
 
-        try:
-            return self.structured_llm.invoke(prompt)
-        except Exception as e:
-            logger.warning(f"Structured output failed: {e}")
-            return None
+        return self.structured_llm.invoke(prompt)
 
 
 # 单例模式的辅助函数
