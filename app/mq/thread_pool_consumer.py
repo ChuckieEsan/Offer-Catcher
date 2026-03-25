@@ -13,7 +13,6 @@ from typing import Callable, Optional, List
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
-from aio_pika.exceptions import QueueEmpty
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
@@ -50,254 +49,6 @@ class ThreadPoolRabbitMQConsumer:
         self._running = True
         self._started = False
 
-        # 为每个线程创建独立的熔断器
-        self._circuit_breakers: dict[int, any] = {}
-
-    def _create_circuit_breaker_for_thread(self, thread_id: int):
-        """为每个线程创建独立的熔断器"""
-        return create_circuit_breaker(
-            fail_max=5,
-            timeout_duration=30.0,
-            name=f"rabbitmq_consumer_thread_{thread_id}",
-        )
-
-    def _consume_in_thread(self, thread_id: int, callback: Callable) -> None:
-        """在线程中运行事件循环消费消息
-
-        每个线程创建独立的连接、channel 和事件循环。
-
-        Args:
-            thread_id: 线程 ID
-            callback: 消息处理回调函数
-        """
-        # 创建独立的事件循环
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        # 为该线程创建独立的熔断器
-        self._circuit_breakers[thread_id] = self._create_circuit_breaker_for_thread(thread_id)
-
-        logger.info(f"Thread-{thread_id}: Starting consumer...")
-
-        try:
-            loop.run_until_complete(self._run_consumer_thread(thread_id, callback))
-        except Exception as e:
-            logger.error(f"Thread-{thread_id}: Consumer error: {e}")
-        finally:
-            loop.close()
-            logger.info(f"Thread-{thread_id}: Consumer stopped")
-
-    async def _run_consumer_thread(
-        self, thread_id: int, callback: Callable[[MQTaskMessage], bool]
-    ) -> None:
-        """在线程中运行异步消费者
-
-        Args:
-            thread_id: 线程 ID
-            callback: 消息处理回调函数
-        """
-        connection: Optional[AbstractRobustConnection] = None
-        channel: Optional[AbstractRobustChannel] = None
-        queue = None
-        circuit_breaker = self._circuit_breakers[thread_id]
-        circuit_open_time: Optional[float] = None
-        recovery_timeout = 30.0
-
-        try:
-            # 建立独立连接
-            connection = await aio_pika.connect_robust(
-                host=self.settings.rabbitmq_host,
-                port=self.settings.rabbitmq_port,
-                login=self.settings.rabbitmq_user,
-                password=self.settings.rabbitmq_password,
-            )
-            channel = await connection.channel()
-            await channel.set_qos(prefetch_count=self.prefetch_count)
-
-            # 声明队列
-            queue = await channel.declare_queue(
-                self.settings.rabbitmq_queue, durable=True
-            )
-
-            logger.info(f"Thread-{thread_id}: Connected to queue: {self.settings.rabbitmq_queue}")
-
-            # 消费循环
-            while self._running:
-                current_message = None
-                try:
-                    # 获取消息
-                    current_message = await queue.get()
-                    
-                    # 熔断器逻辑
-                    if isinstance(circuit_breaker.state, CircuitOpenState):
-                        if circuit_open_time and (
-                            time.time() - circuit_open_time >= recovery_timeout
-                        ):
-                            circuit_breaker.close()
-                            circuit_open_time = None
-                            logger.info(f"Thread-{thread_id}: Circuit breaker recovered")
-                        else:
-                            logger.warning(f"Thread-{thread_id}: Circuit breaker OPEN, requeue message")
-                            await current_message.reject(requeue=True)
-                            await asyncio.sleep(1)
-                            continue
-
-                    # 处理消息
-                    success = await self._process_message(
-                        current_message, callback, circuit_breaker, thread_id
-                    )
-
-                    if success:
-                        await current_message.ack()
-                        circuit_breaker.close()
-                    else:
-                        circuit_breaker.open()
-                        circuit_open_time = time.time()
-                        await current_message.ack()
-                        # 重新入队
-                        await self._republish_to_back(current_message, channel)
-
-                except QueueEmpty:
-                    # 队列为空，等待后重试
-                    await asyncio.sleep(1)
-                    continue
-
-                except asyncio.CancelledError:
-                    logger.info(f"Thread-{thread_id}: Task cancelled")
-                    # 拒绝当前消息让其重新入队
-                    if current_message is not None:
-                        try:
-                            await current_message.reject(requeue=True)
-                        except Exception:
-                            pass
-                    break
-                except Exception as e:
-                    import traceback
-                    logger.error(f"Thread-{thread_id}: Error in consume loop: {e}\n{traceback.format_exc()}")
-                    circuit_breaker.open()
-                    circuit_open_time = time.time()
-                    # 拒绝当前消息让其重新入队
-                    if current_message is not None:
-                        try:
-                            await current_message.reject(requeue=True)
-                        except Exception:
-                            pass
-                    await asyncio.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Thread-{thread_id}: Connection error: {e}")
-        finally:
-            if channel and not channel.is_closed:
-                await channel.close()
-            if connection and not connection.is_closed:
-                await connection.close()
-
-    async def _process_message(
-        self,
-        message: AbstractIncomingMessage,
-        callback: Callable[[MQTaskMessage], bool],
-        circuit_breaker,
-        thread_id: int,
-    ) -> bool:
-        """处理单条消息
-
-        Args:
-            message: 接收到的消息
-            callback: 处理回调（可以是同步或异步函数）
-            circuit_breaker: 熔断器
-            thread_id: 线程 ID
-
-        Returns:
-            处理是否成功
-        """
-
-
-        question_id = "unknown"
-        retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
-
-        try:
-            task = MQTaskMessage.model_validate_json(message.body)
-            question_id = task.question_id
-            logger.info(f"Thread-{thread_id}: Processing task {question_id}, retry={retry_count}")
-
-            # 调用回调函数 - 支持同步和异步回调
-            result = callback(task)
-
-            # 如果返回的是协程，需要 await
-            if inspect.iscoroutine(result):
-                success = await result
-            else:
-                success = result
-
-            return success if success is not None else True
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Thread-{thread_id}: Invalid JSON: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Thread-{thread_id}: Error processing message: {e}")
-            return False
-
-    async def _republish_to_back(
-        self, original_msg: AbstractIncomingMessage, channel: AbstractRobustChannel
-    ) -> bool:
-        """将失败消息重新发布到队尾
-
-        Args:
-            original_msg: 原始消息
-            channel: channel 实例
-
-        Returns:
-            是否成功
-        """
-        retry_count = original_msg.headers.get("x-retry-count", 0) if original_msg.headers else 0
-        new_retry_count = retry_count + 1
-
-        if new_retry_count >= self.settings.rabbitmq_max_retries:
-            # 转入死信队列
-            return await self._send_to_dlq(original_msg, channel)
-
-        try:
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-retry-count": new_retry_count},
-            )
-            await channel.default_exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_queue
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to republish message: {e}")
-            return False
-
-    async def _send_to_dlq(
-        self, original_msg: AbstractIncomingMessage, channel: AbstractRobustChannel
-    ) -> bool:
-        """发送到死信队列
-
-        Args:
-            original_msg: 原始消息
-            channel: channel 实例
-
-        Returns:
-            是否成功
-        """
-        try:
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-dead-letter": True},
-            )
-            await channel.default_exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_dlq
-            )
-            logger.warning("Message sent to DLQ (max retries exceeded)")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send to DLQ: {e}")
-            return False
-
     async def start(self, callback: Callable[[MQTaskMessage], bool]) -> None:
         """启动线程池消费者
 
@@ -313,9 +64,21 @@ class ThreadPoolRabbitMQConsumer:
         self._executor = ThreadPoolExecutor(max_workers=self.num_threads)
         self._running = True
 
+        # 为每个线程创建独立的熔断器
+        circuit_breakers = {
+            i: create_circuit_breaker(
+                fail_max=5,
+                timeout_duration=30.0,
+                name=f"rabbitmq_consumer_thread_{i}",
+            )
+            for i in range(self.num_threads)
+        }
+
         # 为每个线程提交消费任务
         for i in range(self.num_threads):
-            future = self._executor.submit(self._consume_in_thread, i, callback)
+            future = self._executor.submit(
+                self._consume_in_thread, i, callback, circuit_breakers[i]
+            )
             self._futures.append(future)
 
         self._started = True
@@ -346,6 +109,224 @@ class ThreadPoolRabbitMQConsumer:
         """检查是否正在运行"""
         return self._started and self._running
 
+    def _consume_in_thread(
+        self,
+        thread_id: int,
+        callback: Callable,
+        circuit_breaker,
+    ) -> None:
+        """在线程中运行事件循环消费消息
+
+        每个线程创建独立的连接、channel 和事件循环。
+
+        Args:
+            thread_id: 线程 ID
+            callback: 消息处理回调函数
+            circuit_breaker: 该线程的熔断器
+        """
+        # 创建独立的事件循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        logger.info(f"Thread-{thread_id}: Starting consumer...")
+
+        try:
+            loop.run_until_complete(
+                self._run_consumer_thread(thread_id, callback, circuit_breaker)
+            )
+        except Exception as e:
+            logger.error(f"Thread-{thread_id}: Consumer error: {e}")
+        finally:
+            loop.close()
+            logger.info(f"Thread-{thread_id}: Consumer stopped")
+
+    async def _run_consumer_thread(
+        self,
+        thread_id: int,
+        callback: Callable[[MQTaskMessage], bool],
+        circuit_breaker,
+    ) -> None:
+        """在线程中运行异步消费者
+
+        Args:
+            thread_id: 线程 ID
+            callback: 消息处理回调函数
+            circuit_breaker: 熔断器实例
+        """
+        connection: Optional[AbstractRobustConnection] = None
+        channel: Optional[AbstractRobustChannel] = None
+
+        try:
+            # 建立独立连接
+            connection = await aio_pika.connect_robust(
+                host=self.settings.rabbitmq_host,
+                port=self.settings.rabbitmq_port,
+                login=self.settings.rabbitmq_user,
+                password=self.settings.rabbitmq_password,
+            )
+            channel = await connection.channel()
+            await channel.set_qos(prefetch_count=self.prefetch_count)
+
+            # 声明队列
+            queue = await channel.declare_queue(
+                self.settings.rabbitmq_queue, durable=True
+            )
+
+            logger.info(f"Thread-{thread_id}: Connected to queue: {self.settings.rabbitmq_queue}")
+
+            # 使用 consume 回调模式 - 有新消息时自动调用，不会空转
+            await queue.consume(
+                lambda msg: self._on_message_callback(
+                    msg, thread_id, callback, circuit_breaker, channel
+                )
+            )
+
+            # 挂起保持消费
+            while self._running:
+                await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            logger.info(f"Thread-{thread_id}: Task cancelled")
+        except Exception as e:
+            logger.error(f"Thread-{thread_id}: Connection error: {e}")
+        finally:
+            if channel and not channel.is_closed:
+                await channel.close()
+            if connection and not connection.is_closed:
+                await connection.close()
+
+    async def _on_message_callback(
+        self,
+        message: AbstractIncomingMessage,
+        thread_id: int,
+        callback: Callable[[MQTaskMessage], bool],
+        circuit_breaker,
+        channel: AbstractRobustChannel,
+    ) -> None:
+        """消息回调处理
+
+        Args:
+            message: 接收到的消息
+            thread_id: 线程 ID
+            callback: 业务回调函数
+            circuit_breaker: 熔断器
+            channel: channel 实例
+        """
+        circuit_open_time: Optional[float] = None
+        recovery_timeout = 30.0
+
+        # 熔断器拦截逻辑
+        if isinstance(circuit_breaker.state, CircuitOpenState):
+            if circuit_open_time and (
+                time.time() - circuit_open_time >= recovery_timeout
+            ):
+                circuit_breaker.close()
+                circuit_open_time = None
+                logger.info(f"Thread-{thread_id}: Circuit breaker recovered")
+            else:
+                logger.warning(f"Thread-{thread_id}: Circuit breaker OPEN, requeue message")
+                await message.reject(requeue=True)
+                return
+
+        # 处理消息
+        success = await self._process_message(
+            message, callback, thread_id
+        )
+
+        if success:
+            await message.ack()
+            circuit_breaker.close()
+        else:
+            circuit_breaker.open()
+            circuit_open_time = time.time()
+            await message.ack()
+            await self._republish_to_back(message, channel)
+
+    async def _process_message(
+        self,
+        message: AbstractIncomingMessage,
+        callback: Callable[[MQTaskMessage], bool],
+        thread_id: int,
+    ) -> bool:
+        """处理单条消息
+
+        Args:
+            message: 接收到的消息
+            callback: 处理回调（可以是同步或异步函数）
+            thread_id: 线程 ID
+
+        Returns:
+            处理是否成功
+        """
+        question_id = "unknown"
+        retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
+
+        try:
+            task = MQTaskMessage.model_validate_json(message.body)
+            question_id = task.question_id
+            logger.info(f"Thread-{thread_id}: Processing task {question_id}, retry={retry_count}")
+
+            # 调用回调函数 - 支持同步和异步回调
+            result = callback(task)
+
+            # 如果返回的是协程，需要 await
+            if inspect.iscoroutine(result):
+                success = await result
+            else:
+                success = result
+
+            return success if success is not None else True
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Thread-{thread_id}: Invalid JSON: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Thread-{thread_id}: Error processing message: {e}")
+            return False
+
+    async def _republish_to_back(
+        self, original_msg: AbstractIncomingMessage, channel: AbstractRobustChannel
+    ) -> bool:
+        """将失败消息重新发布到队尾"""
+        retry_count = original_msg.headers.get("x-retry-count", 0) if original_msg.headers else 0
+        new_retry_count = retry_count + 1
+
+        if new_retry_count >= self.settings.rabbitmq_max_retries:
+            return await self._send_to_dlq(original_msg, channel)
+
+        try:
+            msg = aio_pika.Message(
+                body=original_msg.body,
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                headers={"x-retry-count": new_retry_count},
+            )
+            await channel.default_exchange.publish(
+                msg, routing_key=self.settings.rabbitmq_queue
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to republish message: {e}")
+            return False
+
+    async def _send_to_dlq(
+        self, original_msg: AbstractIncomingMessage, channel: AbstractRobustChannel
+    ) -> bool:
+        """发送到死信队列"""
+        try:
+            msg = aio_pika.Message(
+                body=original_msg.body,
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                headers={"x-dead-letter": True},
+            )
+            await channel.default_exchange.publish(
+                msg, routing_key=self.settings.rabbitmq_dlq
+            )
+            logger.warning("Message sent to DLQ (max retries exceeded)")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send to DLQ: {e}")
+            return False
+
 
 # 全局消费者实例
 _thread_pool_consumer: Optional[ThreadPoolRabbitMQConsumer] = None
@@ -354,15 +335,7 @@ _thread_pool_consumer: Optional[ThreadPoolRabbitMQConsumer] = None
 async def get_thread_pool_consumer(
     num_threads: int = 4, prefetch_count: int = 1
 ) -> ThreadPoolRabbitMQConsumer:
-    """获取线程池消费者单例
-
-    Args:
-        num_threads: 工作线程数量
-        prefetch_count: 每个线程的预取消息数量
-
-    Returns:
-        ThreadPoolRabbitMQConsumer 实例
-    """
+    """获取线程池消费者单例"""
     global _thread_pool_consumer
     if _thread_pool_consumer is None:
         _thread_pool_consumer = ThreadPoolRabbitMQConsumer(
