@@ -144,6 +144,24 @@ class Settings(BaseSettings):
         default=3,
     )
 
+    # Neo4j 图数据库配置
+    neo4j_uri: str = Field(
+        description="Neo4j 连接 URI",
+        default="bolt://localhost:7687",
+    )
+    neo4j_user: str = Field(
+        description="Neo4j 用户名",
+        default="neo4j",
+    )
+    neo4j_password: str = Field(
+        description="Neo4j 密码",
+        default="neo4j",
+    )
+    neo4j_database: str = Field(
+        description="Neo4j 数据库名称",
+        default="neo4j",
+    )
+
     # 应用配置
     app_name: str = Field(
         description="应用名称",
