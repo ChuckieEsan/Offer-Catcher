@@ -29,3 +29,14 @@ class MasteryLevel(int, Enum):
     LEVEL_0 = 0
     LEVEL_1 = 1
     LEVEL_2 = 2
+    
+    
+class IntentType(str, Enum):
+    """意图类型枚举"""
+
+    QUERY = "query"  # 查询题目
+    INGEST = "ingest"  # 录入面经
+    PRACTICE = "practice"  # 练习答题
+    STATS = "stats"  # 统计查询
+    
+    

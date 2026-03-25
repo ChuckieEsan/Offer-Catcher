@@ -1,6 +1,6 @@
 """数据模型层"""
 
-from app.models.enums import MasteryLevel, QuestionType
+from app.models.enums import MasteryLevel, QuestionType, IntentType
 from app.models.schemas import (
     ExtractedInterview,
     MQTaskMessage,
@@ -11,6 +11,7 @@ from app.models.schemas import (
 )
 
 __all__ = [
+    "IntentType",
     "QuestionType",
     "MasteryLevel",
     "QuestionItem",

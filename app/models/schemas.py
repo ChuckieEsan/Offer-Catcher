@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import MasteryLevel, QuestionType
+from app.models.enums import IntentType, MasteryLevel, QuestionType
 
 
 class QuestionItem(BaseModel):
@@ -134,22 +134,13 @@ class MQTaskMessage(BaseModel):
     )
 
 
-class IntentType(str):
-    """意图类型枚举"""
-
-    QUERY = "query"  # 查询题目
-    INGEST = "ingest"  # 录入面经
-    PRACTICE = "practice"  # 练习答题
-    STATS = "stats"  # 统计查询
-
-
-class RoutingResult(BaseModel):
+class RouterResult(BaseModel):
     """路由结果模型
 
     Router Agent 输出的结构化结果，包含意图分类和参数提取。
     """
 
-    intent: str = Field(description="意图类型: query/ingest/practice/stats")
+    intent: IntentType = Field(description="意图类型: query/ingest/practice/stats")
     params: dict[str, Any] = Field(
         default_factory=dict,
         description="提取的参数，包含 company, position, question 等",

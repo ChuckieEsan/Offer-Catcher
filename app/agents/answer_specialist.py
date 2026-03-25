@@ -3,34 +3,23 @@
 从 RabbitMQ 消费任务，使用 Web Search Tool 搜索资料并生成答案。
 """
 
-from pathlib import Path
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
-
-from app.config.settings import create_llm, get_settings
+from app.agents.base import BaseAgent
 from app.models.schemas import QuestionItem
 from app.tools.web_search import WebSearchTool, get_web_search_tool
 from app.utils.logger import logger
 
 
-# Prompt 模板路径
-PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "answer_specialist.md"
-
-
-def load_prompt() -> str:
-    """加载 Prompt 模板"""
-    if PROMPT_PATH.exists():
-        return PROMPT_PATH.read_text(encoding="utf-8")
-    return ""
-
-
-class AnswerSpecialistAgent:
+class AnswerSpecialistAgent(BaseAgent):
     """Answer Specialist - 使用 Web Search 生成答案
 
     消费 RabbitMQ 消息，使用 Web Search Tool 搜索资料，
     然后调用 LLM 生成标准答案。
     """
+
+    _prompt_filename = "answer_specialist.md"
+    _structured_output_schema = None  # 不使用 structured output
 
     def __init__(self, provider: str = "dashscope"):
         """初始化 Answer Specialist
@@ -38,18 +27,8 @@ class AnswerSpecialistAgent:
         Args:
             provider: LLM Provider 名称，默认 dashscope
         """
-        self.provider = provider
-        self._llm = None
-        self._web_search = None
-        self.prompt_template = load_prompt()
-        logger.info(f"AnswerSpecialistAgent initialized with provider: {provider}")
-
-    @property
-    def llm(self) -> ChatOpenAI:
-        """获取 LLM"""
-        if self._llm is None:
-            self._llm = create_llm(self.provider, "chat")
-        return self._llm
+        super().__init__(provider)
+        self._web_search: Optional[WebSearchTool] = None
 
     @property
     def web_search(self) -> WebSearchTool:
@@ -100,8 +79,7 @@ class AnswerSpecialistAgent:
 
         # 3. 调用 LLM 生成答案
         try:
-            response = self.llm.invoke(prompt)
-            answer = response.content
+            answer = self.invoke_llm(prompt)
             logger.info(f"Answer generated, length: {len(answer)}")
             return answer
         except Exception as e:
