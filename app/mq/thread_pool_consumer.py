@@ -13,9 +13,11 @@ from typing import Callable, Optional, List
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
+from aiobreaker import CircuitBreaker
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
+from app.mq.message_helper import get_mq_message_helper
 from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
@@ -43,6 +45,7 @@ class ThreadPoolRabbitMQConsumer:
         self.settings = get_settings()
         self.num_threads = num_threads
         self.prefetch_count = prefetch_count
+        self._message_helper = get_mq_message_helper()
 
         self._executor: Optional[ThreadPoolExecutor] = None
         self._futures: List[Future] = []
@@ -113,7 +116,7 @@ class ThreadPoolRabbitMQConsumer:
         self,
         thread_id: int,
         callback: Callable,
-        circuit_breaker,
+        circuit_breaker: CircuitBreaker,
     ) -> None:
         """在线程中运行事件循环消费消息
 
@@ -144,7 +147,7 @@ class ThreadPoolRabbitMQConsumer:
         self,
         thread_id: int,
         callback: Callable[[MQTaskMessage], bool],
-        circuit_breaker,
+        circuit_breaker: CircuitBreaker,
     ) -> None:
         """在线程中运行异步消费者
 
@@ -200,10 +203,12 @@ class ThreadPoolRabbitMQConsumer:
         message: AbstractIncomingMessage,
         thread_id: int,
         callback: Callable[[MQTaskMessage], bool],
-        circuit_breaker,
+        circuit_breaker: CircuitBreaker,
         channel: AbstractRobustChannel,
     ) -> None:
         """消息回调处理
+
+        处理接收到的 RabbitMQ 消息，包括熔断器检查、消息处理和结果确认。
 
         Args:
             message: 接收到的消息
@@ -289,43 +294,36 @@ class ThreadPoolRabbitMQConsumer:
     ) -> bool:
         """将失败消息重新发布到队尾"""
         retry_count = original_msg.headers.get("x-retry-count", 0) if original_msg.headers else 0
-        new_retry_count = retry_count + 1
-
-        if new_retry_count >= self.settings.rabbitmq_max_retries:
-            return await self._send_to_dlq(original_msg, channel)
-
+        question_id = "unknown"
         try:
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-retry-count": new_retry_count},
-            )
-            await channel.default_exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_queue
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to republish message: {e}")
-            return False
+            task = MQTaskMessage.model_validate_json(original_msg.body)
+            question_id = task.question_id
+        except Exception:
+            pass
+
+        return await self._message_helper.republish_to_back(
+            original_msg=original_msg,
+            channel=channel,
+            question_id=question_id,
+            retry_count=retry_count,
+        )
 
     async def _send_to_dlq(
         self, original_msg: AbstractIncomingMessage, channel: AbstractRobustChannel
     ) -> bool:
         """发送到死信队列"""
+        question_id = "unknown"
         try:
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-dead-letter": True},
-            )
-            await channel.default_exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_dlq
-            )
-            logger.warning("Message sent to DLQ (max retries exceeded)")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send to DLQ: {e}")
-            return False
+            task = MQTaskMessage.model_validate_json(original_msg.body)
+            question_id = task.question_id
+        except Exception:
+            pass
+
+        return await self._message_helper._send_to_dlq(
+            original_msg=original_msg,
+            channel=channel,
+            question_id=question_id,
+        )
 
 
 # 全局消费者实例

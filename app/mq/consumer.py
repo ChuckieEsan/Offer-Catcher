@@ -14,6 +14,7 @@ from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, Abstra
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
+from app.mq.message_helper import get_mq_message_helper
 from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
@@ -53,6 +54,7 @@ class AsyncRabbitMQConsumer:
         self.circuit_breaker = _message_breaker
         self._circuit_open_time: Optional[float] = None
         self._recovery_timeout = 30.0
+        self._message_helper = get_mq_message_helper()
 
     async def connect(self) -> bool:
         """建立与 RabbitMQ 的强健连接（自动处理断线重连）"""
@@ -92,6 +94,11 @@ class AsyncRabbitMQConsumer:
             raise
 
     async def _ensure_connected(self) -> None:
+        """确保连接有效
+
+        Raises:
+            RuntimeError: 如果未连接
+        """
         if self._connection is None or self._connection.is_closed:
             raise RuntimeError("Consumer not connected. Call await connect() first.")
 
@@ -100,50 +107,23 @@ class AsyncRabbitMQConsumer:
     ) -> bool:
         """降级：将失败的消息重新发布到队尾"""
         await self._ensure_connected()
-        new_retry_count = retry_count + 1
-
-        # 若超过最大重试次数，转入死信队列
-        if new_retry_count >= self.settings.rabbitmq_max_retries:
-            return await self._send_to_dlq(original_msg, question_id)
-
-        try:
-            # 构造新的 Message，附带递增的 retry-count
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-retry-count": new_retry_count},
-            )
-            await self._exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_queue
-            )
-            logger.info(
-                f"Message republished to back: q_id={question_id}, retry={new_retry_count}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to republish message: {e}")
-            return False
+        return await self._message_helper.republish_to_back(
+            original_msg=original_msg,
+            channel=self._channel,
+            question_id=question_id,
+            retry_count=retry_count,
+        )
 
     async def _send_to_dlq(
         self, original_msg: AbstractIncomingMessage, question_id: str
     ) -> bool:
         """死信处理"""
-        try:
-            msg = aio_pika.Message(
-                body=original_msg.body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                headers={"x-dead-letter": True},
-            )
-            await self._exchange.publish(
-                msg, routing_key=self.settings.rabbitmq_dlq
-            )
-            logger.warning(
-                f"Message sent to DLQ (max retries exceeded): q_id={question_id}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send to DLQ: {e}")
-            return False
+        await self._ensure_connected()
+        return await self._message_helper._send_to_dlq(
+            original_msg=original_msg,
+            channel=self._channel,
+            question_id=question_id,
+        )
 
     async def _on_message(
         self,

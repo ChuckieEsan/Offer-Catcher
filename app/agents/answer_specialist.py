@@ -6,9 +6,11 @@
 from pathlib import Path
 from typing import Optional
 
+from langchain_openai import ChatOpenAI
+
 from app.config.settings import create_llm, get_settings
 from app.models.schemas import QuestionItem
-from app.tools.web_search import get_web_search_tool
+from app.tools.web_search import WebSearchTool, get_web_search_tool
 from app.utils.logger import logger
 
 
@@ -43,14 +45,14 @@ class AnswerSpecialistAgent:
         logger.info(f"AnswerSpecialistAgent initialized with provider: {provider}")
 
     @property
-    def llm(self):
+    def llm(self) -> ChatOpenAI:
         """获取 LLM"""
         if self._llm is None:
             self._llm = create_llm(self.provider, "chat")
         return self._llm
 
     @property
-    def web_search(self):
+    def web_search(self) -> WebSearchTool:
         """获取 Web Search 工具"""
         if self._web_search is None:
             self._web_search = get_web_search_tool(max_results=5)

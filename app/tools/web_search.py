@@ -185,3 +185,11 @@ def get_web_search_tool(max_results: int = 5) -> WebSearchTool:
     if _web_search_tool is None:
         _web_search_tool = WebSearchTool(max_results=max_results)
     return _web_search_tool
+
+
+# 导出公共 API
+__all__ = [
+    "WebSearchResult",
+    "WebSearchTool",
+    "get_web_search_tool",
+]

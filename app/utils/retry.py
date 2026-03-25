@@ -1,7 +1,8 @@
 """重试装饰器模块"""
 
 import functools
-from typing import Callable, Type, Tuple
+import time
+from typing import Callable, Tuple, Type
 
 from app.utils.logger import logger
 
@@ -44,8 +45,6 @@ def retry(
                             f"{func.__name__} attempt {attempt + 1}/{max_retries} failed: {e}. "
                             f"Retrying in {current_delay}s..."
                         )
-                        import time
-
                         time.sleep(current_delay)
                         current_delay *= backoff
                     else:

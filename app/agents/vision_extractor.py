@@ -9,11 +9,13 @@
 
 import base64
 import json
+import re
 from pathlib import Path
 from typing import Any, Optional
 from urllib.request import urlopen
 
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from app.config.settings import create_llm, get_settings
@@ -101,7 +103,7 @@ class VisionExtractor:
         logger.info(f"VisionExtractor initialized with provider: {provider}")
 
     @property
-    def base_llm(self):
+    def base_llm(self) -> ChatOpenAI:
         """获取基础 LLM"""
         if self._base_llm is None:
             extra_kwargs = {}
@@ -112,7 +114,7 @@ class VisionExtractor:
         return self._base_llm
 
     @property
-    def structured_llm(self):
+    def structured_llm(self) -> Optional[ChatOpenAI]:
         """获取支持 structured output 的 LLM"""
         if self._structured_llm is None:
             try:
@@ -161,7 +163,6 @@ class VisionExtractor:
                     data["questions"] = json.loads(data["questions"])
                 except json.JSONDecodeError:
                     # 如果还是失败，尝试提取数组
-                    import re
                     match = re.search(r'\[.*\]', data["questions"])
                     if match:
                         data["questions"] = json.loads(match.group())
