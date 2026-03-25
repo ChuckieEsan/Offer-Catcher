@@ -13,6 +13,9 @@ from app.db.qdrant_client import QdrantManager
 from app.models.schemas import MQTaskMessage, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 
+# 测试专用的 collection 名称
+TEST_COLLECTION = "questions_test"
+
 
 def generate_random_vector(dim: int = None) -> List[float]:
     """生成随机向量（用于测试）"""
@@ -27,13 +30,17 @@ class TestAnswerWorkerIdempotency:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置"""
-        self.manager = QdrantManager()
+        # 使用独立的测试 collection，不影响生产数据
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.settings = get_settings()
         self.test_company = "测试公司"
         self.test_position = "测试岗位"
         self.test_question = "什么是测试？"
+
+        # 确保测试集合存在
+        self.manager.create_collection_if_not_exists()
         yield
-        # 清理
+        # 测试后清理：删除测试 collection
         try:
             self.manager.delete_collection()
         except Exception:

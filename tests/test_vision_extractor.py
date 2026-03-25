@@ -3,16 +3,15 @@
 验证从文本或图片中提取面经题目信息的功能。
 """
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.agents.vision_extractor import (
     VisionExtractor,
     get_vision_extractor,
     ExtractedQuestion,
     ExtractedInterviewSchema,
-    encode_image_to_base64,
-    load_prompt,
 )
+from app.utils.image import encode_image_to_base64
+from app.utils.agent import load_prompt
 
 
 class TestVisionExtractor:

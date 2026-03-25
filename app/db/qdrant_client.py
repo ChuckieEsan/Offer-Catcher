@@ -22,12 +22,25 @@ class QdrantManager:
     - 批量 Upsert（插入或更新）
     - 混合检索（支持 Payload 预过滤）
     - 状态查询
+
+    支持测试模式：通过构造函数传入 collection_name 可以使用独立的测试集合
     """
 
-    def __init__(self) -> None:
-        """初始化 Qdrant 管理器"""
+    def __init__(self, collection_name: Optional[str] = None) -> None:
+        """初始化 Qdrant 管理器
+
+        Args:
+            collection_name: 可选的集合名称，用于测试或使用独立的集合
+        """
         self.settings = get_settings()
         self._client: Optional[QdrantClient] = None
+        # 如果提供了 collection_name，则使用它；否则使用配置中的默认值
+        self._collection_name = collection_name
+
+    @property
+    def collection_name(self) -> str:
+        """获取集合名称"""
+        return self._collection_name or self.settings.qdrant_collection
 
     @property
     def client(self) -> QdrantClient:
@@ -56,7 +69,7 @@ class QdrantManager:
             是否成功创建
         """
         vector_size = vector_size or self.settings.qdrant_vector_size
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             # 检查集合是否存在
@@ -195,7 +208,7 @@ class QdrantManager:
                 f"Questions count ({len(questions)}) != vectors count ({len(vectors)})"
             )
 
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             # 确保集合存在
@@ -287,7 +300,7 @@ class QdrantManager:
         Returns:
             检索结果列表
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             # 构建过滤条件
@@ -343,7 +356,7 @@ class QdrantManager:
         Returns:
             题目数据，不存在则返回 None
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             results = self.client.retrieve(
@@ -368,7 +381,7 @@ class QdrantManager:
         Returns:
             是否成功
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             self.client.delete_collection(collection_name=collection_name)
@@ -388,7 +401,7 @@ class QdrantManager:
         Returns:
             是否成功
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             self.client.delete(
@@ -428,7 +441,7 @@ class QdrantManager:
         Returns:
             是否成功
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             # 构建更新 payload
@@ -470,7 +483,7 @@ class QdrantManager:
         Returns:
             集合信息字典
         """
-        collection_name = self.settings.qdrant_collection
+        collection_name = self.collection_name
 
         try:
             info = self.client.get_collection(collection_name=collection_name)

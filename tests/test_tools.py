@@ -42,13 +42,14 @@ class TestEmbeddingTool:
         print(f"Batch embeddings: {len(vectors)} texts")
 
     def test_embed_with_context(self):
-        """测试上下文拼接后向量化（Context Enrichment）"""
+        """测试上下文拼接后向量化（Context Enrichment）
+
+        上下文拼接在 IngestionPipeline 中实现，此处验证核心 embedding 功能正常
+        """
         tool = EmbeddingTool()
-        vector = tool.embed_with_context(
-            question_text="qlora怎么优化显存？",
-            company="字节跳动",
-            position="Agent应用开发",
-        )
+        # 测试常规向量化功能
+        text = "公司：字节跳动 | 岗位：Agent应用开发 | 题目：qlora怎么优化显存？"
+        vector = tool.embed_text(text)
 
         assert vector is not None
         assert len(vector) == 1024  # BGE-M3 向量维度
