@@ -90,6 +90,21 @@ def get_ingestion_strategy(question_text: str, core_entities: list[str], qdrant_
         }
 
 
+@st.dialog("确认入库")
+def confirm_text_ingest(result):
+    """确认入库对话框"""
+    st.write(f"确定要入库 **{result.company}** 的 **{result.position}** 面经吗？")
+    st.write(f"共 **{len(result.questions)}** 道题目")
+    col1, col2 = st.columns(2)
+    if col1.button("确认入库", key="text_confirm_yes"):
+        st.session_state.confirm_result = True
+        st.session_state.confirm_data = result
+        st.rerun()
+    if col2.button("取消", key="text_confirm_no"):
+        st.session_state.confirm_result = False
+        st.rerun()
+
+
 def main():
     """主函数"""
     # 初始化组件
@@ -117,71 +132,75 @@ def main():
                 placeholder="请输入面经内容...\n\n例如：字节跳动 Agent开发面经：\n1. 什么是RAG？\n2. 讲讲你的Agent项目",
             )
 
-            if st.button("提取并入库", type="primary"):
-                if not text_input.strip():
-                    st.error("请输入面经内容")
-                else:
-                    with st.spinner("正在提取面经..."):
-                        try:
-                            result = vision_extractor.extract(text_input, source_type="text")
-                            # 保存到 session state，供后续确认入库使用
-                            st.session_state.extracted_result = result
-                            st.session_state.input_type = "text"
-                            st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
+            col_btn1, col_btn2 = st.columns([3, 1])
+            with col_btn1:
+                if st.button("提取并入库", type="primary", key="btn_extract_text"):
+                    if not text_input.strip():
+                        st.error("请输入面经内容")
+                    else:
+                        with st.spinner("正在提取面经..."):
+                            try:
+                                result = vision_extractor.extract(text_input, source_type="text")
+                                st.session_state.extracted_result = result
+                                st.session_state.input_type = "text"
+                                st.session_state.extraction_done = True
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"提取失败: {e}")
+            with col_btn2:
+                # 确认入库按钮（仅在提取完成后显示）
+                if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "text":
+                    if st.button("确认入库", key="btn_confirm_text", type="secondary"):
+                        result = st.session_state.extracted_result
+                        confirm_text_ingest(result)
 
-                            # 显示题目列表和入库策略
-                            st.subheader("提取的题目")
-                            for i, q in enumerate(result.questions, 1):
-                                # 获取入库策略
-                                strategy = get_ingestion_strategy(
-                                    q.question_text,
-                                    q.core_entities,
-                                    qdrant_manager
-                                )
-
-                                with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
-                                    st.write(f"**类型**: {q.question_type.value}")
-                                    st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
-                                    st.write("---")
-                                    st.write(f"**入库策略**: {strategy['message']}")
-                                    if strategy.get("similar_text"):
-                                        st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
-                        except Exception as e:
-                            st.error(f"提取失败: {e}")
-
-            # 入库（使用 session state 保存的结果）- 独立于上面的按钮
-            if "extracted_result" in st.session_state and st.session_state.get("input_type") == "text":
+            # 入库（使用 session state 保存的结果）
+            if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "text":
                 result = st.session_state.extracted_result
-                # 显示确认信息
-                st.info(f"共提取 {len(result.questions)} 道题目，确认无误后点击下方按钮入库")
-                # 点击按钮弹出确认对话框
-                if st.button("确认入库", key="text_ingest"):
-                    # 触发确认对话框
-                    st.session_state.show_text_confirm_dialog = True
 
-                # 确认入库对话框
-                if st.session_state.get("show_text_confirm_dialog"):
-                    @st.dialog("确认入库")
-                    def confirm_text_ingest():
-                        st.write(f"确定要入库 **{result.company}** 的 **{result.position}** 面经吗？")
-                        st.write(f"共 **{len(result.questions)}** 道题目")
-                        col1, col2 = st.columns(2)
-                        if col1.button("确认入库", key="text_confirm_yes"):
-                            st.session_state.show_text_confirm_dialog = False
-                            with st.spinner("正在入库..."):
-                                try:
-                                    ingestion_result = ingestion_pipeline.process(result)
-                                    st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
-                                    if ingestion_result.async_tasks > 0:
-                                        st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
-                                    if "extracted_result" in st.session_state:
-                                        del st.session_state.extracted_result
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"入库失败: {e}")
-                        if col2.button("取消", key="text_confirm_no"):
-                            st.session_state.show_text_confirm_dialog = False
-                            st.rerun()
+                # 显示题目列表
+                st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
+                st.info("💡 点击题目可查看入库策略")
+
+                st.subheader("提取的题目")
+                for i, q in enumerate(result.questions, 1):
+                    # 延迟加载：仅在展开时计算入库策略
+                    with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
+                        st.write(f"**完整题目**: {q.question_text}")
+                        st.write(f"**类型**: {q.question_type.value}")
+                        st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
+
+                        # 延迟加载入库策略
+                        with st.spinner("计算入库策略..."):
+                            strategy = get_ingestion_strategy(
+                                q.question_text,
+                                q.core_entities,
+                                qdrant_manager
+                            )
+
+                        st.write("---")
+                        st.write(f"**入库策略**: {strategy['message']}")
+                        if strategy.get("similar_text"):
+                            st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
+
+            # 处理确认入库结果
+            if st.session_state.get("confirm_result") and st.session_state.get("confirm_data"):
+                result = st.session_state.confirm_data
+                with st.spinner("正在入库..."):
+                    try:
+                        ingestion_result = ingestion_pipeline.process(result)
+                        st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
+                        if ingestion_result.async_tasks > 0:
+                            st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
+                        # 清理状态
+                        st.session_state.extracted_result = None
+                        st.session_state.extraction_done = False
+                        st.session_state.input_type = None
+                        st.session_state.confirm_result = None
+                        st.session_state.confirm_data = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"入库失败: {e}")
 
         else:  # 图片上传
             uploaded_file = st.file_uploader("上传面经图片", type=["png", "jpg", "jpeg"])
@@ -199,70 +218,64 @@ def main():
 
                 st.image(image, caption="预览", width=300)
 
-                if st.button("提取并入库", key="img_process"):
-                    with st.spinner("正在提取图片面经..."):
-                        try:
-                            result = vision_extractor.extract(tmp_path, source_type="image")
-                            # 保存到 session state，供后续确认入库使用
-                            st.session_state.extracted_result = result
-                            st.session_state.input_type = "image"
-                            st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
+                col_btn1, col_btn2 = st.columns([3, 1])
+                with col_btn1:
+                    if st.button("提取并入库", key="btn_extract_img"):
+                        with st.spinner("正在提取图片面经..."):
+                            try:
+                                result = vision_extractor.extract(tmp_path, source_type="image")
+                                st.session_state.extracted_result = result
+                                st.session_state.input_type = "image"
+                                st.session_state.extraction_done = True
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"提取失败: {e}")
+                            finally:
+                                if os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
+                with col_btn2:
+                    # 确认入库按钮（仅在提取完成后显示）
+                    if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "image":
+                        if st.button("确认入库", key="btn_confirm_img", type="secondary"):
+                            result = st.session_state.extracted_result
+                            confirm_text_ingest(result)
 
-                            # 显示题目和入库策略
-                            st.subheader("提取的题目")
-                            for i, q in enumerate(result.questions, 1):
-                                # 获取入库策略
+                # 入库（使用 session state 保存的结果）
+                if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "image":
+                    result = st.session_state.extracted_result
+
+                    # 显示题目列表
+                    st.success(f"✅ 提取完成：公司={result.company}, 岗位={result.position}, 共 {len(result.questions)} 道题目")
+                    st.info("💡 点击题目可查看入库策略")
+
+                    st.subheader("提取的题目")
+                    for i, q in enumerate(result.questions, 1):
+                        # 延迟加载：仅在展开时计算入库策略
+                        with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
+                            st.write(f"**完整题目**: {q.question_text}")
+                            st.write(f"**类型**: {q.question_type.value}")
+                            st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
+
+                            # 延迟加载入库策略
+                            with st.spinner("计算入库策略..."):
                                 strategy = get_ingestion_strategy(
                                     q.question_text,
                                     q.core_entities,
                                     qdrant_manager
                                 )
 
-                                with st.expander(f"题目 {i}: [{q.question_type.value}] {q.question_text[:50]}..."):
-                                    st.write(f"**类型**: {q.question_type.value}")
-                                    st.write(f"**知识点**: {', '.join(q.core_entities) if q.core_entities else '无'}")
-                                    st.write("---")
-                                    st.write(f"**入库策略**: {strategy['message']}")
-                                    if strategy.get("similar_text"):
-                                        st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
-                        except Exception as e:
-                            st.error(f"提取失败: {e}")
-                        finally:
-                            if os.path.exists(tmp_path):
-                                os.unlink(tmp_path)
+                            st.write("---")
+                            st.write(f"**入库策略**: {strategy['message']}")
+                            if strategy.get("similar_text"):
+                                st.caption(f"相似题目: {strategy['similar_text'][:40]}... (相似度: {strategy['similar_score']:.3f})")
 
-                # 入库（使用 session state 保存的结果）- 独立于上面的按钮
-                if "extracted_result" in st.session_state and st.session_state.get("input_type") == "image":
-                    result = st.session_state.extracted_result
                     # 显示确认信息
                     st.info(f"共提取 {len(result.questions)} 道题目，确认无误后点击下方按钮入库")
-                    # 点击按钮弹出确认对话框
-                    if st.button("确认入库", key="img_ingest"):
-                        st.session_state.show_img_confirm_dialog = True
 
-                    # 确认入库对话框
-                    if st.session_state.get("show_img_confirm_dialog"):
-                        @st.dialog("确认入库")
-                        def confirm_img_ingest():
-                            st.write(f"确定要入库 **{result.company}** 的 **{result.position}** 面经吗？")
-                            st.write(f"共 **{len(result.questions)}** 道题目")
-                            col1, col2 = st.columns(2)
-                            if col1.button("确认入库", key="img_confirm_yes"):
-                                st.session_state.show_img_confirm_dialog = False
-                                with st.spinner("正在入库..."):
-                                    try:
-                                        ingestion_result = ingestion_pipeline.process(result)
-                                        st.success(f"✅ 入库成功：处理 {ingestion_result.processed} 条")
-                                        if ingestion_result.async_tasks > 0:
-                                            st.info(f"📤 已触发 {ingestion_result.async_tasks} 个异步答案生成任务")
-                                        if "extracted_result" in st.session_state:
-                                            del st.session_state.extracted_result
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"入库失败: {e}")
-                            if col2.button("取消", key="img_confirm_no"):
-                                st.session_state.show_img_confirm_dialog = False
-                                st.rerun()
+                    # 点击按钮弹出确认对话框
+                    if st.button("确认入库", key="img_ingest", type="primary"):
+                        # 显示确认对话框
+                        confirm_text_ingest(result)
 
     elif page == "🔍 搜索题目":
         st.subheader("🔍 搜索题目")
