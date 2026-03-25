@@ -179,7 +179,9 @@ offer_catcher/
 │   │
 │   ├── mq/                     # 消息队列层
 │   │   ├── producer.py         # RabbitMQ 生产者
-│   │   └── consumer.py         # RabbitMQ 消费者
+│   │   ├── consumer.py         # RabbitMQ 异步消费者
+│   │   ├── thread_pool_consumer.py  # 线程池消费者
+│   │   └── message_helper.py   # MQ 消息处理辅助类
 │   │
 │   ├── models/                 # 数据模型
 │   │   ├── schemas.py          # Pydantic 模型
@@ -194,7 +196,9 @@ offer_catcher/
 │   │
 │   └── utils/                  # 工具
 │       ├── hasher.py           # MD5 哈希工具
-│       └── logger.py           # 日志工具
+│       ├── logger.py           # 日志工具
+│       ├── retry.py            # 重试装饰器
+│       └── circuit_breaker.py  # 熔断器
 │
 ├── workers/                    # 后台进程
 │   └── answer_worker.py        # 异步答案生成 Worker

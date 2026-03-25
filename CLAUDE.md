@@ -27,11 +27,11 @@ offer_catcher/
 │   ├── tools/           # 智能体工具（search_web, search_vector）
 │   ├── pipelines/       # 业务流水线编排（ingestion, retrieval）
 │   ├── db/              # 基础设施层（qdrant_client）
-│   ├── mq/              # 消息队列层（producer, consumer）
+│   ├── mq/              # 消息队列层（producer, consumer, thread_pool_consumer, message_helper）
 │   ├── models/          # 领域数据模型（schemas.py, enums.py）
 │   ├── prompts/         # Prompt 模板中心（Markdown）
 │   ├── config/          # 全局配置管理（settings.py）
-│   └── utils/           # 通用工具（hasher.py, logger.py）
+│   └── utils/           # 通用工具（hasher.py, logger.py, retry.py, circuit_breaker.py）
 ├── workers/             # 后台常驻进程（async_answer_worker.py）
 └── gateways/            # 外部接入层（cli_chat.py）
 ```
@@ -42,8 +42,8 @@ offer_catcher/
 
 严格遵循定义在 `app/models/schemas.py` 和 `app/models/enums.py` 中的契约：
 
-- **枚举类**: 
-  - `QuestionType`: `knowledge`（客观题）、`project`（项目深挖题）、`behavioral`（行为题）
+- **枚举类**:
+  - `QuestionType`: `knowledge`（客观题）、`project`（项目深挖题）、`behavioral`（行为题）、`scenario`（场景题）
   - `MasteryLevel`: `0`（未掌握）、`1`（熟悉）、`2`（已掌握）
 - **核心数据总线 (ExtractedInterview)**: 包含 `company`, `position` 和 `questions` 列表。
 - **单题粒度 (QuestionItem)**: 必须包含 `question_id` (MD5哈希)、`question_text`、`question_type`、`requires_async_answer`、`mastery_level`。
