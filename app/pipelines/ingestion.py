@@ -57,16 +57,13 @@ class IngestionPipeline:
         logger.info("IngestionPipeline initialized")
 
     def _create_context(self, question: QuestionItem) -> str:
-        """创建用于 embedding 的上下文
+        """创建用于 embedding 的上下文（静态前缀策略）
 
-        遵循 CLAUDE.md 中的 Context Enrichment 原则：
-        存储时拼接上下文："公司：xxx | 岗位：xxx | 题目：xxx"
+        格式："考点标签：xxx,yyy | 题目：xxx"
         """
-        return (
-            f"公司：{question.company} | "
-            f"岗位：{question.position} | "
-            f"题目：{question.question_text}"
-        )
+        entities = question.core_entities or []
+        entities_str = ",".join(entities) if entities else "综合"
+        return f"考点标签：{entities_str} | 题目：{question.question_text}"
 
     def _create_payload(self, question: QuestionItem) -> QdrantQuestionPayload:
         """创建 Qdrant Payload"""
@@ -131,12 +128,38 @@ class IngestionPipeline:
             vectors = []
 
             for question in interview.questions:
-                # 创建上下文用于 embedding
+                # 1.1 创建上下文用于 embedding
                 context = self._create_context(question)
-                # 生成向量
-                vector = self.embedding_tool.embeddings.embed_query(context)
-                # 创建 Payload
-                payload = self._create_payload(question)
+
+                # 1.2 写时复制：查重并复用答案
+                query_vector = self.embedding_tool.embed_text(context)
+                similar_docs = self.qdrant_manager.search(
+                    query_vector=query_vector,
+                    limit=1,
+                    score_threshold=0.95,  # 高阈值查重
+                )
+
+                # 如果命中且已有答案，复用答案并关闭 MQ 任务
+                if similar_docs:
+                    existing = similar_docs[0]
+                    if existing.question_answer:
+                        logger.info(
+                            f"触发白嫖机制！题目【{question.question_text}】复用了库中已有标准答案。"
+                        )
+                        # 复制答案并关闭异步任务
+                        # 注意：QuestionItem 没有 question_answer 字段，需要通过 payload 传递
+                        question.requires_async_answer = False
+                        # 在 payload 中设置答案
+                        payload = self._create_payload(question)
+                        payload.question_answer = existing.question_answer
+                        logger.info(f"Question {question.question_id} will reuse existing answer")
+                    else:
+                        payload = self._create_payload(question)
+                else:
+                    payload = self._create_payload(question)
+
+                # 1.3 生成向量
+                vector = self.embedding_tool.embed_text(context)
 
                 payloads.append(payload)
                 vectors.append(vector)
@@ -150,7 +173,7 @@ class IngestionPipeline:
 
             logger.info(f"Stored {result.processed} questions to Qdrant")
 
-            # 3. 分类熔断 - 发送异步任务
+            # 3. 分类熔断 - 发送异步任务（只在 requires_async_answer 为 True 时发送）
             async_count = self._send_async_task(interview)
             result.async_tasks = async_count
             logger.info(f"Sent {async_count} async tasks to MQ")

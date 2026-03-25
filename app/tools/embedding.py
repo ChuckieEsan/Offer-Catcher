@@ -98,54 +98,6 @@ class EmbeddingTool:
             logger.error(f"Failed to embed texts: {e}")
             raise
 
-    def embed_with_context(
-        self,
-        question_text: str,
-        company: str,
-        position: str,
-    ) -> list[float]:
-        """上下文拼接后向量化（Context Enrichment）
-
-        遵循 CLAUDE.md 中的设计原则：
-        计算向量时不要只嵌入题目，必须拼接上下文：
-        "公司：字节跳动 | 岗位：Agent应用开发 | 题目：qlora怎么优化显存？"
-
-        Args:
-            question_text: 题目文本
-            company: 公司名称
-            position: 岗位名称
-
-        Returns:
-            向量列表
-        """
-        # 上下文拼接
-        context_text = f"公司：{company} | 岗位：{position} | 题目：{question_text}"
-        logger.debug(f"Context enriched text: {context_text}")
-
-        return self.embed_text(context_text)
-
-    def embed_questions(
-        self,
-        questions: list[dict],
-    ) -> list[list[float]]:
-        """批量题目向量化（带上下文）
-
-        适用于批量入库场景。
-
-        Args:
-            questions: 题目列表，每项包含 question_text, company, position
-
-        Returns:
-            向量列表
-        """
-        context_texts = []
-        for q in questions:
-            context = f"公司：{q['company']} | 岗位：{q['position']} | 题目：{q['question_text']}"
-            context_texts.append(context)
-
-        return self.embed_texts(context_texts)
-
-
 # 全局单例
 _embedding_tool: Optional[EmbeddingTool] = None
 
