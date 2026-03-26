@@ -342,8 +342,9 @@ else:
                     response = llm.invoke(messages)
                     ai_response = response.content if hasattr(response, 'content') else str(response)
 
-                    # 添加 AI 回答到历史（不需要 rerun，st.chat_input 会自动触发更新）
+                    # 添加 AI 回答到历史，并触发重绘显示
                     chat_history.append({"role": "assistant", "content": ai_response})
+                    st.rerun()
                 except Exception as e:
                     st.error(f"追问失败: {e}")
 
