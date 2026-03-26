@@ -351,112 +351,233 @@ async def main():
         st.subheader("📝 练习答题")
         st.markdown("选择一道题目进行练习，提交答案后获取 AI 评分和改进建议")
 
-        # 获取题目列表供选择
-        with st.spinner("加载题目..."):
-            practice_questions = retrieval_pipeline.search(query="", k=100)
+        # 抽题模式选择
+        col_mode1, col_mode2 = st.columns([1, 2])
 
-        if not practice_questions:
-            st.info("暂无题目数据，请先录入题目")
+        with col_mode1:
+            practice_mode = st.selectbox(
+                "抽题模式",
+                [
+                    "随机抽题",
+                    "按公司抽题",
+                    "按知识点抽题",
+                    "按熟练度抽题（未掌握）",
+                    "语义搜索抽题",
+                ],
+                key="practice_mode",
+            )
+
+        # 根据不同模式获取题目
+        available_questions = []
+        query_text = ""
+
+        with col_mode2:
+            if practice_mode == "随机抽题":
+                with st.spinner("加载题目..."):
+                    all_questions = retrieval_pipeline.search(query="", k=200)
+                    available_questions = [q for q in all_questions if q.question_answer]
+                st.info(f"共 {len(available_questions)} 道带答案的题目")
+
+                # 随机抽题按钮
+                if st.button("🎲 随机抽取一道题目", key="random_pick"):
+                    if available_questions:
+                        import random
+                        selected_q = random.choice(available_questions)
+                        # 设置 session state 以选中这道题目
+                        st.session_state.practice_select = f"[{selected_q.company}] {selected_q.question_text[:40]}..."
+                        st.session_state.selected_for_practice = selected_q
+                        st.rerun()
+                    else:
+                        st.warning("暂无带答案的题目")
+
+            elif practice_mode == "按公司抽题":
+                company_input = st.text_input("输入公司名称（如：字节跳动）", key="practice_company")
+                if company_input:
+                    with st.spinner("搜索中..."):
+                        results = retrieval_pipeline.search(
+                            query="",
+                            company=company_input,
+                            k=50
+                        )
+                        available_questions = [q for q in results if q.question_answer]
+                    st.info(f"找到 {len(available_questions)} 道带答案的题目")
+
+            elif practice_mode == "按知识点抽题":
+                # 从图数据库获取热门知识点
+                with st.spinner("加载知识点..."):
+                    top_entities = graph_client.get_top_entities(limit=30)
+                    entity_options = [e["entity"] for e in top_entities]
+
+                if entity_options:
+                    selected_entities = st.multiselect(
+                        "选择知识点",
+                        entity_options,
+                        default=None,
+                        key="practice_entities"
+                    )
+                    if selected_entities:
+                        with st.spinner("搜索中..."):
+                            results = retrieval_pipeline.search(
+                                query="",
+                                core_entities=selected_entities,
+                                k=50
+                            )
+                            available_questions = [q for q in results if q.question_answer]
+                        st.info(f"找到 {len(available_questions)} 道带答案的题目")
+                else:
+                    st.info("暂无知识点数据")
+
+            elif practice_mode == "按熟练度抽题（未掌握）":
+                with st.spinner("加载未掌握题目..."):
+                    results = retrieval_pipeline.search(
+                        query="",
+                        mastery_level=0,
+                        k=50
+                    )
+                    available_questions = [q for q in results if q.question_answer]
+                st.info(f"找到 {len(available_questions)} 道未掌握的题目")
+
+            elif practice_mode == "语义搜索抽题":
+                query_text = st.text_input("输入搜索关键词（如：RAG、Agent、LLM）", key="practice_query")
+                if query_text:
+                    with st.spinner("搜索中..."):
+                        results = retrieval_pipeline.search(
+                            query=query_text,
+                            k=50
+                        )
+                        available_questions = [q for q in results if q.question_answer]
+                    st.info(f"找到 {len(available_questions)} 道相关题目")
+
+        # 如果没有可用题目
+        if not available_questions:
+            if practice_mode != "随机抽题":
+                st.warning("暂无带答案的题目，请尝试其他抽题方式")
         else:
-            # 过滤有答案的题目才能练习
-            available_questions = [q for q in practice_questions if q.question_answer]
+            # 题目选择器
+            question_options = {
+                f"[{q.company}] {q.question_text[:40]}...": q
+                for q in available_questions
+            }
 
-            if not available_questions:
-                st.warning("暂无带答案的题目，请等待异步答案生成完成")
+            # 检查是否有通过随机抽题选中的题目
+            if "selected_for_practice" in st.session_state and st.session_state.selected_for_practice:
+                selected_q = st.session_state.selected_for_practice
+                # 清理 session state
+                st.session_state.selected_for_practice = None
             else:
-                # 题目选择器
-                question_options = {
-                    f"[{q.company}] {q.question_text[:40]}...": q
-                    for q in available_questions
-                }
+                # 用户手动选择
                 selected_label = st.selectbox(
                     "选择题目",
                     list(question_options.keys()),
                     key="practice_select"
                 )
+                selected_q = question_options.get(selected_label) if selected_label else None
 
-                if selected_label:
-                    selected_q = question_options[selected_label]
+            if selected_q:
+                # 清理旧的选择（如果用户切换了抽题模式）
+                if "practice_mode" in st.session_state:
+                    current_mode = st.session_state.practice_mode
+                    # 验证选中的题目是否符合当前模式
 
-                    # 显示题目
-                    st.markdown("---")
-                    st.markdown("### 题目")
-                    st.write(f"**公司**: {selected_q.company}")
-                    st.write(f"**岗位**: {selected_q.position}")
-                    st.write(f"**类型**: {selected_q.question_type}")
+                # 显示题目
+                st.markdown("---")
+                st.markdown("### 题目")
+                st.write(f"**公司**: {selected_q.company}")
+                st.write(f"**岗位**: {selected_q.position}")
+                st.write(f"**类型**: {selected_q.question_type}")
 
-                    with st.expander("查看题目详情"):
-                        st.write(selected_q.question_text)
-                        if selected_q.core_entities:
-                            st.write(f"**知识点**: {', '.join(selected_q.core_entities)}")
+                with st.expander("查看题目详情"):
+                    st.write(selected_q.question_text)
+                    if selected_q.core_entities:
+                        st.write(f"**知识点**: {', '.join(selected_q.core_entities)}")
 
-                    # 答案输入
-                    st.markdown("### 你的答案")
-                    user_answer = st.text_area(
-                        "请在此输入你的答案",
-                        height=200,
-                        placeholder="请用自己的话回答这道题目...",
-                        key="practice_answer"
+                # 展示相似题目（向量相似度）
+                st.markdown("#### 相似题目推荐")
+                with st.spinner("查找相似题目..."):
+                    similar_results = retrieval_pipeline.search(
+                        query=selected_q.question_text,
+                        k=5,
+                        score_threshold=0.5
                     )
+                    # 排除当前题目
+                    similar_questions = [s for s in similar_results if s.question_id != selected_q.question_id]
 
-                    # 提交评分
-                    if st.button("提交评分", type="primary", key="submit_score"):
-                        if not user_answer.strip():
-                            st.error("请输入答案")
-                        else:
-                            with st.spinner("AI 评分中..."):
-                                try:
-                                    score_result = asyncio.run(
-                                        scorer_agent.score(
-                                            question_id=selected_q.question_id,
-                                            user_answer=user_answer
-                                        )
+                if similar_questions:
+                    for sq in similar_questions:
+                        with st.expander(f"相似: [{sq.company}] {sq.question_text[:30]}..."):
+                            st.write(sq.question_text[:100] + "..." if len(sq.question_text) > 100 else sq.question_text)
+                            if sq.core_entities:
+                                st.caption(f"知识点: {', '.join(sq.core_entities)}")
+                else:
+                    st.caption("暂无相似题目")
+
+                # 答案输入
+                st.markdown("### 你的答案")
+                user_answer = st.text_area(
+                    "请在此输入你的答案",
+                    height=200,
+                    placeholder="请用自己的话回答这道题目...",
+                    key="practice_answer"
+                )
+
+                # 提交评分
+                if st.button("提交评分", type="primary", key="submit_score"):
+                    if not user_answer.strip():
+                        st.error("请输入答案")
+                    else:
+                        with st.spinner("AI 评分中..."):
+                            try:
+                                score_result = asyncio.run(
+                                    scorer_agent.score(
+                                        question_id=selected_q.question_id,
+                                        user_answer=user_answer
                                     )
+                                )
 
-                                    # 显示评分结果
-                                    st.markdown("---")
-                                    st.markdown("### 评分结果")
+                                # 显示评分结果
+                                st.markdown("---")
+                                st.markdown("### 评分结果")
 
-                                    # 分数和等级
-                                    col_score1, col_score2, col_score3 = st.columns(3)
-                                    with col_score1:
-                                        st.metric("得分", f"{score_result.score}/100")
-                                    with col_score2:
-                                        level_emoji = ["❌", "⚠️", "✅"]
-                                        level_name = ["未掌握", "熟悉", "已掌握"]
-                                        st.metric(
-                                            "熟练度",
-                                            f"{level_emoji[score_result.mastery_level.value]} {level_name[score_result.mastery_level.value]}"
-                                        )
-                                    with col_score3:
-                                        st.metric("标准答案", "已提供" if score_result.standard_answer else "待生成")
+                                # 分数和等级
+                                col_score1, col_score2, col_score3 = st.columns(3)
+                                with col_score1:
+                                    st.metric("得分", f"{score_result.score}/100")
+                                with col_score2:
+                                    level_emoji = ["❌", "⚠️", "✅"]
+                                    level_name = ["未掌握", "熟悉", "已掌握"]
+                                    st.metric(
+                                        "熟练度",
+                                        f"{level_emoji[score_result.mastery_level.value]} {level_name[score_result.mastery_level.value]}"
+                                    )
+                                with col_score3:
+                                    st.metric("标准答案", "已提供" if score_result.standard_answer else "待生成")
 
-                                    # 优点
-                                    if score_result.strengths:
-                                        st.markdown("#### 优点")
-                                        for s in score_result.strengths:
-                                            st.success(f"✓ {s}")
+                                # 优点
+                                if score_result.strengths:
+                                    st.markdown("#### 优点")
+                                    for s in score_result.strengths:
+                                        st.success(f"✓ {s}")
 
-                                    # 改进建议
-                                    if score_result.improvements:
-                                        st.markdown("#### 改进建议")
-                                        for imp in score_result.improvements:
-                                            st.warning(f"→ {imp}")
+                                # 改进建议
+                                if score_result.improvements:
+                                    st.markdown("#### 改进建议")
+                                    for imp in score_result.improvements:
+                                        st.warning(f"→ {imp}")
 
-                                    # 综合反馈
-                                    if score_result.feedback:
-                                        st.markdown("#### 综合反馈")
-                                        st.info(score_result.feedback)
+                                # 综合反馈
+                                if score_result.feedback:
+                                    st.markdown("#### 综合反馈")
+                                    st.info(score_result.feedback)
 
-                                    # 显示标准答案（可选）
-                                    with st.expander("查看标准答案"):
-                                        if score_result.standard_answer:
-                                            st.markdown(score_result.standard_answer)
-                                        else:
-                                            st.info("标准答案待生成")
+                                # 显示标准答案（可选）
+                                with st.expander("查看标准答案"):
+                                    if score_result.standard_answer:
+                                        st.markdown(score_result.standard_answer)
+                                    else:
+                                        st.info("标准答案待生成")
 
-                                except Exception as e:
-                                    st.error(f"评分失败: {e}")
+                            except Exception as e:
+                                st.error(f"评分失败: {e}")
 
     elif page == "📋 题目管理":
         st.subheader("📋 题目管理")

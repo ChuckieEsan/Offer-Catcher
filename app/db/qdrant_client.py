@@ -177,6 +177,14 @@ class QdrantManager:
                     match=models.MatchValue(value=filter_conditions.question_type),
                 )
             )
+        # 知识点过滤（数组字段，支持多值匹配）
+        if filter_conditions.core_entities:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="core_entities",
+                    match=models.MatchAny(any=filter_conditions.core_entities),
+                )
+            )
 
         return models.Filter(must=must_conditions) if must_conditions else None
 

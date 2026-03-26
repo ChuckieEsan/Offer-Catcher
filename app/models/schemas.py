@@ -1,7 +1,7 @@
 """核心数据模型定义模块"""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -95,6 +95,9 @@ class SearchFilter(BaseModel):
     mastery_level: Optional[int] = Field(default=None, description="熟练度等级过滤")
     question_type: Optional[str] = Field(
         default=None, description="题目类型过滤"
+    )
+    core_entities: Optional[List[str]] = Field(
+        default=None, description="知识点过滤（匹配任一知识点）"
     )
 
 
