@@ -15,6 +15,7 @@
 6. **不要在业务代码中使用 Emoji 字符**。在开发 streamlit 前端时，可以适当使用 Emoji。
 7. **软件开发设计应当符合 Langchain/LangGraph 的最佳实践**，你需要尽可能少的重复造轮子，尽可能复用 Langchain 已有的组件
 8. **如果发生重构，不要进行向后兼容，你需要直接重构**
+9. **禁止在测试用例中写生产数据库，只允许读**
 
 ---
 
@@ -33,7 +34,7 @@ offer_catcher/
 │   ├── config/          # 全局配置管理（settings.py）
 │   └── utils/           # 通用工具（hasher.py, logger.py, retry.py, circuit_breaker.py）
 ├── workers/             # 后台常驻进程（async_answer_worker.py）
-└── gateways/            # 外部接入层（cli_chat.py）
+└── gateways/            # 外部接入层（前端为 cli_chat.py）
 ```
 
 ---
