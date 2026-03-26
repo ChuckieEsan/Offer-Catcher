@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Qdrant 数据库导出脚本
 
-导出指定集合的所有数据为 JSON 文件。
+导出指定集合的所有数据为 joblib 文件。
 """
 
-import json
+import joblib
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 from qdrant_client import QdrantClient
@@ -51,14 +52,14 @@ def export_collection(
             collection_name=collection_name,
             limit=batch_size,
             offset=offset,
-            with_vectors=False,  # 不导出向量以减小文件体积
+            with_vectors=True,
             with_payload=True,
         )
 
         for point in results:
             points_data.append({
                 "id": point.id,
-                "vector": None,  # 可选择导出向量
+                "vector": point.vector,
                 "payload": point.payload,
             })
 
@@ -69,8 +70,7 @@ def export_collection(
 
     # 写入文件
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(points_data, f, ensure_ascii=False, indent=2)
+    joblib.dump(points_data, output_file)
 
     logger.info(f"导出完成: {output_file} ({len(points_data)} 条记录)")
     return len(points_data)
@@ -81,7 +81,7 @@ def main():
     parser.add_argument(
         "-o", "--output",
         type=str,
-        help="输出文件路径 (默认: backups/qdrant_export_xxx.json)",
+        help="输出文件路径 (默认: backups/qdrant_export_xxx.pkl)",
     )
     parser.add_argument(
         "-c", "--collection",
@@ -110,9 +110,8 @@ def main():
     if args.output:
         output_file = Path(args.output)
     else:
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = Path(__file__).parent.parent / "backups" / f"qdrant_export_{timestamp}.json"
+        output_file = Path(__file__).parent.parent / "backups" / f"qdrant_export_{timestamp}.pkl"
 
     # 连接 Qdrant
     client = QdrantClient(url=settings.qdrant_url)

@@ -1,6 +1,7 @@
 """Qdrant 客户端功能测试
 
 验证 Qdrant 数据库连接和各项功能是否正常工作。
+注意：所有测试使用独立的测试 collection，不影响生产数据。
 """
 
 import random
@@ -12,6 +13,9 @@ from app.config.settings import get_settings
 from app.db.qdrant_client import QdrantManager
 from app.models.schemas import QdrantQuestionPayload, SearchFilter
 from app.utils.hasher import generate_question_id
+
+# 测试专用的 collection 名称
+TEST_COLLECTION = "questions_test"
 
 
 def generate_random_vector(dim: int = None) -> List[float]:
@@ -33,7 +37,8 @@ class TestQdrantConnection:
 
     def test_connection(self):
         """测试 Qdrant 连接是否正常"""
-        manager = QdrantManager()
+        # 使用测试 collection，不影响生产
+        manager = QdrantManager(collection_name=TEST_COLLECTION)
         # 尝试获取集合列表，验证连接
         collections = manager.client.get_collections()
         assert collections is not None
@@ -46,9 +51,14 @@ class TestQdrantCollection:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置"""
-        self.manager = QdrantManager()
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.settings = get_settings()
         yield
+        # 测试后清理：删除测试 collection
+        try:
+            self.manager.delete_collection()
+        except Exception:
+            pass
 
     def test_create_collection(self):
         """测试创建集合"""
@@ -62,7 +72,7 @@ class TestQdrantCollection:
 
         # 获取集合信息
         info = self.manager.get_collection_info()
-        assert info["name"] == self.settings.qdrant_collection
+        assert info["name"] == TEST_COLLECTION
         print(f"Collection info: {info}")
 
 
@@ -72,7 +82,7 @@ class TestQdrantUpsert:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置：确保集合存在"""
-        self.manager = QdrantManager()
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.settings = get_settings()
         self.test_company = "字节跳动"
         self.test_position = "Agent应用开发"
@@ -139,7 +149,7 @@ class TestQdrantSearch:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置：确保集合存在"""
-        self.manager = QdrantManager()
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.test_data = [
             ("字节跳动", "Agent应用开发", "什么是 RAG？", "knowledge"),
             ("字节跳动", "Agent应用开发", "讲讲你的 Agent 项目？", "project"),
@@ -215,7 +225,7 @@ class TestQdrantGetQuestion:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置：确保集合存在"""
-        self.manager = QdrantManager()
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.test_company = "字节跳动"
         self.test_question = "什么是 RAG？"
         self.question_id = generate_question_id(self.test_company, self.test_question)
@@ -261,7 +271,7 @@ class TestQdrantUpdate:
     @pytest.fixture(autouse=True)
     def setup(self):
         """测试前置设置：确保集合存在"""
-        self.manager = QdrantManager()
+        self.manager = QdrantManager(collection_name=TEST_COLLECTION)
         self.test_company = "字节跳动"
         self.test_question = "什么是 RAG？"
         self.question_id = generate_question_id(self.test_company, self.test_question)
@@ -298,7 +308,7 @@ class TestQdrantFullWorkflow:
 
     def test_full_workflow(self):
         """测试完整的数据流"""
-        manager = QdrantManager()
+        manager = QdrantManager(collection_name=TEST_COLLECTION)
 
         try:
             # 1. 创建集合（如果不存在）

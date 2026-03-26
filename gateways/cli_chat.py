@@ -820,6 +820,50 @@ async def main():
                     else:
                         st.info("暂无数据")
 
+            # 跨公司通用考点
+            st.markdown("#### 跨公司通用考点")
+            st.markdown("多家公司同时考察的高频知识点")
+            cross_company = graph_client.get_cross_company_entities(min_companies=2)
+            if cross_company:
+                cross_company_data = {
+                    e["entity"]: e["company_count"] for e in cross_company[:10]
+                }
+                st.bar_chart(cross_company_data)
+                # 显示详情
+                with st.expander("查看详情"):
+                    for e in cross_company[:10]:
+                        st.write(f"- **{e['entity']}**: 出现在 {e['company_count']} 家公司, 共 {e['total_count']} 次")
+                        st.caption(f"  考察的公司: {', '.join(e['companies'])}")
+            else:
+                st.info("暂无跨公司考点数据")
+
+            # 知识点关联查询
+            st.markdown("#### 知识点关联查询")
+            st.markdown("查看某知识点通常与哪些知识点一起考察")
+
+            col_query1, col_query2 = st.columns([3, 1])
+            with col_query1:
+                query_entity = st.text_input("输入要查询的知识点", placeholder="例如: RAG", key="query_entity")
+            with col_query2:
+                query_limit = st.number_input("返回数量", min_value=1, max_value=20, value=5, key="query_limit")
+
+            if query_entity:
+                with st.spinner(f"查询 {query_entity} 的关联知识点..."):
+                    related = graph_client.get_related_entities(query_entity, limit=query_limit)
+
+                if related:
+                    st.success(f"与「{query_entity}」经常一起考察的知识点：")
+                    related_data = {
+                        e["entity"]: e["co_occurrence_count"] for e in related
+                    }
+                    st.bar_chart(related_data)
+
+                    # 详细列表
+                    for e in related:
+                        st.write(f"- **{e['entity']}**: 共现 {e['co_occurrence_count']} 次")
+                else:
+                    st.info(f"未找到与「{query_entity}」相关的知识点数据")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

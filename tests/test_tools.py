@@ -117,14 +117,17 @@ class TestToolsIntegration:
 
     def test_embedding_to_qdrant_pipeline(self):
         """测试 Embedding -> Qdrant 完整流程"""
+        # 使用测试 collection
+        test_collection = "questions_test"
+
         # 1. Embedding
         embedding_tool = get_embedding_tool()
         query = "什么是 RAG"
         vector = embedding_tool.embed_text(query)
         print(f"1. Embedded query: {len(vector)} dims")
 
-        # 2. Qdrant search
-        qdrant_manager = QdrantManager()
+        # 2. Qdrant search (使用测试 collection)
+        qdrant_manager = QdrantManager(collection_name=test_collection)
         results = qdrant_manager.search(query_vector=vector, limit=5)
         print(f"2. Qdrant search returned {len(results)} results")
 

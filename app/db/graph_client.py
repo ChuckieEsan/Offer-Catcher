@@ -263,6 +263,191 @@ class Neo4jGraphClient:
 
         return success
 
+    def delete_companies(self, companies: list[str]) -> bool:
+        """删除指定的公司节点及其关联关系
+
+        Args:
+            companies: 要清理的公司名称列表
+
+        Returns:
+            是否成功
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return False
+
+        query = """
+        MATCH (c:Company {name: $company})
+        DETACH DELETE c
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                for company in companies:
+                    session.run(query, company=company)
+            logger.debug(f"Cleaned up companies: {companies}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to cleanup companies: {e}")
+            return False
+
+    def get_related_entities(
+        self,
+        entity: str,
+        limit: int = 5,
+    ) -> list[dict]:
+        """获取与给定知识点相关的其他知识点（基于同公司考察）
+
+        例如：如果考了 RAG，通常还会考 Agent、LangChain 等。
+
+        Args:
+            entity: 知识点名称
+            limit: 返回数量限制
+
+        Returns:
+            相关知识点列表，每个元素包含 entity, related_entity, co_occurrence_count
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        # 找出考察过该知识点的公司，再找出这些公司考察的其他知识点
+        query = """
+        MATCH (c:Company)-[r1:考频]->(e1:Entity {name: $entity})
+        MATCH (c)-[r2:考频]->(e2:Entity)
+        WHERE e1 <> e2
+        RETURN e2.name as related_entity, sum(r2.count) as co_occurrence_count
+        ORDER BY co_occurrence_count DESC
+        LIMIT $limit
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, entity=entity, limit=limit)
+                return [
+                    {"entity": record["related_entity"], "co_occurrence_count": record["co_occurrence_count"]}
+                    for record in result
+                ]
+        except Exception as e:
+            logger.error(f"Failed to get related entities: {e}")
+            return []
+
+    def get_entity_cooccurrence(
+        self,
+        entity: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """获取与给定知识点共同考察的知识点（更精确的共现分析）
+
+        基于同一家公司、同一批次考察的知识点计算共现关系。
+
+        Args:
+            entity: 知识点名称
+            limit: 返回数量限制
+
+        Returns:
+            共现知识点列表
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        query = """
+        MATCH (c:Company)-[r1:考频]->(e1:Entity {name: $entity})
+        MATCH (c:Company)-[r2:考频]->(e2:Entity)
+        WHERE e1 <> e2
+        WITH c, e2, r1, r2
+        RETURN e2.name as entity,
+               (r1.count + r2.count) / 2.0 as weight,
+               r1.count as entity1_count,
+               r2.count as entity2_count
+        ORDER BY weight DESC
+        LIMIT $limit
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, entity=entity, limit=limit)
+                return [
+                    {
+                        "entity": record["entity"],
+                        "weight": record["weight"],
+                        "entity1_count": record["entity1_count"],
+                        "entity2_count": record["entity2_count"],
+                    }
+                    for record in result
+                ]
+        except Exception as e:
+            logger.error(f"Failed to get entity cooccurrence: {e}")
+            return []
+
+    def get_company_entity_distribution(self, company: str) -> list[dict]:
+        """获取公司在各个知识点的分布情况
+
+        Args:
+            company: 公司名称
+
+        Returns:
+            知识点分布列表
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        query = """
+        MATCH (c:Company {name: $company})-[r:考频]->(e:Entity)
+        RETURN e.name as entity, r.count as count
+        ORDER BY count DESC
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, company=company)
+                return [
+                    {"entity": record["entity"], "count": record["count"]}
+                    for record in result
+                ]
+        except Exception as e:
+            logger.error(f"Failed to get company entity distribution: {e}")
+            return []
+
+    def get_cross_company_entities(self, min_companies: int = 2) -> list[dict]:
+        """获取跨多家公司考察的知识点（高频通用考点）
+
+        Args:
+            min_companies: 最少考察该知识点的公司数量
+
+        Returns:
+            跨公司知识点列表
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        query = """
+        MATCH (c:Company)-[r:考频]->(e:Entity)
+        WITH e.name as entity, collect(c.name) as companies, sum(r.count) as total_count
+        WHERE size(companies) >= $min_companies
+        RETURN entity, companies, total_count, size(companies) as company_count
+        ORDER BY total_count DESC
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, min_companies=min_companies)
+                return [
+                    {
+                        "entity": record["entity"],
+                        "companies": record["companies"],
+                        "total_count": record["total_count"],
+                        "company_count": record["company_count"],
+                    }
+                    for record in result
+                ]
+        except Exception as e:
+            logger.error(f"Failed to get cross-company entities: {e}")
+            return []
+
 
 # 全局单例
 _graph_client: Optional[Neo4jGraphClient] = None

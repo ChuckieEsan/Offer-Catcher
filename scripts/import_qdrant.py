@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Qdrant 数据库导入脚本
 
-从 JSON 文件导入数据到 Qdrant 集合。
+从 joblib 文件导入数据到 Qdrant 集合。
 """
 
-import json
+import joblib
 import argparse
 from pathlib import Path
 
@@ -35,8 +35,7 @@ def import_collection(
         导入记录数
     """
     # 读取 JSON 文件
-    with open(input_file, "r", encoding="utf-8") as f:
-        points_data = json.load(f)
+    points_data = joblib.load(input_file)
 
     if not points_data:
         logger.warning(f"文件为空: {input_file}")
@@ -76,7 +75,7 @@ def main():
     parser.add_argument(
         "input",
         type=str,
-        help="输入 JSON 文件路径",
+        help="输入 joblib 文件路径",
     )
     parser.add_argument(
         "-c", "--collection",
