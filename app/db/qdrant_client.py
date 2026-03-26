@@ -12,6 +12,7 @@ from app.config.settings import get_settings
 from app.models.schemas import QdrantQuestionPayload, SearchFilter, SearchResult
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
+from app.tools.embedding import get_embedding_tool
 
 
 class QdrantManager:
@@ -483,6 +484,72 @@ class QdrantManager:
 
         except Exception as e:
             logger.error(f"Failed to update question: {e}")
+            raise
+
+    def update_question_with_reembedding(
+        self,
+        question_id: str,
+        company: str,
+        position: str,
+        question_text: str,
+        question_type: Optional[str] = None,
+        question_answer: Optional[str] = None,
+        mastery_level: Optional[int] = None,
+    ) -> bool:
+        """更新题目文本并重新计算向量
+
+        当题目文本变化时，需要重新计算 embedding 并更新向量。
+
+        Args:
+            question_id: 题目 ID
+            company: 公司名称（用于生成 embedding 上下文）
+            position: 岗位名称（用于生成 embedding 上下文）
+            question_text: 新题目文本
+            question_type: 新题目类型（可选）
+            question_answer: 新答案（可选）
+            mastery_level: 新熟练度（可选）
+
+        Returns:
+            是否成功
+        """
+        try:
+            # 重新计算 embedding（使用上下文拼接）
+            embedding_tool = get_embedding_tool()
+            context = f"公司：{company} | 岗位：{position} | 题目：{question_text}"
+            new_vector = embedding_tool.embed_text(context)
+
+            # 更新向量和 payload
+            self.client.update_vectors(
+                collection_name=self.collection_name,
+                points=[
+                    models.PointVectors(
+                        id=question_id,
+                        vector=new_vector,
+                    )
+                ],
+            )
+
+            # 更新其他 payload
+            payload = {}
+            if question_type is not None:
+                payload["question_type"] = question_type
+            if question_answer is not None:
+                payload["question_answer"] = question_answer
+            if mastery_level is not None:
+                payload["mastery_level"] = mastery_level
+
+            if payload:
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    points=[question_id],
+                    payload=payload,
+                )
+
+            logger.info(f"Updated question with reembedding: {question_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update question with reembedding: {e}")
             raise
 
     def get_collection_info(self) -> dict:
