@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
@@ -39,18 +39,18 @@ class EmbeddingTool:
             model_path: 模型路径，默认使用 models/bge-m3
         """
         self.model_path = model_path or BGE_M3_MODEL_PATH
-        self._embeddings: Optional[SentenceTransformerEmbeddings] = None
+        self._embeddings: Optional[HuggingFaceEmbeddings] = None
 
     @property
-    def embeddings(self) -> SentenceTransformerEmbeddings:
+    def embeddings(self) -> HuggingFaceEmbeddings:
         """获取 Embeddings 实例（延迟加载）"""
         if self._embeddings is None:
             if not os.path.exists(self.model_path):
                 raise FileNotFoundError(f"Model not found at: {self.model_path}")
 
-            self._embeddings = SentenceTransformerEmbeddings(
+            self._embeddings = HuggingFaceEmbeddings(
                 model_name=self.model_path,
-                model_kwargs={"device": "cpu"},
+                model_kwargs={"device": "cuda"},
             )
             # 获取向量维度
             settings = get_settings()

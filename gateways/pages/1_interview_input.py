@@ -156,23 +156,39 @@ if input_type == "文本输入":
                 st.error(f"入库失败: {e}")
 
 else:  # 图片上传
-    uploaded_file = st.file_uploader("上传面经图片", type=["png", "jpg", "jpeg"])
+    # 支持多个图片和 webp 格式
+    uploaded_files = st.file_uploader(
+        "上传面经图片（可多选）",
+        type=["png", "jpg", "jpeg", "webp"],
+        accept_multiple_files=True
+    )
 
-    if uploaded_file:
-        suffix = f".{uploaded_file.name.split('.')[-1]}" if '.' in uploaded_file.name else ".jpg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp_path = tmp.name
-            image = Image.open(uploaded_file)
-            image.save(tmp_path)
+    if uploaded_files:
+        # 保存所有上传的图片到临时文件
+        temp_paths = []
+        for uploaded_file in uploaded_files:
+            suffix = f".{uploaded_file.name.split('.')[-1]}" if '.' in uploaded_file.name else ".jpg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp_path = tmp.name
+                image = Image.open(uploaded_file)
+                image.save(tmp_path)
+                temp_paths.append(tmp_path)
 
-        st.image(image, caption="预览", width=300)
+        # 显示所有图片预览
+        st.write(f"已上传 {len(uploaded_files)} 张图片：")
+        cols = st.columns(min(len(uploaded_files), 3))
+        for i, uploaded_file in enumerate(uploaded_files):
+            with cols[i % 3]:
+                image = Image.open(uploaded_file)
+                st.image(image, caption=uploaded_file.name, width=200)
 
         col_btn1, col_btn2 = st.columns([3, 1])
         with col_btn1:
             if st.button("提取并入库", key="btn_extract_img"):
                 with st.spinner("正在提取图片面经..."):
                     try:
-                        result = vision_extractor.extract(tmp_path, source_type="image")
+                        # 传入多个图片路径列表
+                        result = vision_extractor.extract(temp_paths, source_type="image")
                         st.session_state.extracted_result = result
                         st.session_state.input_type = "image"
                         st.session_state.extraction_done = True
@@ -180,8 +196,10 @@ else:  # 图片上传
                     except Exception as e:
                         st.error(f"提取失败: {e}")
                     finally:
-                        if os.path.exists(tmp_path):
-                            os.unlink(tmp_path)
+                        # 清理临时文件
+                        for tmp_path in temp_paths:
+                            if os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
         with col_btn2:
             if st.session_state.get("extraction_done") and st.session_state.get("input_type") == "image":
                 if st.button("确认入库", key="btn_confirm_img", type="secondary"):

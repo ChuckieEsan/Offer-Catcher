@@ -18,7 +18,7 @@ from app.agents.base import BaseAgent
 from app.config.settings import create_llm
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
-from app.utils.image import encode_image_to_base64
+from app.utils.image import build_vision_message_content
 
 
 # 用于 with_structured_output 的 Pydantic 模型
@@ -100,21 +100,20 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 
         return self._vision_structured_llm
 
-    def _build_message(self, source: str, source_type: str) -> HumanMessage:
-        """构建消息"""
+    def _build_message(self, source: str | list[str], source_type: str) -> HumanMessage:
+        """构建消息
+
+        Args:
+            source: 输入内容（文本/单个图片路径/多个图片路径列表/URL/Base64）
+            source_type: 输入类型 "text" | "image"
+        """
         if source_type == "text":
             content = [
                 {"type": "text", "text": self.prompt_template + "\n\n" + "以下是需要分析的内容：\n" + source}
             ]
         elif source_type == "image":
-            image_base64 = encode_image_to_base64(source)
-            content = [
-                {"type": "text", "text": self.prompt_template},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
-                }
-            ]
+            # 支持单个图片路径或多个图片路径列表
+            content = build_vision_message_content(self.prompt_template, source)
         else:
             raise ValueError(f"Invalid source_type: {source_type}")
 
@@ -199,18 +198,23 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         schema = self._parse_json_response(response.content)
         return self._convert_to_extracted_interview(schema)
 
-    def extract(self, source: str, source_type: str = "text") -> ExtractedInterview:
+    def extract(self, source: str | list[str], source_type: str = "text") -> ExtractedInterview:
         """从文本或图片提取面经数据
 
         Args:
-            source: 输入内容（文本/图片路径/URL/Base64）
+            source: 输入内容（文本/单个图片路径/多个图片路径列表/URL/Base64）
             source_type: 输入类型 "text" | "image"
 
         Returns:
             ExtractedInterview 结构化数据
         """
         from app.utils.logger import logger
-        logger.info(f"Extracting from {source_type}: {source[:50]}...")
+
+        # 记录日志
+        if isinstance(source, list):
+            logger.info(f"Extracting from {source_type}: {len(source)} images")
+        else:
+            logger.info(f"Extracting from {source_type}: {source[:50]}...")
 
         # 构建消息
         message = self._build_message(source, source_type)

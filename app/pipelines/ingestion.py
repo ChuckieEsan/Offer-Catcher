@@ -92,10 +92,12 @@ class IngestionPipeline:
         遵循分类熔断机制：
         - knowledge / scenario 类型：需要异步生成答案
         - project / behavioral 类型：熔断，不生成答案
+
+        注意：不主动关闭连接，让 connect_robust 自动处理断线重连。
         """
         task_count = 0
 
-        # 获取生产者
+        # 获取生产者（全局单例，连接保持长连接）
         mq_producer = await self._get_producer()
 
         for question in interview.questions:

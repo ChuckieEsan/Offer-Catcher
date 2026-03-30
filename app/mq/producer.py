@@ -63,11 +63,25 @@ class AsyncRabbitMQProducer:
             raise
 
     async def _ensure_connected(self) -> None:
-        """确保连接有效"""
-        if self._connection is None or self._connection.is_closed:
-            raise RuntimeError(
-                "RabbitMQ producer is not connected. Call await connect() first."
-            )
+        """确保连接有效，如果连接已关闭则自动重连"""
+        if self._connection is None:
+            logger.warning("RabbitMQ producer not connected, connecting...")
+            await self.connect()
+            return
+
+        try:
+            if self._connection.is_closed:
+                logger.warning("RabbitMQ producer connection closed, reconnecting...")
+                await self.connect()
+        except RuntimeError as e:
+            # 处理 "no running event loop" 错误，重新创建连接
+            if "event loop" in str(e).lower():
+                logger.warning(f"Event loop issue: {e}, recreating connection...")
+                self._connection = None
+                self._channel = None
+                await self.connect()
+            else:
+                raise
 
     async def publish_task(self, task: MQTaskMessage, retry: int = 3) -> bool:
         """发布单条任务消息
@@ -133,17 +147,34 @@ class AsyncRabbitMQProducer:
         logger.info(f"Published {success_count}/{len(tasks)} tasks")
         return success_count
 
-    async def close(self) -> None:
-        """关闭连接"""
-        if self._connection and not self._connection.is_closed:
-            try:
+    async def close(self, cleanup: bool = False) -> None:
+        """关闭连接
+
+        Args:
+            cleanup: 如果为 True，则关闭连接并重置全局单例（仅在程序退出时使用）
+        """
+        global _producer
+        try:
+            if self._connection is None:
+                return
+
+            if not self._connection.is_closed:
                 await self._connection.close()
                 logger.info("RabbitMQ producer connection closed")
-            except Exception as e:
+        except RuntimeError as e:
+            # 处理 "no running event loop" 错误
+            if "event loop" in str(e).lower():
+                logger.warning(f"Cannot close connection: {e}")
+            else:
                 logger.warning(f"Error closing connection: {e}")
-            finally:
-                self._connection = None
-                self._channel = None
+        except Exception as e:
+            logger.warning(f"Error closing connection: {e}")
+        finally:
+            self._connection = None
+            self._channel = None
+            # 仅在明确需要清理时重置全局单例
+            if cleanup and _producer is self:
+                _producer = None
 
 
 # 全局单例

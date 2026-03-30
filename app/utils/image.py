@@ -4,11 +4,74 @@
 """
 
 import base64
+import imghdr
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen
 
 from app.utils.logger import logger
+
+
+def get_image_mime_type(image_source: str) -> str:
+    """获取图片的 MIME 类型
+
+    Args:
+        image_source: 图片源（文件路径/URL/Base64）
+
+    Returns:
+        MIME 类型字符串（如 "image/jpeg", "image/png", "image/webp"）
+    """
+    # 从 Base64 数据头检测
+    if image_source.startswith("data:image"):
+        if "," in image_source:
+            prefix = image_source.split(",", 1)[0]
+            if "png" in prefix:
+                return "image/png"
+            elif "webp" in prefix:
+                return "image/webp"
+            elif "gif" in prefix:
+                return "image/gif"
+        return "image/jpeg"
+
+    # 从 URL 检测
+    if image_source.startswith("http://") or image_source.startswith("https://"):
+        try:
+            with urlopen(image_source) as response:
+                content_type = response.headers.get("Content-Type", "image/jpeg")
+                return content_type
+        except Exception:
+            return "image/jpeg"
+
+    # 从文件扩展名检测
+    image_path = Path(image_source)
+    ext = image_path.suffix.lower()
+    mime_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+    }
+    if ext in mime_map:
+        return mime_map[ext]
+
+    # 从文件内容检测
+    try:
+        with open(image_path, "rb") as f:
+            header = f.read(32)
+            if header.startswith(b"\xff\xd8"):
+                return "image/jpeg"
+            elif header.startswith(b"\x89PNG"):
+                return "image/png"
+            elif header.startswith(b"GIF"):
+                return "image/gif"
+            elif header.startswith(b"RIFF") and b"WEBP" in header:
+                return "image/webp"
+    except Exception:
+        pass
+
+    return "image/jpeg"
 
 
 def encode_image_to_base64(image_source: str) -> str:
@@ -57,25 +120,31 @@ def encode_image_to_base64(image_source: str) -> str:
 
 def build_vision_message_content(
     prompt: str,
-    image_source: str,
+    image_source: str | list[str],
 ) -> list[dict[str, str]]:
     """构建 Vision 模型的消息内容
 
     Args:
         prompt: 提示词
-        image_source: 图片源（文件路径/URL/Base64）
+        image_source: 图片源（文件路径/URL/Base64），支持单个或多个
 
     Returns:
         LangChain 消息内容列表
     """
-    image_base64 = encode_image_to_base64(image_source)
-    return [
-        {"type": "text", "text": prompt},
-        {
+    content: list[dict[str, str]] = [{"type": "text", "text": prompt}]
+
+    # 支持单个或多个图片
+    image_sources = [image_source] if isinstance(image_source, str) else image_source
+
+    for img_source in image_sources:
+        image_base64 = encode_image_to_base64(img_source)
+        mime_type = get_image_mime_type(img_source)
+        content.append({
             "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
-        }
-    ]
+            "image_url": {"url": f"data:{mime_type};base64,{image_base64}"}
+        })
+
+    return content
 
 
-__all__ = ["encode_image_to_base64", "build_vision_message_content"]
+__all__ = ["encode_image_to_base64", "build_vision_message_content", "get_image_mime_type"]
