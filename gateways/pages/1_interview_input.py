@@ -187,8 +187,8 @@ else:  # 图片上传
             if st.button("提取并入库", key="btn_extract_img"):
                 with st.spinner("正在提取图片面经..."):
                     try:
-                        # 传入多个图片路径列表
-                        result = vision_extractor.extract(temp_paths, source_type="image")
+                        # 传入多个图片路径列表，使用 OCR 预处理
+                        result = vision_extractor.extract(temp_paths, source_type="image", use_ocr=True)
                         st.session_state.extracted_result = result
                         st.session_state.input_type = "image"
                         st.session_state.extraction_done = True

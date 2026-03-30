@@ -19,6 +19,7 @@ from app.config.settings import create_llm
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 from app.utils.image import build_vision_message_content
+from app.utils.logger import logger
 
 
 # 用于 with_structured_output 的 Pydantic 模型
@@ -198,17 +199,35 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         schema = self._parse_json_response(response.content)
         return self._convert_to_extracted_interview(schema)
 
-    def extract(self, source: str | list[str], source_type: str = "text") -> ExtractedInterview:
+    def extract(self, source: str | list[str], source_type: str = "text", use_ocr: bool = False) -> ExtractedInterview:
         """从文本或图片提取面经数据
 
         Args:
             source: 输入内容（文本/单个图片路径/多个图片路径列表/URL/Base64）
             source_type: 输入类型 "text" | "image"
+            use_ocr: 是否使用 OCR 预处理（仅对 image 有效），默认 False
 
         Returns:
             ExtractedInterview 结构化数据
         """
-        from app.utils.logger import logger
+
+        # 如果是图片且需要使用 OCR
+        if source_type == "image" and use_ocr:
+            from app.utils.ocr import ocr_images
+
+            # 将 source 规范化为列表
+            image_sources = [source] if isinstance(source, str) else source
+
+            # OCR 识别文字
+            ocr_text = ocr_images(image_sources)
+            logger.info(f"OCR completed, extracted text length: {len(ocr_text)}")
+
+            if not ocr_text.strip():
+                raise ValueError("OCR 未能识别出任何文字")
+
+            # 使用 OCR 结果作为文本输入
+            source_type = "text"
+            source = ocr_text
 
         # 记录日志
         if isinstance(source, list):
