@@ -33,7 +33,7 @@ col_mode1, col_mode2 = st.columns([1, 3])
 with col_mode1:
     practice_mode = st.selectbox(
         "抽题模式",
-        ["随机抽题", "按公司抽题", "按知识点抽题", "按熟练度抽题（未掌握）", "语义搜索抽题", "快速搜索（查看答案）"],
+        ["随机抽题", "按公司抽题", "按知识点抽题", "按考点簇抽题", "按熟练度抽题（未掌握）", "语义搜索抽题", "快速搜索（查看答案）"],
         label_visibility="collapsed",
         key="practice_mode",
     )
@@ -81,6 +81,37 @@ with col_mode2:
                 st.caption(f"找到 {len(available_questions)} 道带答案的题目")
         else:
             st.caption("暂无知识点数据")
+
+    elif practice_mode == "按考点簇抽题":
+        with st.spinner("加载考点簇..."):
+            # 获取所有题目，按 cluster_ids 分组
+            all_questions = qdrant_manager.scroll_all()
+            cluster_options = set()
+            for q in all_questions:
+                if q.cluster_ids:
+                    cluster_options.update(q.cluster_ids)
+            cluster_list = sorted(list(cluster_options))
+
+        if cluster_list:
+            # 美化 cluster_id 显示
+            cluster_display = [c.replace("cluster_", "").replace("_", " / ") for c in cluster_list]
+            cluster_map = dict(zip(cluster_display, cluster_list))
+
+            selected_clusters = st.multiselect(
+                "选择考点簇",
+                cluster_display,
+                key="practice_clusters",
+                label_visibility="collapsed"
+            )
+            if selected_clusters:
+                # 转换为 cluster_id
+                selected_cluster_ids = [cluster_map[c] for c in selected_clusters]
+                with st.spinner("搜索中..."):
+                    results = retrieval_pipeline.search(query="", cluster_ids=selected_cluster_ids, k=50)
+                    available_questions = [q for q in results if q.question_answer]
+                st.caption(f"找到 {len(available_questions)} 道带答案的题目")
+        else:
+            st.caption("暂无考点簇数据，请先运行聚类")
 
     elif practice_mode == "按熟练度抽题（未掌握）":
         with st.spinner("加载未掌握题目..."):
@@ -172,25 +203,6 @@ else:
             st.write(selected_q.question_text)
             if selected_q.core_entities:
                 st.write(f"**知识点**: {', '.join(selected_q.core_entities)}")
-
-        # 展示相似题目
-        st.markdown("#### 相似题目推荐")
-        with st.spinner("查找相似题目..."):
-            similar_results = retrieval_pipeline.search(
-                query=selected_q.question_text,
-                k=5,
-                score_threshold=0.5
-            )
-            similar_questions = [s for s in similar_results if s.question_id != selected_q.question_id]
-
-        if similar_questions:
-            for sq in similar_questions:
-                with st.expander(f"相似: [{sq.company}] {sq.question_text[:30]}..."):
-                    st.write(sq.question_text[:100] + "..." if len(sq.question_text) > 100 else sq.question_text)
-                    if sq.core_entities:
-                        st.caption(f"知识点: {', '.join(sq.core_entities)}")
-        else:
-            st.caption("暂无相似题目")
 
         # 答案输入
         st.markdown("### 你的答案")
@@ -354,3 +366,22 @@ else:
             if st.button("清空对话", key=f"clear_chat_{selected_q.question_id}", use_container_width=True):
                 st.session_state.chat_history[chat_key] = []
                 st.rerun()
+                
+        # 展示相似题目
+        st.markdown("### 相似题目推荐")
+        with st.spinner("查找相似题目..."):
+            similar_results = retrieval_pipeline.search(
+                query=selected_q.question_text,
+                k=5,
+                score_threshold=0.5
+            )
+            similar_questions = [s for s in similar_results if s.question_id != selected_q.question_id]
+
+        if similar_questions:
+            for sq in similar_questions:
+                with st.expander(f"相似: [{sq.company}] {sq.question_text[:30]}..."):
+                    st.write(sq.question_text[:100] + "..." if len(sq.question_text) > 100 else sq.question_text)
+                    if sq.core_entities:
+                        st.caption(f"知识点: {', '.join(sq.core_entities)}")
+        else:
+            st.caption("暂无相似题目")

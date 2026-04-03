@@ -106,6 +106,9 @@ class SearchFilter(BaseModel):
     core_entities: Optional[List[str]] = Field(
         default=None, description="知识点过滤（匹配任一知识点）"
     )
+    cluster_ids: Optional[List[str]] = Field(
+        default=None, description="考点簇过滤（匹配任一簇）"
+    )
 
 
 class SearchResult(BaseModel):
@@ -119,6 +122,9 @@ class SearchResult(BaseModel):
     question_type: str = Field(description="题目类型")
     core_entities: list[str] = Field(
         default_factory=list, description="知识点实体列表"
+    )
+    cluster_ids: list[str] = Field(
+        default_factory=list, description="考点簇 ID 列表"
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="题目元数据"

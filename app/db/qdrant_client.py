@@ -186,6 +186,14 @@ class QdrantManager:
                     match=models.MatchAny(any=filter_conditions.core_entities),
                 )
             )
+        # 考点簇过滤（数组字段，支持多值匹配）
+        if filter_conditions.cluster_ids:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="cluster_ids",
+                    match=models.MatchAny(any=filter_conditions.cluster_ids),
+                )
+            )
 
         return models.Filter(must=must_conditions) if must_conditions else None
 
@@ -343,6 +351,7 @@ class QdrantManager:
                         mastery_level=payload.get("mastery_level", 0),
                         question_type=payload.get("question_type", ""),
                         core_entities=payload.get("core_entities", []),
+                        cluster_ids=payload.get("cluster_ids", []),
                         metadata=payload.get("metadata", {}),
                         question_answer=payload.get("question_answer"),
                         score=r.score,

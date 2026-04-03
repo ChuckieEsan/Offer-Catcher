@@ -23,9 +23,7 @@ with st.spinner("加载中..."):
 if not results:
     st.info("暂无题目数据")
 else:
-    # 统计区域
-    st.subheader("📊 数据统计")
-
+    # 准备统计数据
     by_type = {}
     by_mastery = {0: 0, 1: 0, 2: 0}
     by_answer = {"已生成": 0, "待生成": 0}
@@ -45,22 +43,6 @@ else:
         if r.position:
             positions.add(r.position)
 
-    # 统计卡片
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("总题目", len(results))
-    col2.metric("公司数", len(companies))
-    col3.metric("已生成答案", by_answer["已生成"])
-    col4.metric("未掌握", by_mastery.get(0, 0))
-    col5.metric("已掌握", by_mastery.get(2, 0))
-
-    # 按类型分布
-    col_types = st.columns(4)
-    for i, (qtype, count) in enumerate(sorted(by_type.items())):
-        type_name = {"knowledge": "客观题", "project": "项目题", "behavioral": "行为题", "scenario": "场景题", "algorithm": "算法题"}.get(qtype, qtype)
-        col_types[i % 4].metric(type_name, count)
-
-    # 题目列表
-    st.subheader("题目列表")
 
     # 过滤
     col_filter1, col_filter2, col_filter3 = st.columns(3)
