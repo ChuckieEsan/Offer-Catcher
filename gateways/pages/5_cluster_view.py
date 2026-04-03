@@ -4,6 +4,9 @@ import streamlit as st
 from collections import defaultdict
 
 from app.db.qdrant_client import get_qdrant_manager
+from app.agents.answer_specialist import get_answer_specialist
+from app.models.schemas import QuestionItem
+from gateways.components import render_question_list
 
 
 @st.cache_resource
@@ -83,44 +86,57 @@ else:
         start_idx = (page - 1) * page_size
         end_idx = min(start_idx + page_size, total_count)
 
-        # 显示题目列表
-        for i, q in enumerate(filtered_questions[start_idx:end_idx]):
-            with st.expander(
-                f"[{q.company}] {q.question_text[:60]}...",
-                expanded=False
-            ):
-                # 题目信息
-                col_info1, col_info2, col_info3 = st.columns(3)
-                with col_info1:
-                    st.markdown(f"**岗位**: {q.position}")
-                with col_info2:
-                    st.markdown(f"**类型**: {q.question_type}")
-                with col_info3:
-                    level_emoji = ["❌ 未掌握", "⚠️ 熟悉", "✅ 已掌握"][q.mastery_level]
-                    st.markdown(f"**熟练度**: {level_emoji}")
+        # 定义回调函数
+        def get_original_question(qid: str) -> QuestionItem:
+            """获取原始题目"""
+            for q in all_questions:
+                if q.question_id == qid:
+                    return q
+            return None
 
-                # 知识点
-                if q.core_entities:
-                    st.caption(f"📌 知识点: {', '.join(q.core_entities)}")
+        def handle_save(question_id: str, company: str, position: str, new_text: str, new_answer: str):
+            """保存题目修改"""
+            original = get_original_question(question_id)
+            is_text_changed = original and new_text != original.question_text
 
-                # 考点簇
-                if q.cluster_ids:
-                    st.caption(f"🏷️ 考点簇: {', '.join([c.replace('cluster_', '') for c in q.cluster_ids])}")
+            if is_text_changed:
+                qdrant_manager.update_question_with_reembedding(
+                    question_id=question_id,
+                    company=company,
+                    position=position,
+                    question_text=new_text,
+                    question_answer=new_answer,
+                )
+                st.session_state[f"text_updated_{question_id}"] = True
+            else:
+                qdrant_manager.update_question(
+                    question_id,
+                    question_text=new_text,
+                    question_answer=new_answer,
+                )
 
-                # 题目内容
-                st.markdown("---")
-                st.markdown("**题目内容**")
-                st.write(q.question_text)
+        def handle_delete(question_id: str):
+            """删除题目"""
+            qdrant_manager.delete_question(question_id)
 
-                # 答案
-                st.markdown("---")
-                if q.question_answer:
-                    st.markdown("**答案**")
-                    st.markdown(q.question_answer)
-                else:
-                    st.caption("⏳ 答案待生成")
+        def handle_update_mastery(question_id: str, new_level: int):
+            """更新熟练度"""
+            qdrant_manager.update_question(question_id, mastery_level=new_level)
 
-                st.markdown("---")
+        def handle_regenerate_answer(question):
+            """重新生成答案"""
+            agent = get_answer_specialist(provider="dashscope")
+            answer = agent.generate_answer(question)
+            qdrant_manager.update_question(question.question_id, question_answer=answer)
+
+        # 显示题目列表（可编辑版本）
+        render_question_list(
+            questions=filtered_questions[start_idx:end_idx],
+            on_save=handle_save,
+            on_delete=handle_delete,
+            on_update_mastery=handle_update_mastery,
+            on_regenerate_answer=handle_regenerate_answer,
+        )
 
     # 底部：运行聚类按钮
     st.markdown("---")

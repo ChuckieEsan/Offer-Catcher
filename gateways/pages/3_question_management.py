@@ -4,6 +4,8 @@ import streamlit as st
 
 from app.pipelines.retrieval import get_retrieval_pipeline
 from app.db.qdrant_client import get_qdrant_manager
+from app.agents.answer_specialist import get_answer_specialist
+from gateways.components import render_editable_question_list
 
 
 @st.cache_resource
@@ -71,110 +73,45 @@ else:
     start_idx = (page - 1) * page_size
     end_idx = min(start_idx + page_size, len(filtered))
 
-    for r in filtered[start_idx:end_idx]:
-        with st.expander(f"[{r.company}] {r.question_text[:60]}..."):
-            # 检查是否有更新标志（题目文本被修改）
-            text_updated = st.session_state.get(f"text_updated_{r.question_id}", False)
-            if text_updated:
-                st.success("✅ 题目已更新，embedding 已重新计算")
-                st.session_state[f"text_updated_{r.question_id}"] = False
+    # 定义回调函数
+    def handle_save(question_id: str, company: str, position: str, new_text: str, new_answer: str):
+        """保存题目修改"""
+        # 判断是否更新了题目文本（需要重新计算 embedding）
+        if new_text != question.question_text:
+            qdrant_manager.update_question_with_reembedding(
+                question_id=question_id,
+                company=company,
+                position=position,
+                question_text=new_text,
+                question_answer=new_answer,
+            )
+            st.session_state[f"text_updated_{question_id}"] = True
+        else:
+            qdrant_manager.update_question(
+                question_id,
+                question_text=new_text,
+                question_answer=new_answer,
+            )
 
-            # 第一行：岗位、类型、熟练度
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.write(f"**岗位**: {r.position}")
-            with col2:
-                st.write(f"**类型**: {r.question_type}")
-            with col3:
-                mastery_str = ["❌ 未掌握", "⚠️ 熟悉", "✅ 已掌握"][r.mastery_level]
-                st.write(f"**熟练度**: {mastery_str}")
+    def handle_delete(question_id: str):
+        """删除题目"""
+        qdrant_manager.delete_question(question_id)
 
-            # 知识点（如果有）
-            if r.core_entities:
-                st.caption(f"**知识点**: {', '.join(r.core_entities)}")
+    def handle_update_mastery(question_id: str, new_level: int):
+        """更新熟练度"""
+        qdrant_manager.update_question(question_id, mastery_level=new_level)
 
-            # 第二行：题目内容
-            st.markdown("---")
-            st.markdown("**题目内容**")
-            st.write(r.question_text[:500] + "..." if len(r.question_text) > 500 else r.question_text)
+    def handle_regenerate_answer(question):
+        """重新生成答案"""
+        agent = get_answer_specialist(provider="dashscope")
+        answer = agent.generate_answer(question)
+        qdrant_manager.update_question(question.question_id, question_answer=answer)
 
-            # 第三行：答案
-            st.markdown("**答案**")
-            if r.question_answer:
-                with st.expander("查看答案"):
-                    st.markdown(r.question_answer)
-            else:
-                st.caption("暂无答案")
-
-            # 第四行：操作按钮
-            st.markdown("---")
-            col_edit, col_level, col_delete = st.columns(3)
-
-            # 编辑模式
-            if f"editing_{r.question_id}" not in st.session_state:
-                st.session_state[f"editing_{r.question_id}"] = False
-
-            with col_edit:
-                if st.session_state[f"editing_{r.question_id}"]:
-                    if st.button("保存", key=f"save_{r.question_id}", use_container_width=True):
-                        new_text = st.session_state.get(f"edit_text_{r.question_id}", r.question_text)
-                        new_answer = st.session_state.get(f"edit_answer_{r.question_id}", r.question_answer)
-
-                        # 判断是否更新了题目文本（需要重新计算 embedding）
-                        if new_text != r.question_text:
-                            qdrant_manager.update_question_with_reembedding(
-                                question_id=r.question_id,
-                                company=r.company,
-                                position=r.position,
-                                question_text=new_text,
-                                question_answer=new_answer,
-                            )
-                            st.session_state[f"text_updated_{r.question_id}"] = True
-                        else:
-                            qdrant_manager.update_question(
-                                r.question_id,
-                                question_text=new_text,
-                                question_answer=new_answer,
-                            )
-
-                        st.session_state[f"editing_{r.question_id}"] = False
-                        st.rerun()
-                else:
-                    if st.button("编辑", key=f"edit_{r.question_id}", use_container_width=True):
-                        st.session_state[f"editing_{r.question_id}"] = True
-                        st.rerun()
-
-            # 编辑状态下的文本输入
-            if st.session_state[f"editing_{r.question_id}"]:
-                st.markdown("---")
-                st.markdown("#### 编辑题目")
-                new_text = st.text_area("题目内容", r.question_text, key=f"edit_text_{r.question_id}", height=100)
-                new_answer = st.text_area("答案", r.question_answer or "", key=f"edit_answer_{r.question_id}", height=150)
-
-                col_cancel_edit = st.columns(1)[0]
-                with col_cancel_edit:
-                    if st.button("取消编辑", key=f"cancel_{r.question_id}", use_container_width=True):
-                        st.session_state[f"editing_{r.question_id}"] = False
-                        st.rerun()
-                st.markdown("---")
-
-            # 熟练度更新
-            with col_level:
-                new_level = st.selectbox(
-                    "熟练度",
-                    [0, 1, 2],
-                    index=r.mastery_level,
-                    key=f"level_{r.question_id}"
-                )
-                if new_level != r.mastery_level:
-                    if st.button("更新熟练度", key=f"btn_{r.question_id}", use_container_width=True):
-                        qdrant_manager.update_question(r.question_id, mastery_level=new_level)
-                        st.success("✅ 更新成功")
-                        st.rerun()
-
-            # 删除
-            with col_delete:
-                if st.button("删除", key=f"delete_{r.question_id}", use_container_width=True):
-                    qdrant_manager.delete_question(r.question_id)
-                    st.success("✅ 删除成功")
-                    st.rerun()
+    # 使用可编辑题目列表组件
+    render_editable_question_list(
+        questions=filtered[start_idx:end_idx],
+        on_save=handle_save,
+        on_delete=handle_delete,
+        on_update_mastery=handle_update_mastery,
+        on_regenerate_answer=handle_regenerate_answer,
+    )
