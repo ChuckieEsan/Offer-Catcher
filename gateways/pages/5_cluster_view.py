@@ -5,8 +5,7 @@ from collections import defaultdict
 
 from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
-from app.models.schemas import QuestionItem
-from gateways.components import render_question_list
+from gateways.components import render_question_list, get_default_handlers
 
 
 @st.cache_resource
@@ -86,56 +85,20 @@ else:
         start_idx = (page - 1) * page_size
         end_idx = min(start_idx + page_size, total_count)
 
-        # 定义回调函数
-        def get_original_question(qid: str) -> QuestionItem:
-            """获取原始题目"""
-            for q in all_questions:
-                if q.question_id == qid:
-                    return q
-            return None
+        # 构建 question_id -> 原始题目 的映射
+        question_map = {q.question_id: q for q in all_questions}
 
-        def handle_save(question_id: str, company: str, position: str, new_text: str, new_answer: str):
-            """保存题目修改"""
-            original = get_original_question(question_id)
-            is_text_changed = original and new_text != original.question_text
+        # 获取默认回调
+        handlers = get_default_handlers(
+            question_map=question_map,
+            qdrant_manager=qdrant_manager,
+            answer_specialist=get_answer_specialist(provider="dashscope"),
+        )
 
-            if is_text_changed:
-                qdrant_manager.update_question_with_reembedding(
-                    question_id=question_id,
-                    company=company,
-                    position=position,
-                    question_text=new_text,
-                    question_answer=new_answer,
-                )
-                st.session_state[f"text_updated_{question_id}"] = True
-            else:
-                qdrant_manager.update_question(
-                    question_id,
-                    question_text=new_text,
-                    question_answer=new_answer,
-                )
-
-        def handle_delete(question_id: str):
-            """删除题目"""
-            qdrant_manager.delete_question(question_id)
-
-        def handle_update_mastery(question_id: str, new_level: int):
-            """更新熟练度"""
-            qdrant_manager.update_question(question_id, mastery_level=new_level)
-
-        def handle_regenerate_answer(question):
-            """重新生成答案"""
-            agent = get_answer_specialist(provider="dashscope")
-            answer = agent.generate_answer(question)
-            qdrant_manager.update_question(question.question_id, question_answer=answer)
-
-        # 显示题目列表（可编辑版本）
+        # 显示题目列表
         render_question_list(
             questions=filtered_questions[start_idx:end_idx],
-            on_save=handle_save,
-            on_delete=handle_delete,
-            on_update_mastery=handle_update_mastery,
-            on_regenerate_answer=handle_regenerate_answer,
+            **handlers,
         )
 
     # 底部：运行聚类按钮

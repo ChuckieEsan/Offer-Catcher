@@ -21,7 +21,7 @@ def render_question_card(
         on_save: 保存回调，参数为 (question_id, company, position, question_text, question_answer)
         on_delete: 删除回调，参数为 (question_id,)
         on_update_mastery: 更新熟练度回调，参数为 (question_id, new_level)
-        on_regenerate_answer: 重新生成答案回调，参数为 (question,)
+        on_regenerate_answer: 重新生成答案回调，参数为 (question,)，返回新答案
     """
     qid = question.question_id
 
@@ -140,8 +140,11 @@ def render_question_card(
             if on_regenerate_answer:
                 try:
                     with st.spinner("正在调用大模型生成答案..."):
-                        on_regenerate_answer(question)
-                    st.success("✅ 答案生成完成")
+                        new_answer = on_regenerate_answer(question)
+                    # 将新答案存入编辑框的 session_state，并自动进入编辑模式
+                    st.session_state[f"edit_answer_{qid}"] = new_answer or ""
+                    st.session_state[f"editing_{qid}"] = True
+                    st.success("✅ 答案已生成，请在编辑框中查看并修改")
                 except Exception as e:
                     st.error(f"生成失败: {e}")
                 finally:
@@ -164,7 +167,7 @@ def render_question_list(
         on_save: 保存回调，参数为 (question_id, company, position, question_text, question_answer)
         on_delete: 删除回调，参数为 (question_id,)
         on_update_mastery: 更新熟练度回调，参数为 (question_id, new_level)
-        on_regenerate_answer: 重新生成答案回调，参数为 (question,)
+        on_regenerate_answer: 重新生成答案回调，参数为 (question,)，返回新答案
         empty_message: 空列表时显示的消息
     """
     if not questions:
@@ -214,3 +217,69 @@ def render_question_compact(
         st.write(" ".join(title_parts) + " | " + " ".join(meta))
     else:
         st.write(" ".join(title_parts))
+
+
+# ==================== 默认回调实现 ====================
+
+def get_default_handlers(
+    question_map: dict,
+    qdrant_manager,
+    answer_specialist=None,
+) -> dict:
+    """获取默认的回调函数实现
+
+    Args:
+        question_map: question_id -> QuestionItem 的映射
+        qdrant_manager: Qdrant 管理器实例
+        answer_specialist: Answer Specialist Agent 实例（可选，用于重新生成答案）
+
+    Returns:
+        包含 on_save, on_delete, on_update_mastery, on_regenerate_answer 的字典
+    """
+
+    def handle_save(question_id: str, company: str, position: str, new_text: str, new_answer: str):
+        """保存题目修改"""
+        original = question_map.get(question_id)
+        if not original:
+            return
+
+        is_text_changed = new_text != original.question_text
+
+        if is_text_changed:
+            qdrant_manager.update_question_with_reembedding(
+                question_id=question_id,
+                company=company,
+                position=position,
+                question_text=new_text,
+                question_answer=new_answer,
+            )
+            st.session_state[f"text_updated_{question_id}"] = True
+        else:
+            qdrant_manager.update_question(
+                question_id,
+                question_text=new_text,
+                question_answer=new_answer,
+            )
+
+    def handle_delete(question_id: str):
+        """删除题目"""
+        qdrant_manager.delete_question(question_id)
+
+    def handle_update_mastery(question_id: str, new_level: int):
+        """更新熟练度"""
+        qdrant_manager.update_question(question_id, mastery_level=new_level)
+
+    def handle_regenerate_answer(question: QuestionItem) -> str:
+        """重新生成答案"""
+        if not answer_specialist:
+            raise ValueError("Answer Specialist 未配置，无法重新生成答案")
+        answer = answer_specialist.generate_answer(question)
+        # qdrant_manager.update_question(question.question_id, question_answer=answer)
+        return answer
+
+    return {
+        "on_save": handle_save,
+        "on_delete": handle_delete,
+        "on_update_mastery": handle_update_mastery,
+        "on_regenerate_answer": handle_regenerate_answer,
+    }

@@ -5,7 +5,7 @@ import streamlit as st
 from app.pipelines.retrieval import get_retrieval_pipeline
 from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
-from gateways.components import render_editable_question_list
+from gateways.components import render_question_list, get_default_handlers
 
 
 @st.cache_resource
@@ -73,45 +73,18 @@ else:
     start_idx = (page - 1) * page_size
     end_idx = min(start_idx + page_size, len(filtered))
 
-    # 定义回调函数
-    def handle_save(question_id: str, company: str, position: str, new_text: str, new_answer: str):
-        """保存题目修改"""
-        # 判断是否更新了题目文本（需要重新计算 embedding）
-        if new_text != question.question_text:
-            qdrant_manager.update_question_with_reembedding(
-                question_id=question_id,
-                company=company,
-                position=position,
-                question_text=new_text,
-                question_answer=new_answer,
-            )
-            st.session_state[f"text_updated_{question_id}"] = True
-        else:
-            qdrant_manager.update_question(
-                question_id,
-                question_text=new_text,
-                question_answer=new_answer,
-            )
+    # 构建 question_id -> 原始题目 的映射
+    question_map = {q.question_id: q for q in filtered[start_idx:end_idx]}
 
-    def handle_delete(question_id: str):
-        """删除题目"""
-        qdrant_manager.delete_question(question_id)
-
-    def handle_update_mastery(question_id: str, new_level: int):
-        """更新熟练度"""
-        qdrant_manager.update_question(question_id, mastery_level=new_level)
-
-    def handle_regenerate_answer(question):
-        """重新生成答案"""
-        agent = get_answer_specialist(provider="dashscope")
-        answer = agent.generate_answer(question)
-        qdrant_manager.update_question(question.question_id, question_answer=answer)
+    # 获取默认回调
+    handlers = get_default_handlers(
+        question_map=question_map,
+        qdrant_manager=qdrant_manager,
+        answer_specialist=get_answer_specialist(provider="dashscope"),
+    )
 
     # 使用可编辑题目列表组件
-    render_editable_question_list(
+    render_question_list(
         questions=filtered[start_idx:end_idx],
-        on_save=handle_save,
-        on_delete=handle_delete,
-        on_update_mastery=handle_update_mastery,
-        on_regenerate_answer=handle_regenerate_answer,
+        **handlers,
     )
