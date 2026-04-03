@@ -20,6 +20,7 @@ class QuestionItem(BaseModel):
         mastery_level: 熟练度等级，默认为 0（未掌握）
         company: 公司名称（从 ExtractedInterview 继承）
         position: 岗位名称（从 ExtractedInterview 继承）
+        cluster_ids: 所属考点簇 ID 列表（一道题可能属于多个簇）
     """
 
     question_id: str = Field(description="题目唯一标识，MD5哈希值")
@@ -38,6 +39,9 @@ class QuestionItem(BaseModel):
     position: str = Field(description="岗位名称")
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="题目元数据，如面试轮次、来源页码等"
+    )
+    cluster_ids: list[str] = Field(
+        default_factory=list, description="所属考点簇 ID 列表"
     )
 
 
@@ -81,6 +85,9 @@ class QdrantQuestionPayload(BaseModel):
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="题目元数据"
+    )
+    cluster_ids: list[str] = Field(
+        default_factory=list, description="所属考点簇 ID 列表"
     )
 
 
@@ -175,3 +182,23 @@ class ScoreResult(BaseModel):
         default_factory=list, description="改进建议"
     )
     feedback: str = Field(description="综合反馈")
+
+
+class Cluster(BaseModel):
+    """考点簇模型
+
+    将相似题目聚类为一个考点簇，便于组织和管理题目。
+    """
+
+    cluster_id: str = Field(description="唯一标识，如 cluster_qlora_memory")
+    cluster_name: str = Field(description="考点簇名称，如 QLoRA 显存优化")
+    summary: str = Field(description="一句话总结")
+    question_ids: list[str] = Field(
+        default_factory=list, description="该簇下所有题目 ID"
+    )
+    knowledge_points: list[str] = Field(
+        default_factory=list, description="核心知识点列表"
+    )
+    frequency: int = Field(default=0, description="该簇题目总数")
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)

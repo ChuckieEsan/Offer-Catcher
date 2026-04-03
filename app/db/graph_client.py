@@ -448,6 +448,237 @@ class Neo4jGraphClient:
             logger.error(f"Failed to get cross-company entities: {e}")
             return []
 
+    # ========== Cluster 相关方法 ==========
+
+    def create_cluster_node(
+        self,
+        cluster_id: str,
+        cluster_name: str,
+        summary: str = "",
+    ) -> bool:
+        """创建考点簇节点
+
+        Args:
+            cluster_id: 考点簇唯一标识
+            cluster_name: 考点簇名称
+            summary: 考点簇总结
+
+        Returns:
+            是否成功
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return False
+
+        query = """
+        MERGE (c:Cluster {cluster_id: $cluster_id})
+        SET c.cluster_name = $cluster_name,
+            c.summary = $summary,
+            c.updated_at = timestamp()
+        RETURN c
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                session.run(
+                    query,
+                    cluster_id=cluster_id,
+                    cluster_name=cluster_name,
+                    summary=summary,
+                )
+            logger.debug(f"Created/merged cluster node: {cluster_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create cluster node: {e}")
+            return False
+
+    def create_belongs_to_relationship(
+        self,
+        question_id: str,
+        cluster_id: str,
+    ) -> bool:
+        """创建题目与考点簇的归属关系
+
+        Args:
+            question_id: 题目 ID
+            cluster_id: 考点簇 ID
+
+        Returns:
+            是否成功
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return False
+
+        query = """
+        MATCH (q:Question {question_id: $question_id})
+        MATCH (c:Cluster {cluster_id: $cluster_id})
+        MERGE (q)-[r:BELONGS_TO]->(c)
+        RETURN r
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                session.run(question_id=question_id, cluster_id=cluster_id)
+            logger.debug(f"Created BELONGS_TO relationship: {question_id} -> {cluster_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create BELONGS_TO relationship: {e}")
+            return False
+
+    def create_related_to_relationship(
+        self,
+        cluster_id: str,
+        knowledge_point: str,
+    ) -> bool:
+        """创建考点簇与知识点的关联关系
+
+        Args:
+            cluster_id: 考点簇 ID
+            knowledge_point: 知识点名称
+
+        Returns:
+            是否成功
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return False
+
+        # 先确保知识点节点存在
+        self.create_entity_node(knowledge_point)
+
+        query = """
+        MATCH (c:Cluster {cluster_id: $cluster_id})
+        MATCH (e:Entity {name: $knowledge_point})
+        MERGE (c)-[r:RELATED_TO]->(e)
+        RETURN r
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                session.run(
+                    query,
+                    cluster_id=cluster_id,
+                    knowledge_point=knowledge_point,
+                )
+            logger.debug(f"Created RELATED_TO relationship: {cluster_id} -> {knowledge_point}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create RELATED_TO relationship: {e}")
+            return False
+
+    def get_cluster_by_id(self, cluster_id: str) -> Optional[dict]:
+        """根据 ID 获取考点簇
+
+        Args:
+            cluster_id: 考点簇 ID
+
+        Returns:
+            考点簇信息字典
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return None
+
+        query = """
+        MATCH (c:Cluster {cluster_id: $cluster_id})
+        OPTIONAL MATCH (c)-[:BELONGS_TO]-(q:Question)
+        OPTIONAL MATCH (c)-[:RELATED_TO]-(e:Entity)
+        RETURN c.cluster_id as cluster_id,
+               c.cluster_name as cluster_name,
+               c.summary as summary,
+               collect(DISTINCT q.question_id) as question_ids,
+               collect(DISTINCT e.name) as knowledge_points,
+               count(DISTINCT q) as frequency
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, cluster_id=cluster_id)
+                record = result.single()
+                if record:
+                    return {
+                        "cluster_id": record["cluster_id"],
+                        "cluster_name": record["cluster_name"],
+                        "summary": record["summary"],
+                        "question_ids": [q for q in record["question_ids"] if q],
+                        "knowledge_points": [e for e in record["knowledge_points"] if e],
+                        "frequency": record["frequency"],
+                    }
+        except Exception as e:
+            logger.error(f"Failed to get cluster by id: {e}")
+
+        return None
+
+    def get_all_clusters(self, limit: int = 50) -> list[dict]:
+        """获取所有考点簇
+
+        Args:
+            limit: 返回数量限制
+
+        Returns:
+            考点簇列表
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        query = """
+        MATCH (c:Cluster)
+        OPTIONAL MATCH (c)-[:BELONGS_TO]-(q:Question)
+        RETURN c.cluster_id as cluster_id,
+               c.cluster_name as cluster_name,
+               c.summary as summary,
+               count(DISTINCT q) as frequency
+        ORDER BY frequency DESC
+        LIMIT $limit
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, limit=limit)
+                return [
+                    {
+                        "cluster_id": record["cluster_id"],
+                        "cluster_name": record["cluster_name"],
+                        "summary": record["summary"],
+                        "frequency": record["frequency"],
+                    }
+                    for record in result
+                ]
+        except Exception as e:
+            logger.error(f"Failed to get all clusters: {e}")
+            return []
+
+    def get_questions_in_cluster(self, cluster_id: str) -> list[str]:
+        """获取指定考点簇下的所有题目 ID
+
+        Args:
+            cluster_id: 考点簇 ID
+
+        Returns:
+            题目 ID 列表
+        """
+        if not self.is_connected:
+            logger.warning("Neo4j not connected")
+            return []
+
+        query = """
+        MATCH (c:Cluster {cluster_id: $cluster_id})-[r:BELONGS_TO]-(q:Question)
+        RETURN collect(q.question_id) as question_ids
+        """
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                result = session.run(query, cluster_id=cluster_id)
+                record = result.single()
+                if record:
+                    return [q for q in record["question_ids"] if q]
+        except Exception as e:
+            logger.error(f"Failed to get questions in cluster: {e}")
+
+        return []
+
 
 # 全局单例
 _graph_client: Optional[Neo4jGraphClient] = None

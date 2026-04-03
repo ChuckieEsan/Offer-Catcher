@@ -2,6 +2,7 @@
 
 from app.models.enums import MasteryLevel, QuestionType, IntentType
 from app.models.schemas import (
+    Cluster,
     ExtractedInterview,
     MQTaskMessage,
     QdrantQuestionPayload,
@@ -20,4 +21,5 @@ __all__ = [
     "SearchFilter",
     "SearchResult",
     "MQTaskMessage",
+    "Cluster",
 ]

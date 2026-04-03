@@ -84,6 +84,7 @@ class IngestionPipeline:
             question_type=question.question_type.value,
             core_entities=question.core_entities,
             metadata=question.metadata,
+            cluster_ids=question.cluster_ids,
         )
 
     async def _send_async_task(self, interview: ExtractedInterview) -> int:

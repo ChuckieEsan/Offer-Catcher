@@ -262,6 +262,18 @@ wheels = [
 ]
 
 [[package]]
+name = "apscheduler"
+version = "3.11.2"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "tzlocal" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/07/12/3e4389e5920b4c1763390c6d371162f3784f86f85cd6d6c1bfe68eef14e2/apscheduler-3.11.2.tar.gz", hash = "sha256:2a9966b052ec805f020c8c4c3ae6e6a06e24b1bf19f2e11d91d8cca0473eef41" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/9f/64/2e54428beba8d9992aa478bb8f6de9e4ecaa5f8f513bcfd567ed7fb0262d/apscheduler-3.11.2-py3-none-any.whl", hash = "sha256:ce005177f741409db4e4dd40a7431b76feb856b9dd69d57e0da49d6715bfd26d" },
+]
+
+[[package]]
 name = "async-timeout"
 version = "4.0.3"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
@@ -1022,6 +1034,35 @@ dependencies = [
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/1d/17/afa56379f94ad0fe8defd37d6eb3f89a25404ffc71d4d848893d270325fc/h2-4.3.0.tar.gz", hash = "sha256:6c59efe4323fa18b47a632221a1888bd7fde6249819beda254aeca909f221bf1" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/69/b2/119f6e6dcbd96f9069ce9a2665e0146588dc9f88f29549711853645e736a/h2-4.3.0-py3-none-any.whl", hash = "sha256:c438f029a25f7945c69e0ccf0fb951dc3f73a5f6412981daee861431b70e2bdd" },
+]
+
+[[package]]
+name = "hdbscan"
+version = "0.8.42"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "joblib" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.3", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11'" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11'" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/e3/e1/f0d795e4b015f9e210d1e75a0fc538722a68152044b919d26ff30479aff4/hdbscan-0.8.42.tar.gz", hash = "sha256:3bd749a3df39c7e965bd8b2173c3804cdb11ad73d524a5df1201360814293614" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/ae/0c/413d01df176d44f0e322157a58459f8ced3bd4df4da3252e93b68f407dce/hdbscan-0.8.42-cp310-cp310-macosx_15_0_x86_64.whl", hash = "sha256:1459d777d16800361b504656982ae3988fc412b97a8f244ffbd565c72a39ca41" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/ee/dd/577da53ec500dec3350350e35143fc0819e961d979f86cc4de03b565c797/hdbscan-0.8.42-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2ab4c7fba52f648fe4276d7b60f6831a9009089872a5ca05f91d6ed1bbe52d23" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/ea/32/cd9c61acca95811069bf99166a7651ea7d0e1936b52283ab535295a58858/hdbscan-0.8.42-cp310-cp310-win_amd64.whl", hash = "sha256:2c86d215b5940a5414ceb468af5987941d3526e49d09418296830528161ccdd6" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/04/a4/877e2d795924d43230a1140e0402f720728ea1dc0d6d67e0f889bf4a6b36/hdbscan-0.8.42-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:bc428bff42b9ec8ecbaf5d790b6b6de9e2cb120059350d0caecb92311f44b869" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/78/a0/7a0fda43d4542d268d47f7741bd5e480043cc022cb5e91acef2d4ee1ca6d/hdbscan-0.8.42-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cd86e30bfe1f1363b9b97a8a84cbeebf761c5ff4262037f9cf0d068b590fe541" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/78/89/8f851a6506392029e712bae10f5816b21f2f277e1e468bca5dc03d8dfde2/hdbscan-0.8.42-cp311-cp311-win_amd64.whl", hash = "sha256:f265f1ae267713c7a8dfa14ddc530c1ccf87905cf003db65769b9afed519d910" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/96/25/6a24f09f857593b8f3bcb9af523fa45fd072e27e015f83f172f380981cb7/hdbscan-0.8.42-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:31541afa4ce2d42ad828ffd5da1bf40d8212fa8318cc28e58c65ffe719e9083b" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/26/b4/6592160ec00d660ef3e3754644a98503d865947480e2f6f1c1fb6f284a64/hdbscan-0.8.42-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f0cc0f279f0f83203277fb5b09422cbfab577fe269e3f71d0082354f65d71cf3" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/8a/95/fbe79ed618e869c9bd9f70429e04c69ce7dabd24d42cb3d5ce8fb44c5268/hdbscan-0.8.42-cp312-cp312-win_amd64.whl", hash = "sha256:fd9f0d5f65a5aa4437b8f69ff8cb4ae6d42723e543254dca49c62f02192c2791" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/86/80/82a3b7f17dafe38d5bd0d59add7318149898c657837ceba6815bfa3214dc/hdbscan-0.8.42-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:7e0f160ee0d5e61d9a2411c44fa41c12849e814899851cab8e17e924487018e1" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/de/81/4c36b1d3363d9f7c831994a8cae073941798915f86e80c8863cbbe161df0/hdbscan-0.8.42-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e14d7309c91e1a59f592936555fe4282e66061719225d9cb2d7bf18040bb8b54" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/d2/f7/5f91bf58a8519cf91ddfc815f560ae6fa507a12902ee9fb6b54c72ac6bcd/hdbscan-0.8.42-cp313-cp313-win_amd64.whl", hash = "sha256:990b9f9ce14f290eb8bd9343048cb50b890560de99ced4fb31c486cb0c9f0f74" },
 ]
 
 [[package]]
@@ -2276,7 +2317,9 @@ source = { virtual = "." }
 dependencies = [
     { name = "aio-pika" },
     { name = "aiobreaker" },
+    { name = "apscheduler" },
     { name = "easyocr" },
+    { name = "hdbscan" },
     { name = "langchain-community" },
     { name = "langchain-huggingface" },
     { name = "langchain-openai" },
@@ -2304,7 +2347,9 @@ dev = [
 requires-dist = [
     { name = "aio-pika", specifier = ">=9.6.2" },
     { name = "aiobreaker", specifier = ">=1.2.0" },
+    { name = "apscheduler", specifier = ">=3.11.2" },
     { name = "easyocr", specifier = ">=1.7.2" },
+    { name = "hdbscan", specifier = ">=0.8.42" },
     { name = "langchain-community", specifier = ">=0.4.1" },
     { name = "langchain-huggingface", specifier = ">=1.2.1" },
     { name = "langchain-openai", specifier = ">=1.1.11" },
@@ -4957,6 +5002,18 @@ source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/5e/a7/c202b344c5ca7daf398f3b8a477eeb205cf3b6f32e7ec3a6bac0629ca975/tzdata-2025.3.tar.gz", hash = "sha256:de39c2ca5dc7b0344f2eba86f49d614019d29f060fc4ebc8a417896a620b56a7" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/c7/b0/003792df09decd6849a5e39c28b513c06e84436a54440380862b5aeff25d/tzdata-2025.3-py2.py3-none-any.whl", hash = "sha256:06a47e5700f3081aab02b2e513160914ff0694bce9947d6b76ebd6bf57cfc5d1" },
+]
+
+[[package]]
+name = "tzlocal"
+version = "5.3.1"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl", hash = "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d" },
 ]
 
 [[package]]

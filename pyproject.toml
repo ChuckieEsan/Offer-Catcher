@@ -24,6 +24,8 @@ dependencies = [
     "paddlepaddle>=3.3.1",
     "paddleocr>=3.4.0",
     "easyocr>=1.7.2",
+    "hdbscan>=0.8.42",
+    "apscheduler>=3.11.2",
 ]
 
 [dependency-groups]

@@ -572,6 +572,80 @@ class QdrantManager:
             logger.error(f"Failed to get collection info: {e}")
             raise
 
+    def scroll_all(self, limit: int = 1000) -> list[QdrantQuestionPayload]:
+        """遍历所有题目
+
+        用于聚类等批量操作场景。
+
+        Args:
+            limit: 每次 scroll 的数量限制
+
+        Returns:
+            所有题目的 payload 列表
+        """
+        collection_name = self.collection_name
+        all_questions = []
+        offset = None
+
+        try:
+            while True:
+                results, offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=limit,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+
+                for point in results:
+                    if point.payload:
+                        try:
+                            question = QdrantQuestionPayload(**point.payload)
+                            all_questions.append(question)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse question {point.id}: {e}")
+
+                if offset is None:
+                    break
+
+            logger.info(f"Scrolled all questions, total: {len(all_questions)}")
+            return all_questions
+
+        except Exception as e:
+            logger.error(f"Failed to scroll all questions: {e}")
+            raise
+
+    def batch_update_cluster_ids(
+        self,
+        cluster_ids_map: dict[str, list[str]],
+    ) -> int:
+        """批量更新题目的 cluster_ids
+
+        Args:
+            cluster_ids_map: {question_id: [cluster_id1, cluster_id2, ...]}
+
+        Returns:
+            更新的题目数量
+        """
+        collection_name = self.collection_name
+
+        try:
+            # 使用 set_payload 批量更新
+            for question_id, cluster_ids in cluster_ids_map.items():
+                self.client.set_payload(
+                    collection_name=collection_name,
+                    points=[question_id],
+                    payload={"cluster_ids": cluster_ids},
+                )
+
+            count = len(cluster_ids_map)
+            logger.info(f"Batch updated cluster_ids for {count} questions")
+            return count
+
+        except Exception as e:
+            logger.error(f"Failed to batch update cluster_ids: {e}")
+            raise
+
 
 # 全局单例
 _qdrant_manager: Optional[QdrantManager] = None

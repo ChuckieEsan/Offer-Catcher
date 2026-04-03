@@ -290,6 +290,12 @@ cp .env.example .env
 ```bash
 # 启动 RabbitMQ Consumer，处理异步答案生成任务
 PYTHONPATH=. uv run python workers/answer_worker.py &
+
+# 启动聚类定时任务（每天凌晨 2 点执行）
+PYTHONPATH=. uv run python workers/clustering_worker.py
+
+# 立即执行一次聚类
+PYTHONPATH=. uv run python workers/clustering_worker.py --run-now
 ```
 
 ### 4. 启动 Web 界面

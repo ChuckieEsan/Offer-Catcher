@@ -60,11 +60,13 @@ class AsyncRabbitMQConsumer:
         """建立与 RabbitMQ 的强健连接（自动处理断线重连）"""
         try:
             # connect_robust 会在网络抖动时自动在底层重连并恢复队列
+            # heartbeat=300 避免长任务导致连接断开
             self._connection = await aio_pika.connect_robust(
                 host=self.settings.rabbitmq_host,
                 port=self.settings.rabbitmq_port,
                 login=self.settings.rabbitmq_user,
                 password=self.settings.rabbitmq_password,
+                heartbeat=300,
             )
             self._channel = await self._connection.channel()
 

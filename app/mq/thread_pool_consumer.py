@@ -160,12 +160,13 @@ class ThreadPoolRabbitMQConsumer:
         channel: Optional[AbstractRobustChannel] = None
 
         try:
-            # 建立独立连接
+            # 建立独立连接，heartbeat=300 避免长任务导致连接断开
             connection = await aio_pika.connect_robust(
                 host=self.settings.rabbitmq_host,
                 port=self.settings.rabbitmq_port,
                 login=self.settings.rabbitmq_user,
                 password=self.settings.rabbitmq_password,
+                heartbeat=300,
             )
             channel = await connection.channel()
             await channel.set_qos(prefetch_count=self.prefetch_count)
