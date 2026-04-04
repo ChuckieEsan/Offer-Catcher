@@ -6,7 +6,7 @@
 2. ThreadPoolRabbitMQConsumer: 基于线程池的消费（每个线程独立 channel）
 """
 
-from app.mq.producer import AsyncRabbitMQProducer, RabbitMQProducer, get_producer
+from app.mq.producer import AsyncRabbitMQProducer, get_producer
 from app.mq.consumer import AsyncRabbitMQConsumer, get_consumer
 from app.mq.thread_pool_consumer import ThreadPoolRabbitMQConsumer, get_thread_pool_consumer
 

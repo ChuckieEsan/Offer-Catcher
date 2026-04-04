@@ -162,6 +162,54 @@ class Settings(BaseSettings):
         default="neo4j",
     )
 
+    # Redis 配置（短期记忆）
+    redis_host: str = Field(
+        description="Redis 服务地址",
+        default="localhost",
+    )
+    redis_port: int = Field(
+        description="Redis 端口",
+        default=6379,
+    )
+    redis_password: str = Field(
+        description="Redis 密码",
+        default="",
+    )
+    redis_db: int = Field(
+        description="Redis 数据库编号",
+        default=0,
+    )
+    redis_ttl: int = Field(
+        description="短期记忆 TTL（秒）",
+        default=86400,  # 24 小时
+    )
+
+    # PostgreSQL 配置（历史对话）
+    postgres_host: str = Field(
+        description="PostgreSQL 服务地址",
+        default="localhost",
+    )
+    postgres_port: int = Field(
+        description="PostgreSQL 端口",
+        default=5432,
+    )
+    postgres_user: str = Field(
+        description="PostgreSQL 用户名",
+        default="root",
+    )
+    postgres_password: str = Field(
+        description="PostgreSQL 密码",
+        default="root",
+    )
+    postgres_db: str = Field(
+        description="PostgreSQL 数据库名称",
+        default="offer_catcher",
+    )
+    postgres_test_db: str = Field(
+        description="PostgreSQL 测试数据库名称",
+        default="offer_catcher_test",
+    )
+
     # 应用配置
     app_name: str = Field(
         description="应用名称",

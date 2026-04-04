@@ -26,6 +26,8 @@ dependencies = [
     "easyocr>=1.7.2",
     "hdbscan>=0.8.42",
     "apscheduler>=3.11.2",
+    "redis>=7.4.0",
+    "psycopg2-binary>=2.9.11",
 ]
 
 [dependency-groups]

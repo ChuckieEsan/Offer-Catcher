@@ -192,7 +192,3 @@ async def get_producer() -> AsyncRabbitMQProducer:
         _producer = AsyncRabbitMQProducer()
         await _producer.connect()
     return _producer
-
-
-# 向后兼容别名
-RabbitMQProducer = AsyncRabbitMQProducer

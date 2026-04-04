@@ -50,6 +50,7 @@ if "components_initialized" not in st.session_state:
 
 # 使用 Streamlit 多页面导航
 st.navigation([
+    st.Page("pages/0_chat.py", title="AI 聊天", icon="💬"),
     st.Page("pages/1_interview_input.py", title="录入面经", icon="📝"),
     st.Page("pages/2_practice.py", title="练习答题", icon="📝"),
     st.Page("pages/3_question_management.py", title="题目管理", icon="📋"),
