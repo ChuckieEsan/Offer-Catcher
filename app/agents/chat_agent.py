@@ -1,0 +1,264 @@
+"""Chat Agent - AI 面试助手
+
+使用 LangChain create_agent 实现，支持工具调用：
+- 向量检索 (Qdrant)
+- Web 搜索 (Tavily)
+- 图数据库 (Neo4j)
+"""
+
+from typing import Optional, List
+
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.messages import AIMessage
+from langchain_openai import ChatOpenAI
+from app.db.qdrant_client import get_qdrant_manager
+
+from app.config.settings import create_llm
+from app.utils.logger import logger
+from app.tools.web_search import get_web_search_tool
+from app.skills import get_skills_prompt
+
+
+# ==================== LangChain Tools ====================
+
+@tool
+def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
+    """搜索题目库中的相关面试题
+
+    Args:
+        query: 搜索关键词
+        company: 公司名称（可选）
+        position: 岗位名称（可选）
+        k: 返回数量，默认 5
+
+    Returns:
+        搜索结果，以文本形式返回
+    """
+
+    qdrant = get_qdrant_manager()
+    results = qdrant.search(query, k=k)
+
+    if company:
+        results = [r for r in results if r.company == company]
+    if position:
+        results = [r for r in results if r.position == position]
+
+    if not results:
+        return "未找到相关题目"
+
+    output = []
+    for i, r in enumerate(results, 1):
+        output.append(f"题目 {i}: {r.question_text[:100]}...")
+        if r.question_answer:
+            output.append(f"答案: {r.question_answer[:200]}...")
+        output.append("---")
+
+    return "\n".join(output)
+
+
+@tool
+def search_web(query: str, max_results: int = 3) -> str:
+    """使用 Web 搜索获取最新信息
+
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数，默认 3
+
+    Returns:
+        搜索结果，以文本形式返回
+    """
+
+    try:
+        web_tool = get_web_search_tool(max_results=max_results)
+        results = web_tool.search(query)
+
+        if not results:
+            return "未找到相关信息"
+
+        output = []
+        for r in results:
+            output.append(f"标题: {r.title}")
+            output.append(f"内容: {r.content[:300]}...")
+            output.append("---")
+
+        return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Web search failed: {e}")
+        return f"搜索失败: {e}"
+
+
+@tool
+def query_graph(question: str) -> str:
+    """查询图数据库，获取知识点之间的关系
+
+    Args:
+        question: 查询问题
+
+    Returns:
+        查询结果
+    """
+    from app.db.graph_client import get_graph_client
+
+    try:
+        graph_client = get_graph_client()
+
+        keywords = question.replace("关系", "").replace("?", "").split()
+
+        if not keywords:
+            return "请提供要查询的关键词"
+
+        results = []
+        for kw in keywords[:3]:
+            nodes = graph_client.search_nodes(kw)
+            if nodes:
+                results.extend(nodes[:3])
+
+        if not results:
+            return "未找到相关知识点"
+
+        output = ["找到以下知识点:"]
+        for r in results:
+            output.append(f"- {r.get('name', r)}")
+            if r.get('description'):
+                output.append(f"  描述: {r.get('description')[:100]}")
+
+        return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Graph query failed: {e}")
+        return f"图数据库查询失败: {e}"
+
+
+# ==================== Chat Agent ====================
+
+class ChatAgent:
+    """AI 面试助手 Agent
+
+    基于 LangChain create_agent，支持工具调用：
+    - search_questions: 向量检索题目
+    - search_web: Web 搜索
+    - query_graph: 图数据库查询
+    """
+
+    def __init__(self, provider: str = "dashscope"):
+        self.provider = provider
+        self._agent = None
+        self._tools = [search_questions, search_web, query_graph]
+
+    @property
+    def agent(self):
+        if self._agent is None:
+            self._agent = self._create_agent()
+        return self._agent
+
+    def _create_agent(self):
+        """创建 Agent"""
+        llm = create_llm(self.provider, "chat")
+
+        skills_prompt = get_skills_prompt()
+
+        system_prompt = f"""你是一个 AI 面试助手，专门帮助用户准备技术面试。
+
+你的能力：
+1. 搜索题目库中的相关面试题
+2. 使用 Web 搜索获取最新的面试信息
+3. 查询知识点之间的关系
+4. 如果用户要求梳理知识点或分析题目分布，可以使用 Skills
+
+当用户提出问题时，你应该：
+- 首先理解用户的问题
+- 使用合适的工具来回答
+- 最后整合信息，给出有价值的回答
+
+注意：
+- 回答要专业、准确
+- 如果不确定信息，说明不确定的原因
+- 保持友好的对话风格
+
+{skills_prompt}"""
+
+        return create_agent(
+            llm,
+            self._tools,
+            system_prompt=system_prompt,
+        )
+
+    def chat(self, message: str, history: List[dict] = None) -> str:
+        """处理用户消息
+
+        Args:
+            message: 用户消息
+            history: 对话历史
+
+        Returns:
+            Agent 回复
+        """
+        logger.info(f"ChatAgent processing: {message[:50]}...")
+
+        messages = []
+        if history:
+            for msg in history[-10:]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+
+        messages.append({"role": "user", "content": message})
+
+        try:
+            result = self.agent.invoke({"messages": messages})
+            response = result["messages"][-1].content
+            logger.info(f"ChatAgent response: {response[:50]}...")
+            return response
+        except Exception as e:
+            logger.error(f"ChatAgent error: {e}")
+            return f"抱歉，我遇到了问题: {e}"
+
+    def chat_streaming(self, message: str, history: List[dict] = None):
+        """流式处理用户消息
+
+        Args:
+            message: 用户消息
+            history: 对话历史
+
+        Yields:
+            Agent 回复的片段
+        """
+        logger.info(f"ChatAgent streaming: {message[:50]}...")
+
+        messages = []
+        if history:
+            for msg in history[-10:]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+
+        messages.append({"role": "user", "content": message})
+
+        try:
+            for event in self.agent.stream(
+                {"messages": messages},
+                stream_mode="messages"
+            ):
+                # event 是 (message, metadata) 元组
+                if isinstance(event, tuple):
+                    msg = event[0]
+                else:
+                    msg = event
+
+                # 只处理 AI 的回复，不要处理用户消息
+                if isinstance(msg, AIMessage) and msg.content:
+                    yield msg.content
+        except Exception as e:
+            logger.error(f"ChatAgent streaming error: {e}")
+            yield f"抱歉，我遇到了问题: {e}"
+
+
+# 全局单例
+_chat_agent: Optional[ChatAgent] = None
+
+
+def get_chat_agent(provider: str = "dashscope") -> ChatAgent:
+    """获取 Chat Agent 单例"""
+    global _chat_agent
+    if _chat_agent is None:
+        _chat_agent = ChatAgent(provider=provider)
+    return _chat_agent
+
+
+__all__ = ["ChatAgent", "get_chat_agent"]

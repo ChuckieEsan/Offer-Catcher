@@ -4,6 +4,7 @@
 - 左侧：历史对话列表
 - 中间：核心聊天区域
 - 支持短期记忆（Redis）和长期记忆（PostgreSQL）
+- Chat Agent 流式输出
 """
 
 import streamlit as st
@@ -11,6 +12,7 @@ from datetime import datetime
 
 from app.db.redis_client import get_redis_client
 from app.db.postgres_client import get_postgres_client
+from app.agents.chat_agent import get_chat_agent
 
 
 # 页面配置
@@ -36,7 +38,8 @@ def init_clients():
     """初始化客户端"""
     redis_client = get_redis_client()
     postgres_client = get_postgres_client()
-    return redis_client, postgres_client
+    chat_agent = get_chat_agent(provider="dashscope")
+    return redis_client, postgres_client, chat_agent
 
 
 def render_sidebar(redis_client, postgres_client, user_id: str):
@@ -96,7 +99,7 @@ def render_sidebar(redis_client, postgres_client, user_id: str):
                 st.caption(f"⏰ {time_str}")
 
 
-def render_chat_area(redis_client, postgres_client, user_id: str):
+def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
     """渲染核心聊天区域"""
     st.title("💬 AI 面试助手")
 
@@ -163,17 +166,33 @@ def render_chat_area(redis_client, postgres_client, user_id: str):
             title = prompt[:50] + "..." if len(prompt) > 50 else prompt
             postgres_client.update_conversation_title(user_id, conversation_id, title)
 
-        # 模拟 AI 回复（TODO: 后续接入真正的 Agent）
+        # 使用 Chat Agent 生成回复（流式输出）
         with st.chat_message("assistant"):
-            with st.spinner("思考中..."):
-                # TODO: 这里后续接入 Chat Agent
-                response = "我收到了你的消息！🎉\n\n这是 AI 面试助手的测试回复。后续我会接入真正的 Agent 来回答你的问题。\n\n你可以问我一些关于面试的问题，比如：\n- 帮我梳理一下 XXX 公司的常考知识点\n- 生成几道 XXX 岗位的面试题"
+            response_placeholder = st.empty()
+            full_response = ""
+
+            # 获取历史消息（用于上下文）
+            history_for_agent = [
+                msg for msg in chat_context if msg["role"] in ["user", "assistant"]
+            ]
+
+            # 流式输出
+            try:
+                for chunk in chat_agent.chat_streaming(prompt, history_for_agent):
+                    full_response += chunk
+                    response_placeholder.write(full_response)
+                # 移除光标
+                if full_response:
+                    response_placeholder.write(full_response)
+            except Exception as e:
+                full_response = f"抱歉，我遇到了问题: {e}"
+                response_placeholder.write(full_response)
 
         # 添加 AI 回复到上下文
-        chat_context.append({"role": "assistant", "content": response})
+        chat_context.append({"role": "assistant", "content": full_response})
 
         # 保存到数据库
-        postgres_client.add_message(user_id, conversation_id, "assistant", response)
+        postgres_client.add_message(user_id, conversation_id, "assistant", full_response)
 
         # 更新短期记忆
         redis_client.set_short_term_memory(
@@ -189,7 +208,7 @@ def main():
     """主函数"""
     # 初始化
     user_id = get_user_id()
-    redis_client, postgres_client = init_clients()
+    redis_client, postgres_client, chat_agent = init_clients()
 
     # 分栏布局
     col_sidebar, col_main = st.columns([1, 3])
@@ -198,7 +217,7 @@ def main():
         render_sidebar(redis_client, postgres_client, user_id)
 
     with col_main:
-        render_chat_area(redis_client, postgres_client, user_id)
+        render_chat_area(redis_client, postgres_client, chat_agent, user_id)
 
 
 if __name__ == "__main__":
