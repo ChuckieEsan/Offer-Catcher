@@ -5,14 +5,17 @@
 - 中间：核心聊天区域
 - 支持短期记忆（Redis）和长期记忆（PostgreSQL）
 - Chat Agent 流式输出
+- 支持图片上传（提取面经题目）
 """
 
+import base64
 import streamlit as st
 from datetime import datetime
 
 from app.db.redis_client import get_redis_client
 from app.db.postgres_client import get_postgres_client
 from app.agents.chat_agent import get_chat_agent
+from app.agents.vision_extractor import get_vision_extractor
 
 
 # 页面配置
@@ -149,20 +152,52 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # 聊天输入
-    if prompt := st.chat_input("请输入你的问题..."):
-        # 显示用户消息
+    # 底部固定区域：图片上传 + 聊天输入
+    # 使用 columns 布局让上传按钮和输入框并排
+    col_upload, col_input = st.columns([1, 4])
+
+    with col_upload:
+        # 图片上传按钮
+        uploaded_file = st.file_uploader(
+            "📎",
+            type=["png", "jpg", "jpeg", "webp"],
+            help="上传面经图片，自动提取题目",
+            label_visibility="collapsed",
+        )
+
+        # 处理图片为 Base64
+        attachments = []
+        if uploaded_file:
+            img_bytes = uploaded_file.getvalue()
+            b64_img = base64.b64encode(img_bytes).decode()
+            attachments.append(b64_img)
+            # 预览已上传的图片
+            st.image(uploaded_file, width=80, caption=uploaded_file.name)
+
+    with col_input:
+        # 聊天输入框
+        prompt = st.chat_input("请输入你的问题，或上传面经图片自动提取题目...")
+
+    # 只有当有输入内容时才处理（无论是文字还是图片）
+    has_text = prompt is not None and prompt.strip() != ""
+    has_image = len(attachments) > 0
+
+    if has_text or has_image:
+        # 准备发送给 Agent 的消息
+        # 如果只有图片没有文字，给一个默认提示
+        agent_message = prompt if has_text else "请分析这张图片中的面试题目"
+        display_content = prompt if has_text else f"[图片: {uploaded_file.name}]"
         with st.chat_message("user"):
-            st.write(prompt)
+            st.write(display_content)
 
         # 添加到短期记忆
-        chat_context.append({"role": "user", "content": prompt})
+        chat_context.append({"role": "user", "content": display_content})
 
         # 保存到数据库
-        postgres_client.add_message(user_id, conversation_id, "user", prompt)
+        postgres_client.add_message(user_id, conversation_id, "user", display_content)
 
         # 如果是第一句话，自动生成标题
-        if len(messages) == 0 and len(chat_context) == 1:
+        if len(messages) == 0 and len(chat_context) == 1 and has_text:
             title = prompt[:50] + "..." if len(prompt) > 50 else prompt
             postgres_client.update_conversation_title(user_id, conversation_id, title)
 
@@ -178,7 +213,7 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
 
             # 流式输出
             try:
-                for chunk in chat_agent.chat_streaming(prompt, history_for_agent):
+                for chunk in chat_agent.chat_streaming(agent_message, history_for_agent, attachments):
                     full_response += chunk
                     response_placeholder.write(full_response)
                 # 移除光标

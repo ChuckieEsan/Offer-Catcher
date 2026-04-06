@@ -17,6 +17,7 @@ from app.db.qdrant_client import get_qdrant_manager
 from app.config.settings import create_llm
 from app.utils.logger import logger
 from app.tools.web_search import get_web_search_tool
+from app.tools.vision_extractor_tool import extract_interview_questions
 from app.skills import get_skills_prompt
 
 
@@ -36,8 +37,15 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
         搜索结果，以文本形式返回
     """
 
+    from app.tools.embedding import get_embedding_model
+
+    # 将 query 转为向量
+    embedding_model = get_embedding_model()
+    query_vector = embedding_model.embed_text(query)
+
+    # 检索
     qdrant = get_qdrant_manager()
-    results = qdrant.search(query, k=k)
+    results = qdrant.search(query_vector, limit=k)
 
     if company:
         results = [r for r in results if r.company == company]
@@ -143,7 +151,12 @@ class ChatAgent:
     def __init__(self, provider: str = "dashscope"):
         self.provider = provider
         self._agent = None
-        self._tools = [search_questions, search_web, query_graph]
+        self._tools = [
+            extract_interview_questions,
+            search_questions,
+            search_web,
+            query_graph,
+        ]
 
     @property
     def agent(self):
@@ -157,23 +170,25 @@ class ChatAgent:
 
         skills_prompt = get_skills_prompt()
 
-        system_prompt = f"""你是一个 AI 面试助手，专门帮助用户准备技术面试。
+        system_prompt = f"""你是一个 AI 面试助手，具有强大的意图识别能力。
 
 你的能力：
-1. 搜索题目库中的相关面试题
-2. 使用 Web 搜索获取最新的面试信息
-3. 查询知识点之间的关系
-4. 如果用户要求梳理知识点或分析题目分布，可以使用 Skills
+1. 提取面经题目：当用户上传图片或分享面经文本时，调用 extract_interview_questions
+2. 搜索题目：当用户提问技术问题时，调用 search_questions 或 search_web
+3. 查询知识图谱：当用户询问知识点之间的关系时，调用 query_graph
+4. 日常对话：回答面试相关问题，提供建议
 
-当用户提出问题时，你应该：
-- 首先理解用户的问题
-- 使用合适的工具来回答
-- 最后整合信息，给出有价值的回答
+意图识别规则：
+- 用户上传图片/截图 → 必须调用 extract_interview_questions（source_type="image"）
+- 用户粘贴面经文本 → 调用 extract_interview_questions（source_type="text"）
+- 用户提问具体技术问题 → 调用 search_questions 或 search_web
+- 用户问"X 和 Y 是什么关系" → 调用 query_graph
 
 注意：
 - 回答要专业、准确
 - 如果不确定信息，说明不确定的原因
 - 保持友好的对话风格
+- 当调用工具时，告诉用户"正在分析..."
 
 {skills_prompt}"""
 
@@ -183,12 +198,13 @@ class ChatAgent:
             system_prompt=system_prompt,
         )
 
-    def chat(self, message: str, history: List[dict] = None) -> str:
+    def chat(self, message: str, history: List[dict] = None, attachments: List[str] = None) -> str:
         """处理用户消息
 
         Args:
             message: 用户消息
             history: 对话历史
+            attachments: 附件列表（Base64 编码的图片）
 
         Returns:
             Agent 回复
@@ -200,7 +216,17 @@ class ChatAgent:
             for msg in history[-10:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-        messages.append({"role": "user", "content": message})
+        # 如果有附件，构建多模态消息
+        if attachments:
+            content = [{"type": "text", "text": message}]
+            for b64_img in attachments:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                })
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": message})
 
         try:
             result = self.agent.invoke({"messages": messages})
@@ -211,12 +237,13 @@ class ChatAgent:
             logger.error(f"ChatAgent error: {e}")
             return f"抱歉，我遇到了问题: {e}"
 
-    def chat_streaming(self, message: str, history: List[dict] = None):
+    def chat_streaming(self, message: str, history: List[dict] = None, attachments: List[str] = None):
         """流式处理用户消息
 
         Args:
             message: 用户消息
             history: 对话历史
+            attachments: 附件列表（Base64 编码的图片）
 
         Yields:
             Agent 回复的片段
@@ -228,7 +255,17 @@ class ChatAgent:
             for msg in history[-10:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-        messages.append({"role": "user", "content": message})
+        # 如果有附件，构建多模态消息
+        if attachments:
+            content = [{"type": "text", "text": message}]
+            for b64_img in attachments:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                })
+            messages.append({"role": "user", "content": content})
+        else:
+            messages.append({"role": "user", "content": message})
 
         try:
             for event in self.agent.stream(
