@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.agents.base import BaseAgent
 from app.models.schemas import QuestionItem
-from app.tools.web_search import WebSearchTool, get_web_search_tool
+from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
 from app.utils.logger import logger
 
 

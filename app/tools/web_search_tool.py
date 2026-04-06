@@ -193,3 +193,39 @@ __all__ = [
     "WebSearchTool",
     "get_web_search_tool",
 ]
+
+
+# ==================== LangChain @tool 装饰器函数 ====================
+
+from langchain_core.tools import tool
+
+
+@tool
+def search_web(query: str, max_results: int = 3) -> str:
+    """使用 Web 搜索获取最新信息
+
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数，默认 3
+
+    Returns:
+        搜索结果，以文本形式返回
+    """
+
+    try:
+        web_tool = get_web_search_tool(max_results=max_results)
+        results = web_tool.search(query)
+
+        if not results:
+            return "未找到相关信息"
+
+        output = []
+        for r in results:
+            output.append(f"标题: {r.title}")
+            output.append(f"内容: {r.content[:300]}...")
+            output.append("---")
+
+        return "\n".join(output)
+    except Exception as e:
+        logger.error(f"Web search failed: {e}")
+        return f"搜索失败: {e}"

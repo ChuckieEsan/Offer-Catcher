@@ -16,7 +16,7 @@ from app.agents.chat_agent import (
     ChatAgent,
     get_chat_agent,
 )
-from app.tools.embedding import get_embedding_tool
+from app.tools.embedding_tool import get_embedding_tool
 
 
 class TestSearchQuestionsTool:

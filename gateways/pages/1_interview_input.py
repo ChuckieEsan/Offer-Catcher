@@ -31,7 +31,7 @@ def get_ingestion_strategy(question_text: str, core_entities: list, qdrant_manag
     context = f"考点标签：{entities_str} | 题目：{question_text}"
 
     try:
-        from app.tools.embedding import get_embedding_tool
+        from app.tools.embedding_tool import get_embedding_tool
         embedding_tool = get_embedding_tool()
         query_vector = embedding_tool.embed_text(context)
 

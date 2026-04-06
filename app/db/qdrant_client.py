@@ -12,7 +12,7 @@ from app.config.settings import get_settings
 from app.models.schemas import QdrantQuestionPayload, SearchFilter, SearchResult
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
-from app.tools.embedding import get_embedding_tool
+from app.tools.embedding_tool import get_embedding_tool
 
 
 class QdrantManager:
