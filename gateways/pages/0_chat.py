@@ -247,30 +247,21 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
                     elif msg["role"] == "assistant":
                         history_messages.append(AIMessage(content=msg["content"]))
 
-                # 构建用户消息
-                user_input_message = HumanMessage(content=prompt if has_text else "请分析这张图片")
-
+                # 如果有图片附件，追加 OCR 结果到历史
                 if has_image and ocr_message:
-                    # 有附件：history + [user_input, ocr_message]
-                    messages_for_agent = history_messages + [user_input_message, ocr_message]
-                else:
-                    # 无附件：history + [user_input]
-                    messages_for_agent = history_messages + [user_input_message]
+                    history_messages.append(ocr_message)
 
                 # 调用 Agent 处理
                 try:
-                    for event in chat_agent.agent.stream(
-                        {"messages": messages_for_agent},
-                        stream_mode="messages"
+                    # 使用新的流式方法
+                    user_input = prompt if has_text else "请分析这张图片"
+                    for chunk in chat_agent.chat_streaming(
+                        message=user_input,
+                        history=history_messages,
+                        session_id=str(conversation_id)
                     ):
-                        if isinstance(event, tuple):
-                            msg = event[0]
-                        else:
-                            msg = event
-
-                        if isinstance(msg, AIMessage) and msg.content:
-                            full_response += msg.content
-                            response_placeholder.write(full_response)
+                        full_response += chunk
+                        response_placeholder.write(full_response)
 
                     if full_response:
                         response_placeholder.write(full_response)

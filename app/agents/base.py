@@ -43,13 +43,15 @@ class BaseAgent(Generic[T]):
         self._llm: Optional[ChatOpenAI] = None
         self._structured_llm: Optional[ChatOpenAI] = None
         self.prompt_template = load_prompt(self._prompt_filename) if self._prompt_filename else ""
+        # 子类可覆盖此属性来传递额外的 LLM 参数
+        self._llm_kwargs: dict = {}
         logger.info(f"{self.__class__.__name__} initialized with provider: {provider}")
 
     @property
     def llm(self) -> ChatOpenAI:
         """获取 LLM 实例（延迟加载）"""
         if self._llm is None:
-            self._llm = create_llm(self.provider, "chat")
+            self._llm = create_llm(self.provider, "chat", **self._llm_kwargs)
         return self._llm
 
     @property
