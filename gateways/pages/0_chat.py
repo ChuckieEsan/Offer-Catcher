@@ -9,13 +9,16 @@
 """
 
 import base64
+import os
+import tempfile
 import streamlit as st
-from datetime import datetime
+
+from langchain_core.messages import HumanMessage, AIMessage
 
 from app.db.redis_client import get_redis_client
 from app.db.postgres_client import get_postgres_client
 from app.agents.chat_agent import get_chat_agent
-from app.agents.vision_extractor import get_vision_extractor
+from app.utils.ocr import ocr_images
 
 
 # 页面配置
@@ -152,91 +155,143 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # 底部固定区域：图片上传 + 聊天输入
-    # 使用 columns 布局让上传按钮和输入框并排
-    col_upload, col_input = st.columns([1, 4])
+    # 底部区域：图片上传 + 发送表单
+    # 使用 st.form 确保用户点击发送后才处理
+    with st.form("chat_form", clear_on_submit=True):
+        col_upload, col_input, col_button = st.columns([1, 4, 1])
 
-    with col_upload:
-        # 图片上传按钮
-        uploaded_file = st.file_uploader(
-            "📎",
-            type=["png", "jpg", "jpeg", "webp"],
-            help="上传面经图片，自动提取题目",
-            label_visibility="collapsed",
-        )
+        with col_upload:
+            # 图片上传按钮
+            uploaded_file = st.file_uploader(
+                "📎",
+                type=["png", "jpg", "jpeg", "webp"],
+                help="上传面经图片，自动提取题目",
+                label_visibility="collapsed",
+            )
 
-        # 处理图片为 Base64
-        attachments = []
-        if uploaded_file:
-            img_bytes = uploaded_file.getvalue()
-            b64_img = base64.b64encode(img_bytes).decode()
-            attachments.append(b64_img)
-            # 预览已上传的图片
-            st.image(uploaded_file, width=80, caption=uploaded_file.name)
+            # 处理图片为 Base64（仅预览，不处理）
+            attachments = []
+            if uploaded_file:
+                img_bytes = uploaded_file.getvalue()
+                b64_img = base64.b64encode(img_bytes).decode()
+                attachments.append(b64_img)
+                # 预览已上传的图片
+                st.image(uploaded_file, width=60, caption=uploaded_file.name)
 
-    with col_input:
-        # 聊天输入框
-        prompt = st.chat_input("请输入你的问题，或上传面经图片自动提取题目...")
+        with col_input:
+            # 聊天输入框
+            prompt = st.text_area(
+                "请输入你的问题，或上传面经图片自动提取题目...",
+                height=70,
+                label_visibility="collapsed",
+            )
 
-    # 只有当有输入内容时才处理（无论是文字还是图片）
-    has_text = prompt is not None and prompt.strip() != ""
-    has_image = len(attachments) > 0
+        with col_button:
+            st.write("")
+            st.write("")
+            submitted = st.form_submit_button("发送", type="primary")
 
-    if has_text or has_image:
-        # 准备发送给 Agent 的消息
-        # 如果只有图片没有文字，给一个默认提示
-        agent_message = prompt if has_text else "请分析这张图片中的面试题目"
-        display_content = prompt if has_text else f"[图片: {uploaded_file.name}]"
-        with st.chat_message("user"):
-            st.write(display_content)
+    # ========== 处理提交 ==========
+    if submitted:
+        has_text = prompt is not None and prompt.strip() != "" if prompt else False
+        has_image = len(attachments) > 0
 
-        # 添加到短期记忆
-        chat_context.append({"role": "user", "content": display_content})
+        if not has_text and not has_image:
+            st.warning("请输入问题或上传图片")
+        else:
+            # ========== Step 1: 图片 OCR 预处理 ==========
+            ocr_message = None
+            if has_image:
+                tmp_paths = []
+                for b64_img in attachments:
+                    img_bytes = base64.b64decode(b64_img)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                        tmp.write(img_bytes)
+                        tmp_paths.append(tmp.name)
 
-        # 保存到数据库
-        postgres_client.add_message(user_id, conversation_id, "user", display_content)
+                try:
+                    ocr_message = ocr_images(tmp_paths)
+                    st.caption(f"📝 OCR 识别完成，共 {len(attachments)} 张图片")
+                finally:
+                    for tmp_path in tmp_paths:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
 
-        # 如果是第一句话，自动生成标题
-        if len(messages) == 0 and len(chat_context) == 1 and has_text:
-            title = prompt[:50] + "..." if len(prompt) > 50 else prompt
-            postgres_client.update_conversation_title(user_id, conversation_id, title)
+            # ========== Step 2: 构建消息内容 ==========
+            img_count = len(attachments)
+            display_content = prompt if has_text else f"[{img_count} 张图片]"
+            with st.chat_message("user"):
+                st.write(display_content)
 
-        # 使用 Chat Agent 生成回复（流式输出）
-        with st.chat_message("assistant"):
-            response_placeholder = st.empty()
-            full_response = ""
+            # 添加到短期记忆
+            chat_context.append({"role": "user", "content": display_content})
 
-            # 获取历史消息（用于上下文）
-            history_for_agent = [
-                msg for msg in chat_context if msg["role"] in ["user", "assistant"]
-            ]
+            # 保存到数据库
+            postgres_client.add_message(user_id, conversation_id, "user", display_content)
 
-            # 流式输出
-            try:
-                for chunk in chat_agent.chat_streaming(agent_message, history_for_agent, attachments):
-                    full_response += chunk
+            # 如果是第一句话，自动生成标题
+            if len(messages) == 0 and len(chat_context) == 1 and has_text:
+                title = prompt[:50] + "..." if len(prompt) > 50 else prompt
+                postgres_client.update_conversation_title(user_id, conversation_id, title)
+
+            # ========== Step 3: 调用 Agent 处理 ==========
+            with st.chat_message("assistant"):
+                response_placeholder = st.empty()
+                full_response = ""
+
+                # 将历史消息 dict 转换为 LangChain BaseMessage
+                history_messages = []
+                for msg in chat_context:
+                    if msg["role"] == "user":
+                        history_messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        history_messages.append(AIMessage(content=msg["content"]))
+
+                # 构建用户消息
+                user_input_message = HumanMessage(content=prompt if has_text else "请分析这张图片")
+
+                if has_image and ocr_message:
+                    # 有附件：history + [user_input, ocr_message]
+                    messages_for_agent = history_messages + [user_input_message, ocr_message]
+                else:
+                    # 无附件：history + [user_input]
+                    messages_for_agent = history_messages + [user_input_message]
+
+                # 调用 Agent 处理
+                try:
+                    for event in chat_agent.agent.stream(
+                        {"messages": messages_for_agent},
+                        stream_mode="messages"
+                    ):
+                        if isinstance(event, tuple):
+                            msg = event[0]
+                        else:
+                            msg = event
+
+                        if isinstance(msg, AIMessage) and msg.content:
+                            full_response += msg.content
+                            response_placeholder.write(full_response)
+
+                    if full_response:
+                        response_placeholder.write(full_response)
+                except Exception as e:
+                    full_response = f"抱歉，我遇到了问题: {e}"
                     response_placeholder.write(full_response)
-                # 移除光标
-                if full_response:
-                    response_placeholder.write(full_response)
-            except Exception as e:
-                full_response = f"抱歉，我遇到了问题: {e}"
-                response_placeholder.write(full_response)
 
-        # 添加 AI 回复到上下文
-        chat_context.append({"role": "assistant", "content": full_response})
+                # 添加 AI 回复到上下文
+                chat_context.append({"role": "assistant", "content": full_response})
 
-        # 保存到数据库
-        postgres_client.add_message(user_id, conversation_id, "assistant", full_response)
+                # 保存到数据库
+                postgres_client.add_message(user_id, conversation_id, "assistant", full_response)
 
-        # 更新短期记忆
-        redis_client.set_short_term_memory(
-            user_id=user_id,
-            conversation_id=conversation_id,
-            context=chat_context,
-        )
+                # 更新短期记忆
+                redis_client.set_short_term_memory(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    context=chat_context,
+                )
 
-        st.rerun()
+                st.rerun()
 
 
 def main():

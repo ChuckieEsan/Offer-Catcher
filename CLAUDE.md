@@ -16,6 +16,7 @@
 7. **软件开发设计应当符合 Langchain/LangGraph 的最佳实践**，你需要尽可能少的重复造轮子，尽可能复用 Langchain 已有的组件
 8. **如果发生重构，不要进行向后兼容，你需要直接重构**
 9. **禁止在测试用例中写生产数据库，只允许读**
+10. **Agent 的消息必须是 Langchain 的消息，如 AIMessage, HumanMessage, BaseMessage**，不允许自定义字典结构
 
 ---
 

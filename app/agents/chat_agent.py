@@ -6,17 +6,19 @@
 - 图数据库 (Neo4j)
 """
 
-from typing import Optional, List
+from typing import Optional
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from app.db.qdrant_client import get_qdrant_manager
 
 from app.config.settings import create_llm
 from app.utils.logger import logger
 from app.tools.web_search import get_web_search_tool
+from app.tools.embedding import get_embedding_tool
+from app.db.graph_client import get_graph_client
 from app.tools.vision_extractor_tool import extract_interview_questions
 from app.skills import get_skills_prompt
 
@@ -36,8 +38,6 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
     Returns:
         搜索结果，以文本形式返回
     """
-
-    from app.tools.embedding import get_embedding_tool
 
     # 将 query 转为向量
     embedding_tool = get_embedding_tool()
@@ -106,8 +106,6 @@ def query_graph(question: str) -> str:
     Returns:
         查询结果
     """
-    from app.db.graph_client import get_graph_client
-
     try:
         graph_client = get_graph_client()
 
@@ -170,7 +168,7 @@ class ChatAgent:
     def __init__(self, provider: str = "dashscope"):
         self.provider = provider
         self._agent = None
-        self._tools = [
+        self._tools: list = [
             extract_interview_questions,
             search_questions,
             search_web,
@@ -217,35 +215,21 @@ class ChatAgent:
             system_prompt=system_prompt,
         )
 
-    def chat(self, message: str, history: List[dict] = None, attachments: List[str] = None) -> str:
+    def chat(self, message: str, history: Optional[list[BaseMessage]] = None) -> str:
         """处理用户消息
 
         Args:
             message: 用户消息
-            history: 对话历史
-            attachments: 附件列表（Base64 编码的图片）
+            history: 对话历史 (LangChain BaseMessage 列表)
 
         Returns:
             Agent 回复
         """
         logger.info(f"ChatAgent processing: {message[:50]}...")
 
-        messages = []
-        if history:
-            for msg in history[-10:]:
-                messages.append({"role": msg["role"], "content": msg["content"]})
-
-        # 如果有附件，构建多模态消息
-        if attachments:
-            content = [{"type": "text", "text": message}]
-            for b64_img in attachments:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-                })
-            messages.append({"role": "user", "content": content})
-        else:
-            messages.append({"role": "user", "content": message})
+        # 构建消息列表
+        messages = history[-10:] if history else []
+        messages.append(HumanMessage(content=message))
 
         try:
             result = self.agent.invoke({"messages": messages})
@@ -256,48 +240,32 @@ class ChatAgent:
             logger.error(f"ChatAgent error: {e}")
             return f"抱歉，我遇到了问题: {e}"
 
-    def chat_streaming(self, message: str, history: List[dict] = None, attachments: List[str] = None):
+    def chat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None):
         """流式处理用户消息
 
         Args:
             message: 用户消息
-            history: 对话历史
-            attachments: 附件列表（Base64 编码的图片）
+            history: 对话历史 (LangChain BaseMessage 列表)
 
         Yields:
             Agent 回复的片段
         """
         logger.info(f"ChatAgent streaming: {message[:50]}...")
 
-        messages = []
-        if history:
-            for msg in history[-10:]:
-                messages.append({"role": msg["role"], "content": msg["content"]})
-
-        # 如果有附件，构建多模态消息
-        if attachments:
-            content = [{"type": "text", "text": message}]
-            for b64_img in attachments:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-                })
-            messages.append({"role": "user", "content": content})
-        else:
-            messages.append({"role": "user", "content": message})
+        # 构建消息列表
+        messages = history[-10:] if history else []
+        messages.append(HumanMessage(content=message))
 
         try:
             for event in self.agent.stream(
                 {"messages": messages},
                 stream_mode="messages"
             ):
-                # event 是 (message, metadata) 元组
                 if isinstance(event, tuple):
                     msg = event[0]
                 else:
                     msg = event
 
-                # 只处理 AI 的回复，不要处理用户消息
                 if isinstance(msg, AIMessage) and msg.content:
                     yield msg.content
         except Exception as e:

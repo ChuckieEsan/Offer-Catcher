@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 import easyocr
+from langchain_core.messages import HumanMessage
 
 from app.utils.logger import logger
 
@@ -90,14 +91,20 @@ def ocr_image(image_path: str) -> str:
             Path(temp_path).unlink()
 
 
-def ocr_images(image_paths: list[str]) -> str:
-    """对多张图片进行 OCR 识别并拼接结果
+def ocr_images(
+    image_paths: list[str],
+    prompt: str = "经文本解析后，用户上传了如下图片内容：",
+) -> HumanMessage:
+    """对多张图片进行 OCR 识别并返回 HumanMessage
+
+    符合 LangChain 最佳实践，直接返回可用于 Agent 的消息对象。
 
     Args:
         image_paths: 图片路径列表
+        prompt: 提示词，默认分析面试题目
 
     Returns:
-        拼接后的文本内容
+        HumanMessage 对象，可直接传给 Agent
     """
     all_texts = []
 
@@ -110,7 +117,14 @@ def ocr_images(image_paths: list[str]) -> str:
 
     full_text = "\n\n".join(all_texts)
     logger.info(f"OCR completed: {len(image_paths)} images -> {len(all_texts)} sections")
-    return full_text
+
+    # 构建消息内容
+    content = [
+        {"type": "text", "text": prompt},
+        {"type": "text", "text": f"--- OCR 识别结果 ---\n{full_text}"},
+    ]
+
+    return HumanMessage(content=content)
 
 
 def cleanup_ocr_reader() -> None:
@@ -121,4 +135,9 @@ def cleanup_ocr_reader() -> None:
         logger.info("EasyOCR reader cleaned up")
 
 
-__all__ = ["get_ocr_reader", "ocr_image", "ocr_images", "cleanup_ocr_reader"]
+__all__ = [
+    "get_ocr_reader",
+    "ocr_image",
+    "ocr_images",
+    "cleanup_ocr_reader",
+]

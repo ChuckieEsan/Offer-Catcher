@@ -121,6 +121,10 @@ class BaseAgent(Generic[T]):
         return self.structured_llm.invoke(prompt)
 
 
+# 全局单例存储（必须在 create_singleton 函数之前定义）
+_singleton_instances: dict[str, BaseAgent] = {}
+
+
 # 单例模式的辅助函数
 def create_singleton(cls: type[BaseAgent], provider: str = "dashscope") -> BaseAgent:
     """创建或获取 Agent 单例
@@ -139,10 +143,6 @@ def create_singleton(cls: type[BaseAgent], provider: str = "dashscope") -> BaseA
         _singleton_instances[class_name] = cls(provider=provider)
 
     return _singleton_instances[class_name]
-
-
-# 全局单例存储
-_singleton_instances: dict[str, BaseAgent] = {}
 
 
 __all__ = ["BaseAgent", "create_singleton"]

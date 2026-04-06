@@ -122,8 +122,6 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 
     def _parse_json_response(self, response: str) -> ExtractedInterviewSchema:
         """手动解析 JSON 响应"""
-        import app.utils.logger as logger_module
-
         try:
             # 查找 JSON 块
             json_start = response.find("{")
@@ -148,8 +146,8 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             return ExtractedInterviewSchema(**data)
 
         except json.JSONDecodeError as e:
-            logger_module.logger.error(f"Failed to parse JSON: {e}")
-            logger_module.logger.error(f"Response: {response}")
+            logger.error(f"Failed to parse JSON: {e}")
+            logger.error(f"Response: {response}")
             raise ValueError(f"Invalid JSON response: {e}")
 
     def _convert_to_extracted_interview(
@@ -218,8 +216,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             # 将 source 规范化为列表
             image_sources = [source] if isinstance(source, str) else source
 
-            # OCR 识别文字
-            ocr_text = ocr_images(image_sources)
+            # OCR 识别文字，返回 HumanMessage
+            ocr_message = ocr_images(image_sources)
+            # 从 HumanMessage 中提取文本内容
+            ocr_text = ocr_message.content
             logger.info(f"OCR completed, extracted text length: {len(ocr_text)}")
 
             if not ocr_text.strip():
