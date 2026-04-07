@@ -145,6 +145,10 @@ Vision Extractor 输出的 JSON 为全系统数据总线。关键设计在于 **
   2. **打分 Agent 与状态机**：`mastery_level` (0/1/2) 评判逻辑
   3. **答案复用机制**：相似题目自动复用已有答案（节省 Token）
   4. **意图路由 Agent**：用户输入意图分类
+  5. **LangGraph 工作流**：基于 LangGraph 的 ReAct 模式，支持流式输出
+  6. **会话管理**：Redis 短期记忆 + PostgreSQL 历史对话
+  7. **组件缓存优化**：LLM、Prompt、Agent 实例缓存，避免重复创建
+  8. **多页面 Streamlit UI**：聊天、录入、练习、管理、仪表盘
 
 ### 🔵 Phase 3: 未来规划
 - 微信/Telegram Webhook 接入
@@ -176,14 +180,23 @@ offer_catcher/
 ├── app/
 │   ├── agents/                 # 智能体层
 │   │   ├── base.py           # Agent 基类（LLM调用、重试、Structured Output）
+│   │   ├── chat_agent.py     # 聊天 Agent（流式输出、会话管理）
 │   │   ├── vision_extractor.py # 视觉提取 Agent
 │   │   ├── router.py         # 意图路由 Agent
-│   │   ├── scorer.py        # 答题评分 Agent
-│   │   └── answer_specialist.py # 异步答案生成 Agent
+│   │   ├── scorer.py         # 答题评分 Agent
+│   │   ├── answer_specialist.py # 异步答案生成 Agent
+│   │   └── graph/            # LangGraph 工作流
+│   │       ├── state.py      # 状态定义
+│   │       ├── nodes.py      # 节点实现
+│   │       ├── edges.py      # 边（路由逻辑）
+│   │       └── workflow.py   # 工作流组装
 │   │
 │   ├── tools/                # 工具箱
-│   │   ├── embedding.py      # 向量嵌入工具 (BGE-M3)
-│   │   └── web_search.py      # 联网搜索工具 (Tavily)
+│   │   ├── embedding_tool.py # 向量嵌入工具 (BGE-M3)
+│   │   ├── web_search_tool.py # 联网搜索工具 (Tavily)
+│   │   ├── search_question_tool.py # 题目搜索工具
+│   │   ├── vision_extractor_tool.py # 图片提取工具
+│   │   └── query_graph_tool.py # 图数据库查询工具
 │   │
 │   ├── pipelines/            # 业务流水线
 │   │   ├── ingestion.py     # 入库流水线
@@ -191,7 +204,9 @@ offer_catcher/
 │   │
 │   ├── db/                   # 数据库层
 │   │   ├── qdrant_client.py  # Qdrant 向量数据库客户端
-│   │   └── graph_client.py   # Neo4j 图数据库客户端
+│   │   ├── graph_client.py   # Neo4j 图数据库客户端
+│   │   ├── redis_client.py   # Redis 短期记忆客户端
+│   │   └── postgres_client.py # PostgreSQL 历史对话客户端
 │   │
 │   ├── mq/                   # 消息队列层
 │   │   ├── producer.py       # RabbitMQ 生产者
@@ -203,27 +218,49 @@ offer_catcher/
 │   │   ├── schemas.py        # Pydantic 模型
 │   │   └── enums.py          # 枚举类
 │   │
-│   ├── prompts/              # Prompt 模板
+│   ├── prompts/              # Prompt 模板（外置）
 │   │   ├── vision_extractor.md
 │   │   ├── answer_specialist.md
 │   │   ├── router.md
-│   │   └── scorer.md
+│   │   ├── scorer.md
+│   │   ├── react_agent.md    # ReAct Agent 系统提示词
+│   │   └── chat_agent.md     # Chat Agent 系统提示词
+│   │
+│   ├── skills/               # Skills 加载器
+│   │   └── __init__.py       # 加载 SKILL.md 文件
+│   │
+│   ├── services/             # 业务服务
+│   │   └── clustering_service.py # 题目聚类服务
+│   │
+│   ├── llm/                  # LLM 工厂模块
+│   │   └── __init__.py       # create_llm, get_llm (带缓存)
 │   │
 │   ├── config/               # 配置
-│   │   └── settings.py
+│   │   └── settings.py       # Pydantic Settings
 │   │
 │   └── utils/                # 工具
 │       ├── hasher.py         # MD5 哈希工具
 │       ├── logger.py         # 日志工具
 │       ├── retry.py         # 重试装饰器
 │       ├── circuit_breaker.py # 熔断器
-│       └── agent.py         # Agent 通用工具
+│       ├── cache.py         # 通用缓存装饰器
+│       ├── agent.py         # Agent 通用工具
+│       ├── ocr.py           # OCR 工具
+│       └── image.py         # 图片处理工具
 │
 ├── workers/                   # 后台进程
-│   └── answer_worker.py     # 异步答案生成 Worker
+│   ├── answer_worker.py     # 异步答案生成 Worker
+│   └── clustering_worker.py # 聚类定时任务 Worker
 │
 ├── gateways/                 # 接入层
-│   └── cli_chat.py         # Streamlit Web 界面
+│   ├── cli_chat.py         # Streamlit 主入口
+│   └── pages/              # Streamlit 多页面
+│       ├── 0_chat.py         # AI 聊天
+│       ├── 1_interview_input.py # 录入面经
+│       ├── 2_practice.py      # 练习答题
+│       ├── 3_question_management.py # 题目管理
+│       ├── 4_dashboard.py     # 仪表盘
+│       └── 5_cluster_view.py  # 考点聚类
 │
 ├── scripts/                  # 脚本
 │   ├── resend_to_queue.py  # 重新发送任务到队列
@@ -249,8 +286,11 @@ offer_catcher/
 - **Python 3.10+** - 核心语言
 - **Qdrant** - 向量数据库
 - **Neo4j** - 图数据库
+- **Redis** - 短期记忆存储
+- **PostgreSQL** - 历史对话存储
 - **RabbitMQ** - 消息队列
 - **LangChain** - Agent 开发框架
+- **LangGraph** - 工作流编排框架
 - **DashScope/DeepSeek** - 大模型
 - **Streamlit** - Web UI 框架
 - **Tavily** - Web 搜索 API
@@ -262,19 +302,21 @@ offer_catcher/
 ### 环境要求
 
 - Python 3.10+
-- Docker (用于运行 Qdrant、RabbitMQ 和 Neo4j)
+- Docker (用于运行 Qdrant、RabbitMQ、Neo4j、Redis、PostgreSQL)
 - uv (包管理工具)
 
 ### 1. 启动依赖服务
 
 ```bash
-# 启动所有依赖服务 (Qdrant, RabbitMQ, Neo4j)
+# 启动所有依赖服务 (Qdrant, RabbitMQ, Neo4j, Redis, PostgreSQL)
 docker-compose up -d
 
 # 验证服务启动
 # Qdrant: http://localhost:6333
 # RabbitMQ: http://localhost:15672 (guest/guest)
 # Neo4j: http://localhost:7474 (neo4j/neo4j)
+# Redis: localhost:6379
+# PostgreSQL: localhost:5432 (root/root)
 ```
 
 ### 2. 配置环境变量
@@ -309,11 +351,12 @@ PYTHONPATH=. uv run streamlit run gateways/cli_chat.py --server.port 8501
 
 ### 功能说明
 
+- **💬 AI 聊天**：智能对话，支持流式输出，自动识别意图（搜索/录入/闲聊），会话历史持久化
 - **📝 录入面经**：输入文本或上传图片，自动提取题目并入库，触发异步答案生成
-- **🔍 搜索题目**：语义搜索 + 公司/熟练度/类型过滤
 - **📝 练习答题**：选择题目提交答案，AI 评分并给出改进建议
 - **📋 题目管理**：查看所有题目，编辑修改，删除
 - **📊 仪表盘**：数据统计图表 + 图数据库考频分析
+- **🏷️ 考点聚类**：自动聚类相似题目，发现高频考点
 
 ---
 

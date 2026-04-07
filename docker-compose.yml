@@ -18,6 +18,37 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/neo4j
+    volumes:
+      - neo4j_data:/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: offer_catcher
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   qdrant_data:
   rabbitmq_data:
+  neo4j_data:
+  redis_data:
+  postgres_data:

@@ -25,17 +25,26 @@
 ```text
 offer_catcher/
 ├── app/
-│   ├── agents/          # AI 智能体（router, vision, answer_worker, scorer）
-│   ├── tools/           # 智能体工具（search_web, search_vector）
+│   ├── agents/          # AI 智能体
+│   │   ├── base.py      # Agent 基类
+│   │   ├── chat_agent.py # 聊天 Agent（流式输出）
+│   │   ├── router.py    # 意图路由
+│   │   ├── vision_extractor.py # 面经提取
+│   │   ├── scorer.py    # 答题评分
+│   │   └── graph/       # LangGraph 工作流（state, nodes, edges, workflow）
+│   ├── llm/             # LLM 工厂（create_llm, get_llm 带缓存）
+│   ├── tools/           # 智能体工具（search_web, search_questions, query_graph）
 │   ├── pipelines/       # 业务流水线编排（ingestion, retrieval）
-│   ├── db/              # 基础设施层（qdrant_client）
-│   ├── mq/              # 消息队列层（producer, consumer, thread_pool_consumer, message_helper）
+│   ├── db/              # 基础设施层（qdrant, neo4j, redis, postgres）
+│   ├── mq/              # 消息队列层（producer, consumer）
 │   ├── models/          # 领域数据模型（schemas.py, enums.py）
-│   ├── prompts/         # Prompt 模板中心（Markdown）
+│   ├── prompts/         # Prompt 模板中心（Markdown 文件）
+│   ├── skills/          # Skills 加载器（SKILL.md 文件）
+│   ├── services/        # 业务服务（clustering_service）
 │   ├── config/          # 全局配置管理（settings.py）
-│   └── utils/           # 通用工具（hasher.py, logger.py, retry.py, circuit_breaker.py）
-├── workers/             # 后台常驻进程（async_answer_worker.py）
-└── gateways/            # 外部接入层（前端为 cli_chat.py）
+│   └── utils/           # 通用工具（cache, logger, retry, circuit_breaker）
+├── workers/             # 后台常驻进程（answer_worker, clustering_worker）
+└── gateways/            # 外部接入层（Streamlit 多页面应用）
 ```
 
 ---
