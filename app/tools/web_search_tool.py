@@ -198,9 +198,11 @@ __all__ = [
 # ==================== LangChain @tool 装饰器函数 ====================
 
 from langchain_core.tools import tool
+from app.utils.telemetry import traced
 
 
 @tool
+@traced
 def search_web(query: str, max_results: int = 3) -> str:
     """联网搜索获取最新信息（仅在用户明确要求或本地题库无结果时使用）
 

@@ -46,6 +46,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # OpenTelemetry 可观测性后端 (Jaeger All-in-One)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+
 volumes:
   qdrant_data:
   rabbitmq_data:

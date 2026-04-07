@@ -11,6 +11,7 @@
 import base64
 import os
 import tempfile
+import uuid
 import streamlit as st
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -19,6 +20,7 @@ from app.db.redis_client import get_redis_client
 from app.db.postgres_client import get_postgres_client
 from app.agents.chat_agent import get_chat_agent
 from app.utils.ocr import ocr_images
+from app.utils.telemetry import set_request_id, set_session_id
 
 
 # 页面配置
@@ -193,6 +195,11 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
 
     # ========== 处理提交 ==========
     if submitted:
+        # 设置 Request ID 和 Session ID（用于全链路追踪）
+        request_id = set_request_id(str(uuid.uuid4())[:8])
+        set_session_id(str(conversation_id))
+        st.caption(f"🔗 Request ID: {request_id}")
+
         has_text = prompt is not None and prompt.strip() != "" if prompt else False
         has_image = len(attachments) > 0
 
@@ -240,8 +247,11 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
                 full_response = ""
 
                 # 将历史消息 dict 转换为 LangChain BaseMessage
+                # 注意：history_messages 只包含历史消息，不包括当前用户输入
+                # 当前用户输入会通过 message 参数传入，由 chat_agent 内部追加
                 history_messages = []
-                for msg in chat_context:
+                # chat_context 已包含当前用户消息，所以取[:-1]排除当前消息
+                for msg in chat_context[:-1]:
                     if msg["role"] == "user":
                         history_messages.append(HumanMessage(content=msg["content"]))
                     elif msg["role"] == "assistant":
@@ -257,7 +267,7 @@ def render_chat_area(redis_client, postgres_client, chat_agent, user_id: str):
                     user_input = prompt if has_text else "请分析这张图片"
                     for chunk in chat_agent.chat_streaming(
                         message=user_input,
-                        history=history_messages,
+                        history=history_messages,  # 只传历史消息，不含当前消息
                         session_id=str(conversation_id)
                     ):
                         full_response += chunk

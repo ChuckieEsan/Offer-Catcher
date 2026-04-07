@@ -12,6 +12,7 @@ from app.agents.graph.state import AgentState
 from app.agents.router import get_router_agent
 from app.agents.vision_extractor import get_vision_extractor
 from app.utils.logger import logger
+from app.utils.telemetry import traced_async, set_request_id
 from app.llm import get_llm
 from app.skills import get_skills_prompt
 from app.utils.cache import singleton
@@ -233,6 +234,7 @@ def _get_react_agent() -> CompiledStateGraph:
     return create_agent(llm, tools=tools, system_prompt=system_prompt)
 
 
+@traced_async
 async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
 
@@ -268,6 +270,7 @@ def _get_chat_system_prompt() -> str:
     return prompt_template.format(skills_prompt=skills_prompt)
 
 
+@traced_async
 async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """闲聊节点
 

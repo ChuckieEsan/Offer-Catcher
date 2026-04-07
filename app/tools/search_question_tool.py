@@ -3,13 +3,17 @@
 从向量数据库中搜索面试题。
 """
 
+import time
+
 from langchain_core.tools import tool
 
 from app.tools.embedding_tool import get_embedding_tool
 from app.db.qdrant_client import get_qdrant_manager
+from app.utils.telemetry import traced, record_vector_query
 
 
 @tool
+@traced
 def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
     """搜索本地题库中的面试题（默认首选工具）
 
@@ -30,8 +34,13 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
     query_vector = embedding_tool.embed_text(query)
 
     # 检索
+    start_time = time.perf_counter()
     qdrant = get_qdrant_manager()
     results = qdrant.search(query_vector, limit=k)
+
+    # 记录向量查询指标
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    record_vector_query(duration_ms=duration_ms, results_count=len(results))
 
     if company:
         results = [r for r in results if r.company == company]

@@ -173,6 +173,16 @@ class Settings(BaseSettings):
         default="INFO",
     )
 
+    # OpenTelemetry 配置
+    otlp_endpoint: str = Field(
+        description="OpenTelemetry OTLP endpoint",
+        default="http://localhost:4317",
+    )
+    telemetry_enabled: bool = Field(
+        description="是否启用 OpenTelemetry",
+        default=False,
+    )
+
     @property
     def qdrant_url(self) -> str:
         """获取 Qdrant 完整连接 URL"""

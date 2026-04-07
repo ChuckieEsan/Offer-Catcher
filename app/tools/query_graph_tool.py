@@ -7,9 +7,11 @@ from langchain_core.tools import tool
 
 from app.db.graph_client import get_graph_client
 from app.utils.logger import logger
+from app.utils.telemetry import traced
 
 
 @tool
+@traced
 def query_graph(question: str) -> str:
     """查询图数据库，获取知识点之间的关系
 

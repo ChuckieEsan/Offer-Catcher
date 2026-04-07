@@ -294,10 +294,12 @@ offer_catcher/
 - **DashScope/DeepSeek** - 大模型
 - **Streamlit** - Web UI 框架
 - **Tavily** - Web 搜索 API
+- **OpenTelemetry** - 可观测性（全链路追踪、Metrics）
+- **Jaeger** - Trace 可视化（本地开发）
 
 ---
 
-## 七、快速开始 (Quick Start)
+## 九、快速开始 (Quick Start)
 
 ### 环境要求
 
@@ -308,7 +310,7 @@ offer_catcher/
 ### 1. 启动依赖服务
 
 ```bash
-# 启动所有依赖服务 (Qdrant, RabbitMQ, Neo4j, Redis, PostgreSQL)
+# 启动所有依赖服务 (Qdrant, RabbitMQ, Neo4j, Redis, PostgreSQL, Jaeger)
 docker-compose up -d
 
 # 验证服务启动
@@ -317,6 +319,7 @@ docker-compose up -d
 # Neo4j: http://localhost:7474 (neo4j/neo4j)
 # Redis: localhost:6379
 # PostgreSQL: localhost:5432 (root/root)
+# Jaeger (可选): http://localhost:16686
 ```
 
 ### 2. 配置环境变量
@@ -360,7 +363,55 @@ PYTHONPATH=. uv run streamlit run gateways/cli_chat.py --server.port 8501
 
 ---
 
-## 八、开发指南
+## 八、可观测性 (Observability)
+
+本项目集成 OpenTelemetry 实现全链路追踪和 Metrics 收集。
+
+### 启用方式
+
+1. 在 `.env` 中启用：
+   ```bash
+   TELEMETRY_ENABLED=true
+   OTLP_ENDPOINT=http://localhost:4317
+   ```
+
+2. 启动 Jaeger（本地开发）：
+   ```bash
+   docker-compose up -d jaeger
+   ```
+
+3. 访问 Jaeger UI：http://localhost:16686
+
+### 收集的指标
+
+| 指标 | 类型 | 说明 |
+|------|------|------|
+| `tool.calls.total` | Counter | 工具调用次数（成功/失败） |
+| `tool.calls.duration` | Histogram | 工具调用时长 (ms) |
+| `tool.calls.errors` | Counter | 工具调用错误数 |
+| `llm.tokens.input` | Counter | LLM 输入 Token 消耗 |
+| `llm.tokens.output` | Counter | LLM 输出 Token 消耗 |
+| `llm.calls.duration` | Histogram | LLM 调用时长 (ms) |
+| `vector.query.duration` | Histogram | 向量检索时长 |
+| `vector.query.results` | Histogram | 向量检索结果数 |
+
+### 装饰器使用
+
+```python
+from app.utils.telemetry import traced, traced_async
+
+@traced  # 同步函数追踪
+def search_questions(query: str) -> str:
+    ...
+
+@traced_async  # 异步函数追踪
+async def react_loop_node(state, config):
+    ...
+```
+
+---
+
+## 十、开发指南
 
 ### 运行测试
 
