@@ -12,9 +12,8 @@ from app.agents.graph.state import AgentState
 from app.agents.router import get_router_agent
 from app.agents.vision_extractor import get_vision_extractor
 from app.utils.logger import logger
-from app.utils.telemetry import traced_async, set_request_id
+from app.utils.telemetry import traced_async
 from app.llm import get_llm
-from app.skills import get_skills_prompt
 from app.utils.cache import singleton
 from app.utils.agent import load_prompt
 from app.tools.search_question_tool import search_questions
@@ -74,12 +73,12 @@ def extract_node(state: AgentState) -> AgentState:
     """提取面经节点
 
     调用 Vision Extractor 从图片/文本中提取面经题目。
+
+    Note:
+        当前默认从文本提取。图片处理由前端通过 OCR 完成，
+        OCR 结果作为文本消息传入。
     """
     user_input = state["messages"][-1].content
-
-    # 判断是图片还是文本
-    # 这里需要根据实际情况判断，简化处理：假设用户上传的是图片路径或直接文本
-    # TODO: 需要从 UI 层传入 source_type
 
     logger.info("Extracting interview questions...")
 
@@ -173,6 +172,11 @@ def store_and_mq_node(state: AgentState) -> AgentState:
     """存储并发送 MQ
 
     将提取的题目存储到 Qdrant，并根据类型决定是否发送 MQ。
+
+    Note:
+        当前实现仅存储题目，未发送 MQ。
+        完整的入库流程（包含 MQ 发送）应使用 `IngestionPipeline.ingest()`。
+        MQ 异步答案生成功能在 `app/pipelines/ingestion.py` 中实现。
     """
     from app.db.qdrant_client import get_qdrant_manager
     from app.models.enums import QuestionType
@@ -192,8 +196,8 @@ def store_and_mq_node(state: AgentState) -> AgentState:
             stored_count += 1
 
             # 分类熔断：knowledge/scenario 需要发 MQ 异步生成答案
+            # 注：MQ 发送功能请使用 IngestionPipeline.ingest() 完成
             if q.question_type in [QuestionType.KNOWLEDGE, QuestionType.SCENARIO]:
-                # TODO: 发送 MQ
                 mq_count += 1
 
         except Exception as e:

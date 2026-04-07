@@ -28,10 +28,10 @@ class ChatAgent:
     - extract_interview: 提取面经（带确认流程）
     """
 
-    def __init__(self, provider: str = "dashscope"):
+    def __init__(self, provider: str = "dashscope") -> None:
         self.provider = provider
         # 会话状态存储
-        self._session_state: dict = {}
+        self._session_state: dict[str, dict] = {}
 
     def _get_session_state(self, session_id: str = "default") -> dict:
         """获取会话状态"""
@@ -49,7 +49,7 @@ class ChatAgent:
         return self._session_state[session_id]
 
     def chat(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> str:
-        """处理用户消息（同步模式）"""
+        """处理用户消息（同步模式，使用 asyncio.run 包装）"""
         logger.info(f"ChatAgent processing: {message[:50]}...")
 
         messages = list(history) if history else []
@@ -58,7 +58,8 @@ class ChatAgent:
         session_state = self._get_session_state(session_id)
 
         try:
-            result = run_workflow(
+            # run_workflow 现在是异步函数，使用 asyncio.run 调用
+            result = asyncio.run(run_workflow(
                 messages=messages,
                 intent=session_state.get("intent"),
                 params=session_state.get("params"),
@@ -68,7 +69,8 @@ class ChatAgent:
                 current_subgraph=session_state.get("current_subgraph"),
                 last_tool_result=session_state.get("last_tool_result", ""),
                 context=session_state.get("context", {}),
-            )
+                thread_id=session_id,
+            ))
 
             self._update_session_state(session_id, result)
 
@@ -81,8 +83,12 @@ class ChatAgent:
             return f"抱歉，我遇到了问题: {e}"
 
     async def achat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> AsyncGenerator[str, None]:
-        """处理用户消息（异步流式模式）"""
-        logger.info(f"ChatAgent streaming (async): {message[:50]}...")
+        """处理用户消息（异步流式模式，带持久化）
+
+        session_id 作为 thread_id 传递给 LangGraph，
+        实现状态持久化。
+        """
+        logger.info(f"ChatAgent streaming (async): {message[:50]}..., thread_id={session_id}")
 
         messages = list(history) if history else []
         messages.append(HumanMessage(content=message))
@@ -102,6 +108,7 @@ class ChatAgent:
                 current_subgraph=session_state.get("current_subgraph"),
                 last_tool_result=session_state.get("last_tool_result", ""),
                 context=session_state.get("context", {}),
+                thread_id=session_id,  # 关键：传递 thread_id
             ):
                 event_type = event.get("type")
 

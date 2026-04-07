@@ -196,6 +196,14 @@ class Settings(BaseSettings):
             f"@{self.rabbitmq_host}:{self.rabbitmq_port}/"
         )
 
+    @property
+    def postgres_url(self) -> str:
+        """获取 PostgreSQL 连接 URL（用于 LangGraph checkpointer）"""
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
 
 @lru_cache
 def get_settings() -> Settings:
