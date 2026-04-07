@@ -17,27 +17,14 @@ st.set_page_config(
     layout="wide",
 )
 
-# 预先加载所有组件（启动时初始化）
-from app.agents.vision_extractor import get_vision_extractor
-from app.agents.scorer import get_scorer_agent
-from app.pipelines.ingestion import get_ingestion_pipeline
-from app.pipelines.retrieval import get_retrieval_pipeline
-from app.db.qdrant_client import get_qdrant_manager
-from app.db.graph_client import get_graph_client
-from app.services.clustering_service import get_clustering_service
-
-# 初始化所有组件（懒加载到 session_state）
+# 预热核心组件（启动时初始化，避免冷启动延迟）
 if "components_initialized" not in st.session_state:
     with st.spinner("正在初始化组件..."):
-        # 核心组件
-        get_vision_extractor(provider="dashscope")
-        get_scorer_agent(provider="dashscope")
-        get_ingestion_pipeline()
-        get_retrieval_pipeline()
-        get_qdrant_manager()
-        get_clustering_service()
+        from app.utils.warmup import warmup
+        warmup()
 
         # 连接图数据库
+        from app.db.graph_client import get_graph_client
         graph_client = get_graph_client()
         graph_client.connect()
 

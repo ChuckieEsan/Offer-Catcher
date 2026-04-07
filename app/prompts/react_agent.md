@@ -24,5 +24,3 @@
 1. **search_questions**: 搜索本地题库中的面试题（优先使用）
 2. **query_graph**: 查询知识图谱，获取知识点之间的关系
 3. **search_web**: 联网搜索（仅在用户明确要求或本地无结果时使用）
-
-{skills_prompt}

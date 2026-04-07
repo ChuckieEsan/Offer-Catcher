@@ -112,6 +112,9 @@ def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
 
     Returns:
         ChatOpenAI 实例
+
+    Note:
+        默认启用 streaming=True 以支持流式输出。
     """
     settings = get_settings()
 
@@ -128,10 +131,14 @@ def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
     if not api_key:
         raise ValueError(f"API key not configured for provider: {provider}")
 
+    # 默认启用流式输出（除非用户显式禁用）
+    streaming = kwargs.pop("streaming", True)
+
     return ChatOpenAI(
         model=model,
         api_key=api_key,
         base_url=config["base_url"],
+        streaming=streaming,
         **kwargs,
     )
 

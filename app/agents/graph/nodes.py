@@ -228,10 +228,10 @@ def _get_react_agent() -> CompiledStateGraph:
     """获取 ReAct Agent 实例（带缓存）"""
     llm = get_llm("dashscope", "chat")
     tools = [search_questions, search_web, query_graph]
-    skills_prompt = get_skills_prompt()
+    # skills_prompt = get_skills_prompt()
     prompt_template = load_prompt("react_agent.md")
-    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
-    return create_agent(llm, tools=tools, system_prompt=system_prompt)
+    # system_prompt = prompt_template.format(skills_prompt=skills_prompt)
+    return create_agent(llm, tools=tools, system_prompt=prompt_template)
 
 
 @traced_async
@@ -240,6 +240,10 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
     执行一步 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
     支持使用 LangGraph astream_events 流式输出。
+
+    Note:
+        使用 astream_events 而不是 astream，以支持 token 级流式输出。
+        必须将 config 传递给内部的 astream_events，这样外层才能捕获 token 流。
     """
     agent = _get_react_agent()
 
@@ -247,13 +251,30 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     messages: list[BaseMessage] = state["messages"][-10:]
 
     try:
-        # 使用 ainvoke 并传递 config，这样 workflow.astream_events 就能捕捉到 LLM token
-        result = await agent.ainvoke({"messages": messages}, config=config)
-        response = result.get("messages", [])
-        if response and hasattr(response[-1], "content"):
-            final_response = response[-1].content
+        # 使用 astream_events 并传递 config，以支持流式输出
+        final_result = None
+        async for event in agent.astream_events({"messages": messages}, config=config, version="v2"):
+            kind = event.get("event")
+            name = event.get("name")
+
+            # 捕获 Agent 完成时的最终结果
+            # 注意：create_agent 创建的 graph 名称是 "LangGraph"
+            if kind == "on_chain_end" and name == "LangGraph":
+                final_result = event.get("data", {}).get("output")
+
+        # 提取最终响应
+        if final_result:
+            if isinstance(final_result, dict):
+                response = final_result.get("messages", [])
+                if response and hasattr(response[-1], "content"):
+                    final_response = response[-1].content
+                else:
+                    final_response = str(final_result)
+            else:
+                final_response = str(final_result)
         else:
-            final_response = str(result)
+            final_response = "无响应"
+
         return {"last_tool_result": final_response}
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}")
@@ -265,9 +286,10 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 @singleton
 def _get_chat_system_prompt() -> str:
     """获取 Chat 系统 Prompt（带缓存）"""
-    skills_prompt = get_skills_prompt()
+    # skills_prompt = get_skills_prompt()
     prompt_template = load_prompt("chat_agent.md")
-    return prompt_template.format(skills_prompt=skills_prompt)
+    # return prompt_template.format(skills_prompt=skills_prompt)
+    return prompt_template
 
 
 @traced_async
@@ -276,6 +298,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
 
     处理一般对话，不调用工具。
     支持使用 LangGraph astream_events 流式输出。
+
+    Note:
+        使用 astream 而不是 ainvoke，以支持 LLM 的真正流式输出。
+        workflow.astream_events 会捕获 LLM 的 token 流。
     """
     llm = get_llm("dashscope", "chat")
     system_prompt = _get_chat_system_prompt()
@@ -284,11 +310,16 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
     messages.insert(0, SystemMessage(content=system_prompt))
 
     try:
-        # 使用 ainvoke 并传递 config
-        response = await llm.ainvoke(messages, config=config)
-        return {"last_tool_result": response.content}
+        # 使用 astream 进行流式输出，config 会被传递给外层
+        full_content = ""
+        async for chunk in llm.astream(messages, config=config):
+            if chunk.content:
+                full_content += chunk.content
+
+        return {"last_tool_result": full_content}
     except Exception as e:
         logger.error(f"Chat failed: {e}")
+        return {"last_tool_result": f"抱歉，我遇到了问题: {e}"}
         return {"last_tool_result": f"抱歉，我遇到了问题: {e}"}
 
 
