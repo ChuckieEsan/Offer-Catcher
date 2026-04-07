@@ -4,7 +4,6 @@
 """
 
 import base64
-import imghdr
 from pathlib import Path
 from typing import Optional
 from urllib.request import urlopen

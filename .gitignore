@@ -1,6 +1,8 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.web
+.states
 build/
 dist/
 wheels/
@@ -19,6 +21,22 @@ wheels/
 models/
 
 !app/models
+!backend/app/models
 
 # 备份数据
 backups
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
