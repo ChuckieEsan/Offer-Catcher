@@ -30,54 +30,34 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
   return res.data;
 }
 
-export function chatStream(
-  message: string,
-  sessionId: string,
-  history: Array<{ role: string; content: string }>,
-  onChunk: (chunk: string) => void,
-  onDone: () => void,
-  onError: (error: string) => void
-): EventSource {
-  // 使用 POST 需要用 fetch + ReadableStream，这里简化为 GET（需要后端支持）
-  // 或者使用 fetch-event-source 库
-  // 这里提供一个简化版本
-  const es = new EventSource(
-    `${API_BASE}/chat/stream?message=${encodeURIComponent(message)}&session_id=${sessionId}`
-  );
+/**
+ * 流式聊天 API
+ * 使用 Fetch API 处理 SSE 流式响应
+ */
+export async function chatStream(
+  request: ChatRequest,
+  callbacks: {
+    onChunk: (chunk: string) => void;
+    onDone: () => void;
+    onError: (error: string) => void;
+  }
+): Promise<void> {
+  const { onChunk, onDone, onError } = callbacks;
+  let doneCalled = false;
 
-  es.onmessage = (event) => {
-    const data = event.data;
-    if (data === "[DONE]") {
-      es.close();
+  const safeOnDone = () => {
+    if (!doneCalled) {
+      doneCalled = true;
       onDone();
-    } else if (data.startsWith("[ERROR]")) {
-      es.close();
-      onError(data.replace("[ERROR] ", ""));
-    } else {
-      onChunk(data);
     }
   };
 
-  es.onerror = (err) => {
-    es.close();
-    onError("Connection error");
-  };
-
-  return es;
-}
-
-// 使用 fetch 的流式聊天（推荐）
-export async function chatStreamFetch(
-  request: ChatRequest,
-  onChunk: (chunk: string) => void,
-  onDone: () => void,
-  onError: (error: string) => void
-): Promise<void> {
   try {
     const response = await fetch(`${API_BASE}/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "text/event-stream",
       },
       body: JSON.stringify(request),
     });
@@ -86,37 +66,70 @@ export async function chatStreamFetch(
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("No reader available");
+    if (!response.body) {
+      throw new Error("No response body");
     }
 
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
+      if (done) {
+        // 处理缓冲区中剩余的数据
+        if (buffer.trim()) {
+          processSSELine(buffer, onChunk, safeOnDone);
+        }
+        break;
+      }
+
+      // 将新数据追加到缓冲区
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按行分割处理
+      const lines = buffer.split("\n");
+      // 保留最后一个可能不完整的行
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6);
-          if (data === "[DONE]") {
-            onDone();
-          } else if (data.startsWith("[ERROR]")) {
-            onError(data.replace("[ERROR] ", ""));
-          } else {
-            onChunk(data);
-          }
+        if (line.trim()) {
+          processSSELine(line, onChunk, safeOnDone);
         }
       }
     }
 
-    onDone();
+    safeOnDone();
   } catch (error) {
     onError(error instanceof Error ? error.message : "Unknown error");
+  }
+}
+
+/**
+ * 处理 SSE 格式的单行数据
+ */
+function processSSELine(
+  line: string,
+  onChunk: (chunk: string) => void,
+  onDone: () => void
+): void {
+  // SSE 格式: "data: xxx"
+  if (line.startsWith("data: ")) {
+    const data = line.slice(6);
+
+    if (data === "[DONE]") {
+      onDone();
+      return;
+    }
+
+    if (data.startsWith("[ERROR]")) {
+      console.error("Stream error:", data);
+      return;
+    }
+
+    // 正常内容
+    onChunk(data);
   }
 }
 

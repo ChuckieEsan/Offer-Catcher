@@ -1,27 +1,21 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Input,
   Button,
   Card,
-  List,
   Typography,
-  Spin,
   message,
-  Upload,
-  Image,
 } from "antd";
 import {
   SendOutlined,
-  PlusOutlined,
   ClearOutlined,
-  UploadOutlined,
 } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { chatStreamFetch } from "@/lib/api";
+import { chatStream } from "@/lib/api";
 import type { Message } from "@/types";
 
 const { TextArea } = Input;
@@ -34,15 +28,18 @@ export default function ChatPage() {
   const [streamingContent, setStreamingContent] = useState("");
   const [sessionId] = useState(() => `session_${Date.now()}`);
   const listRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<boolean>(false);
+  const messageAddedRef = useRef<boolean>(false);
 
+  // 自动滚动到底部
   useEffect(() => {
-    // 滚动到底部
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages, streamingContent]);
 
-  const handleSend = async () => {
+  // 发送消息
+  const handleSend = useCallback(async () => {
     if (!input.trim() || loading) return;
 
     const userMessage: Message = { role: "user", content: input };
@@ -50,44 +47,52 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
     setStreamingContent("");
+    abortRef.current = false;
+    messageAddedRef.current = false;
 
-    try {
-      await chatStreamFetch(
-        {
-          message: input,
-          session_id: sessionId,
-          history: messages,
+    await chatStream(
+      {
+        message: input,
+        session_id: sessionId,
+        history: messages,
+      },
+      {
+        onChunk: (chunk) => {
+          if (!abortRef.current) {
+            setStreamingContent((prev) => prev + chunk);
+          }
         },
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        () => {
-          setStreamingContent((prev) => {
-            const aiMessage: Message = { role: "assistant", content: prev };
-            setMessages((msgs) => [...msgs, aiMessage]);
-            return "";
-          });
+        onDone: () => {
+          if (!messageAddedRef.current) {
+            messageAddedRef.current = true;
+            setStreamingContent((prev) => {
+              if (prev && !abortRef.current) {
+                const aiMessage: Message = { role: "assistant", content: prev };
+                setMessages((msgs) => [...msgs, aiMessage]);
+              }
+              return "";
+            });
+          }
           setLoading(false);
         },
-        (error) => {
+        onError: (error) => {
           message.error(`错误: ${error}`);
           setLoading(false);
-        }
-      );
-    } catch (error) {
-      message.error("发送失败");
-      setLoading(false);
-    }
-  };
+        },
+      }
+    );
+  }, [input, loading, messages, sessionId]);
 
+  // 清空对话
   const handleClear = () => {
     setMessages([]);
     setStreamingContent("");
   };
 
   return (
-    <MainLayout activeKey="/chat" onMenuClick={() => {}}>
+    <MainLayout>
       <div style={{ height: "calc(100vh - 160px)", display: "flex", flexDirection: "column" }}>
+        {/* 消息列表区域 */}
         <div
           ref={listRef}
           style={{
@@ -109,55 +114,64 @@ export default function ChatPage() {
               </Paragraph>
             </div>
           )}
-          <List
-            dataSource={messages}
-            renderItem={(msg) => (
-              <div
+
+          {/* 历史消息 */}
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              style={{
+                display: "flex",
+                justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                marginBottom: 16,
+              }}
+            >
+              <Card
+                size="small"
                 style={{
-                  display: "flex",
-                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                  marginBottom: 16,
+                  maxWidth: "80%",
+                  background: msg.role === "user" ? "#e6f7ff" : "#fff",
                 }}
               >
-                <Card
-                  size="small"
-                  style={{
-                    maxWidth: "80%",
-                    background: msg.role === "user" ? "#e6f7ff" : "#fff",
-                  }}
-                >
-                  {msg.role === "assistant" ? (
+                {msg.role === "assistant" ? (
+                  <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {msg.content}
                     </ReactMarkdown>
-                  ) : (
-                    <Paragraph style={{ margin: 0 }}>{msg.content}</Paragraph>
-                  )}
-                </Card>
-              </div>
-            )}
-          />
+                  </div>
+                ) : (
+                  <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.content}</Paragraph>
+                )}
+              </Card>
+            </div>
+          ))}
+
+          {/* 流式输出中的消息 */}
           {streamingContent && (
             <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
               <Card size="small" style={{ maxWidth: "80%", background: "#fff" }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {streamingContent}
-                </ReactMarkdown>
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {streamingContent}
+                  </ReactMarkdown>
+                </div>
               </Card>
             </div>
           )}
+
+          {/* 加载指示器 */}
           {loading && !streamingContent && (
-            <div style={{ textAlign: "center" }}>
-              <Spin />
+            <div style={{ textAlign: "center", padding: 20 }}>
+              <span style={{ color: "#999" }}>AI 思考中...</span>
             </div>
           )}
         </div>
 
+        {/* 输入区域 */}
         <div style={{ display: "flex", gap: 8 }}>
           <TextArea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="输入消息..."
+            placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
             autoSize={{ minRows: 1, maxRows: 4 }}
             onPressEnter={(e) => {
               if (!e.shiftKey) {
@@ -165,15 +179,63 @@ export default function ChatPage() {
                 handleSend();
               }
             }}
+            disabled={loading}
           />
-          <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={loading}>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={handleSend}
+            loading={loading}
+            disabled={!input.trim()}
+          >
             发送
           </Button>
-          <Button icon={<ClearOutlined />} onClick={handleClear}>
+          <Button icon={<ClearOutlined />} onClick={handleClear} disabled={loading}>
             清空
           </Button>
         </div>
       </div>
+
+      {/* Markdown 样式 */}
+      <style jsx global>{`
+        .markdown-body {
+          line-height: 1.6;
+        }
+        .markdown-body p {
+          margin: 0.5em 0;
+        }
+        .markdown-body ul, .markdown-body ol {
+          padding-left: 1.5em;
+          margin: 0.5em 0;
+        }
+        .markdown-body code {
+          background: #f5f5f5;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 0.9em;
+        }
+        .markdown-body pre {
+          background: #f5f5f5;
+          padding: 12px;
+          border-radius: 6px;
+          overflow-x: auto;
+          margin: 0.5em 0;
+        }
+        .markdown-body pre code {
+          background: none;
+          padding: 0;
+        }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+          margin: 0.8em 0 0.4em;
+          font-weight: 600;
+        }
+        .markdown-body blockquote {
+          border-left: 3px solid #ddd;
+          padding-left: 1em;
+          margin: 0.5em 0;
+          color: #666;
+        }
+      `}</style>
     </MainLayout>
   );
 }

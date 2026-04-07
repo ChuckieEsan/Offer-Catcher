@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Layout, Menu, Typography } from "antd";
 import {
   MessageOutlined,
@@ -49,12 +50,16 @@ const menuItems: MenuProps["items"] = [
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  activeKey: string;
-  onMenuClick: (key: string) => void;
 }
 
-export default function MainLayout({ children, activeKey, onMenuClick }: MainLayoutProps) {
+export default function MainLayout({ children }: MainLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
+    router.push(key);
+  };
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -74,7 +79,9 @@ export default function MainLayout({ children, activeKey, onMenuClick }: MainLay
             alignItems: "center",
             justifyContent: "center",
             borderBottom: "1px solid #f0f0f0",
+            cursor: "pointer",
           }}
+          onClick={() => router.push("/")}
         >
           <Title level={4} style={{ margin: 0, color: "#1890ff" }}>
             {collapsed ? "📚" : "Offer-Catcher"}
@@ -82,9 +89,9 @@ export default function MainLayout({ children, activeKey, onMenuClick }: MainLay
         </div>
         <Menu
           mode="inline"
-          selectedKeys={[activeKey]}
+          selectedKeys={[pathname]}
           items={menuItems}
-          onClick={({ key }) => onMenuClick(key)}
+          onClick={handleMenuClick}
         />
       </Sider>
       <Layout>

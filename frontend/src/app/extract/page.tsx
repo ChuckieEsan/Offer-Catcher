@@ -97,7 +97,7 @@ export default function ExtractPage() {
   };
 
   return (
-    <MainLayout activeKey="/extract" onMenuClick={() => {}}>
+    <MainLayout>
       <Title level={3}>录入面经</Title>
 
       <Tabs

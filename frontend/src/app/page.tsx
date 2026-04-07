@@ -13,7 +13,7 @@ const { Title, Paragraph } = Typography;
 
 export default function HomePage() {
   return (
-    <MainLayout activeKey="/" onMenuClick={() => {}}>
+    <MainLayout>
       <div style={{ textAlign: "center", marginBottom: 40 }}>
         <Title level={2}>欢迎使用 Offer-Catcher</Title>
         <Paragraph type="secondary">

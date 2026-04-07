@@ -70,7 +70,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <MainLayout activeKey="/dashboard" onMenuClick={() => {}}>
+      <MainLayout>
         <div style={{ textAlign: "center", padding: 100 }}>
           <Spin size="large" />
         </div>
@@ -79,7 +79,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <MainLayout activeKey="/dashboard" onMenuClick={() => {}}>
+    <MainLayout>
       <Title level={3}>数据仪表盘</Title>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
