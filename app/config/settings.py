@@ -7,10 +7,13 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 
 # Provider 基础配置
