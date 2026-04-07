@@ -3,19 +3,20 @@
 包含 router、ingest_flow、query_flow 等核心节点。
 """
 
-from typing import Optional
-
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import SystemMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
 
 from app.agents.graph.state import AgentState
 from app.agents.router import get_router_agent
 from app.agents.vision_extractor import get_vision_extractor
-from app.models.schemas import ExtractedInterview
 from app.utils.logger import logger
 from app.config.settings import create_llm
 from app.skills import get_skills_prompt
+from app.utils.agent import load_prompt
+from app.tools.search_question_tool import search_questions
+from app.tools.web_search_tool import search_web
+from app.tools.query_graph_tool import query_graph
 
 
 # ==================== State Gate Node ====================
@@ -225,28 +226,15 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     执行一步 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
     支持使用 LangGraph astream_events 流式输出。
     """
-    from langgraph.prebuilt import create_react_agent
-    from app.tools.search_question_tool import search_questions
-    from app.tools.web_search_tool import search_web
-    from app.tools.query_graph_tool import query_graph
-
     # 构建 LLM 和工具
     # 注意：MiniMax-M2.5 必须开启 thinking 模式
     llm = create_llm("dashscope", "chat")
     tools = [search_questions, search_web, query_graph]
 
+    # 加载外置的 Prompt 模板
     skills_prompt = get_skills_prompt()
-    system_prompt = f"""你是一个 AI 面试助手。
-
-你的能力：
-1. 搜索题目：当用户提问技术问题时，调用 search_questions 或 search_web
-2. 查询知识图谱：当用户询问知识点之间的关系时，调用 query_graph
-
-注意：
-- 回答要专业、准确
-- 如果不确定信息，说明不确定的原因
-
-{skills_prompt}"""
+    prompt_template = load_prompt("react_agent.md")
+    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
 
     agent = create_agent(
         llm,
@@ -255,7 +243,7 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     )
 
     # 获取最近的消息
-    messages = state["messages"][-10:]
+    messages: list[BaseMessage] = state["messages"][-10:]
 
     try:
         # 使用 ainvoke 并传递 config，这样 workflow.astream_events 就能捕捉到 LLM token
@@ -283,16 +271,12 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
 
     llm = create_llm("dashscope", "chat")
 
+    # 加载外置的 Prompt 模板
     skills_prompt = get_skills_prompt()
-    system_prompt = f"""你是一个 AI 面试助手，擅长回答面试相关问题。
+    prompt_template = load_prompt("chat_agent.md")
+    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
 
-{skills_prompt}
-
-注意：
-- 回答要专业、准确、简洁
-- 保持友好的对话风格"""
-
-    messages = state["messages"][-10:]
+    messages: list[BaseMessage] = state["messages"][-10:]
     messages.insert(0, SystemMessage(content=system_prompt))
 
     try:

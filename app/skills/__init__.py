@@ -66,7 +66,7 @@ class SkillLoader:
             logger.error(f"Failed to load skill from {skill_dir}: {e}")
             return None
 
-    def _parse_frontmatter(self, content: str) -> tuple:
+    def _parse_frontmatter(self, content: str) -> tuple[str, str]:
         """解析 YAML frontmatter"""
         lines = content.split("\n")
 

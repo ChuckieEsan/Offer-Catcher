@@ -13,16 +13,19 @@ query_entry → react_loop → END
 general_chat → END
 """
 
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator, Optional
 
+from langchain_core.messages import BaseMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
 from app.agents.graph import nodes, edges
 from app.utils.logger import logger
+from app.models.schemas import ExtractedInterview
 
 
-def create_workflow() -> Any:
+def create_workflow() -> CompiledStateGraph:
     """创建 LangGraph 工作流"""
     workflow = StateGraph(AgentState)
 
@@ -95,10 +98,10 @@ def create_workflow() -> Any:
 
 
 # 全局工作流实例
-_workflow = None
+_workflow: Optional[CompiledStateGraph] = None
 
 
-def get_workflow() -> Any:
+def get_workflow() -> CompiledStateGraph:
     """获取工作流实例（单例）"""
     global _workflow
     if _workflow is None:
@@ -107,16 +110,16 @@ def get_workflow() -> Any:
 
 
 def run_workflow(
-    messages: list,
+    messages: list[BaseMessage],
     intent: str = None,
     params: dict = None,
-    extracted_interview=None,
+    extracted_interview: Optional[ExtractedInterview] = None,
     pending_confirmation: bool = False,
     confirmed_data: bool = False,
-    current_subgraph: str = None,
+    current_subgraph: Optional[str] = None,
     last_tool_result: str = "",
     context: dict = None,
-) -> dict:
+) -> AgentState:
     """运行工作流（同步模式）"""
     initial_state: AgentState = {
         "messages": messages,
@@ -137,13 +140,13 @@ def run_workflow(
 
 
 async def astream_workflow(
-    messages: list,
+    messages: list[BaseMessage],
     intent: str = None,
     params: dict = None,
-    extracted_interview=None,
+    extracted_interview: Optional[ExtractedInterview] = None,
     pending_confirmation: bool = False,
     confirmed_data: bool = False,
-    current_subgraph: str = None,
+    current_subgraph: Optional[str] = None,
     last_tool_result: str = "",
     context: dict = None,
 ) -> AsyncGenerator[dict, None]:
