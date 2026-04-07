@@ -15,7 +15,7 @@ from app.utils.logger import logger
 from app.utils.telemetry import traced_async
 from app.llm import get_llm
 from app.utils.cache import singleton
-from app.utils.agent import load_prompt
+from app.utils.agent import load_prompt_template
 from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph
@@ -233,9 +233,11 @@ def _get_react_agent() -> CompiledStateGraph:
     llm = get_llm("dashscope", "chat")
     tools = [search_questions, search_web, query_graph]
     # skills_prompt = get_skills_prompt()
-    prompt_template = load_prompt("react_agent.md")
-    # system_prompt = prompt_template.format(skills_prompt=skills_prompt)
-    return create_agent(llm, tools=tools, system_prompt=prompt_template)
+    prompt = load_prompt_template("react_agent.md")
+    # 提取原始模板字符串（create_agent 接受 str）
+    system_prompt = prompt.messages[0].prompt.template
+    # system_prompt = system_prompt.format(skills_prompt=skills_prompt)
+    return create_agent(llm, tools=tools, system_prompt=system_prompt)
 
 
 @traced_async
@@ -291,9 +293,11 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 def _get_chat_system_prompt() -> str:
     """获取 Chat 系统 Prompt（带缓存）"""
     # skills_prompt = get_skills_prompt()
-    prompt_template = load_prompt("chat_agent.md")
-    # return prompt_template.format(skills_prompt=skills_prompt)
-    return prompt_template
+    prompt = load_prompt_template("chat_agent.md")
+    # 提取原始模板字符串
+    system_prompt = prompt.messages[0].prompt.template
+    # return system_prompt.format(skills_prompt=skills_prompt)
+    return system_prompt
 
 
 @traced_async
@@ -323,7 +327,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
         return {"last_tool_result": full_content}
     except Exception as e:
         logger.error(f"Chat failed: {e}")
-        return {"last_tool_result": f"抱歉，我遇到了问题: {e}"}
         return {"last_tool_result": f"抱歉，我遇到了问题: {e}"}
 
 

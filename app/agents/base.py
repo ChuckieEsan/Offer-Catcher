@@ -6,12 +6,12 @@
 from pathlib import Path
 from typing import Any, Generic, Optional, TypeVar
 
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.llm import create_llm
-from app.models.schemas import RouterResult, ScoreResult
 from app.utils.logger import logger
-from app.utils.agent import load_prompt
+from app.utils.agent import load_prompt_template
 from app.utils.retry import retry
 
 # 泛型：Agent 返回的结果类型
@@ -24,7 +24,7 @@ class BaseAgent(Generic[T]):
     提供以下通用能力：
     - LLM 初始化（支持多 Provider）
     - Structured Output 支持
-    - Prompt 模板加载
+    - Prompt 模板加载（支持 jinja2 格式，避免 JSON 转义）
     - 单例模式
     - 重试机制（默认启用）
     """
@@ -42,7 +42,10 @@ class BaseAgent(Generic[T]):
         self.provider = provider
         self._llm: Optional[ChatOpenAI] = None
         self._structured_llm: Optional[ChatOpenAI] = None
-        self.prompt_template = load_prompt(self._prompt_filename) if self._prompt_filename else ""
+        # 加载 prompt 模板（优先使用 ChatPromptTemplate）
+        self._prompt_template: Optional[ChatPromptTemplate] = None
+        if self._prompt_filename:
+            self._prompt_template = load_prompt_template(self._prompt_filename)
         # 子类可覆盖此属性来传递额外的 LLM 参数
         self._llm_kwargs: dict = {}
         logger.info(f"{self.__class__.__name__} initialized with provider: {provider}")
@@ -79,18 +82,29 @@ class BaseAgent(Generic[T]):
     def _build_prompt(self, **kwargs: Any) -> str:
         """构建 Prompt
 
+        使用 jinja2 格式模板，避免 JSON 大括号转义问题。
+
         Args:
             **kwargs: 格式化参数
 
         Returns:
             格式化后的 Prompt
         """
-        if not self.prompt_template:
+        if self._prompt_template is None:
             return ""
 
         # 过滤掉 None 值
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        return self.prompt_template.format(**filtered_kwargs)
+
+        # 使用 ChatPromptTemplate.format() 方法
+        formatted = self._prompt_template.format(**filtered_kwargs)
+
+        # ChatPromptTemplate.format() 返回的是完整的消息字符串
+        # 格式为 "System: ...\nHuman: ..."
+        # 我们只需要 system 消息的内容
+        if formatted.startswith("System: "):
+            return formatted[8:]  # 移除 "System: " 前缀
+        return formatted
 
     @retry(max_retries=3, delay=1.0, backoff=2.0)
     def invoke_llm(self, prompt: str) -> str:

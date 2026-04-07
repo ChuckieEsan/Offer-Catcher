@@ -11,7 +11,7 @@ from app.db.qdrant_client import get_qdrant_manager
 from app.models.enums import MasteryLevel
 from app.models.schemas import ScoreResult
 from app.utils.logger import logger
-from app.utils.agent import load_prompt, parse_json_response
+from app.utils.agent import parse_json_response
 
 
 def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel:
@@ -73,8 +73,8 @@ class ScorerAgent(BaseAgent[ScoreResult]):
         company: str,
         position: str,
     ) -> str:
-        """构建 Prompt"""
-        return self.prompt_template.format(
+        """构建 Prompt（调用父类方法）"""
+        return super()._build_prompt(
             question_text=question_text,
             standard_answer=standard_answer or "无标准答案",
             user_answer=user_answer,
