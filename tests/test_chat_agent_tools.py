@@ -10,12 +10,12 @@
 import pytest
 
 from app.agents.chat_agent import (
-    search_questions,
-    search_web,
-    query_graph,
     ChatAgent,
     get_chat_agent,
 )
+from app.tools.search_question_tool import search_questions
+from app.tools.web_search_tool import search_web
+from app.tools.query_graph_tool import query_graph
 from app.tools.embedding_tool import get_embedding_tool
 
 
@@ -83,20 +83,6 @@ class TestQueryGraphTool:
 
 class TestChatAgent:
     """Chat Agent 集成测试"""
-
-    def test_agent_has_tools(self):
-        """测试 Agent 包含所需工具"""
-        agent = ChatAgent()
-        tool_names = [t.name for t in agent._tools]
-
-        # 验证核心工具存在
-        assert "search_questions" in tool_names
-        assert "search_web" in tool_names
-        assert "query_graph" in tool_names
-
-        print(f"\n✓ Agent 工具数量: {len(agent._tools)}")
-        for name in tool_names:
-            print(f"  - {name}")
 
     def test_get_chat_agent_singleton(self):
         """测试单例获取"""

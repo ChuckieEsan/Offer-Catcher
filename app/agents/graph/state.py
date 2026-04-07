@@ -11,8 +11,10 @@ from typing_extensions import TypedDict
 from app.models.schemas import ExtractedInterview
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     """LangGraph Agent 状态
+
+    使用 total=False 支持 partial update，节点可以只返回局部状态。
 
     Attributes:
         messages: 对话历史（整个会话）
@@ -24,6 +26,7 @@ class AgentState(TypedDict):
         current_subgraph: 当前子图：None/ingest/query
         last_tool_result: 上次工具调用结果
         context: 全局上下文（company, position 等）
+        error: 错误信息
     """
 
     # 对话历史
@@ -46,6 +49,9 @@ class AgentState(TypedDict):
 
     # 全局上下文
     context: dict
+
+    # 错误信息
+    error: Optional[str]
 
 
 __all__ = ["AgentState"]

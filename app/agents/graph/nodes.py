@@ -5,7 +5,9 @@
 
 from typing import Optional
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langchain.agents import create_agent
 
 from app.agents.graph.state import AgentState
 from app.agents.router import get_router_agent
@@ -14,6 +16,18 @@ from app.models.schemas import ExtractedInterview
 from app.utils.logger import logger
 from app.config.settings import create_llm
 from app.skills import get_skills_prompt
+
+
+# ==================== State Gate Node ====================
+
+def state_gate_node(state: AgentState) -> AgentState:
+    """状态门节点
+
+    这个节点不做任何事情，只是作为入口点。
+    实际路由逻辑在 edges.state_gate 中处理。
+    """
+    # 直接返回空更新，让流程继续到 router
+    return {}
 
 
 # ==================== Router Node ====================
@@ -30,17 +44,21 @@ def router_node(state: AgentState) -> AgentState:
     router = get_router_agent()
     result = router.route(user_input)
 
-    # 更新状态
+    # 获取当前上下文
+    current_context = dict(state.get("context", {}))
+
+    # 如果识别到公司/岗位，更新上下文（显式返回）
+    if result.params.get("company"):
+        current_context["company"] = result.params["company"]
+    if result.params.get("position"):
+        current_context["position"] = result.params["position"]
+
+    # 返回完整的状态更新
     new_state: AgentState = {
         "intent": result.intent.value,
         "params": result.params,
+        "context": current_context,
     }
-
-    # 如果识别到公司/岗位，更新全局上下文
-    if result.params.get("company"):
-        state["context"]["company"] = result.params["company"]
-    if result.params.get("position"):
-        state["context"]["position"] = result.params["position"]
 
     logger.info(f"Router result: intent={result.intent.value}, params={result.params}")
     return new_state
@@ -70,15 +88,17 @@ def extract_node(state: AgentState) -> AgentState:
         result = extractor.extract(source=user_input, source_type="text")
 
         # 更新上下文（公司/岗位）
+        new_context = dict(state.get("context", {}))
         if result.company:
-            state["context"]["company"] = result.company
+            new_context["company"] = result.company
         if result.position:
-            state["context"]["position"] = result.position
+            new_context["position"] = result.position
 
         return {
             "extracted_interview": result,
             "pending_confirmation": True,
             "current_subgraph": "ingest",
+            "context": new_context,
         }
     except Exception as e:
         logger.error(f"Extract failed: {e}")
@@ -199,13 +219,13 @@ def query_node(state: AgentState) -> AgentState:
     return {"current_subgraph": "query"}
 
 
-def react_loop_node(state: AgentState) -> AgentState:
+async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
 
     执行一步 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
-    使用新版 LangChain create_agent API。
+    支持使用 LangGraph astream_events 流式输出。
     """
-    from langchain.agents import create_agent
+    from langgraph.prebuilt import create_react_agent
     from app.tools.search_question_tool import search_questions
     from app.tools.web_search_tool import search_web
     from app.tools.query_graph_tool import query_graph
@@ -228,9 +248,8 @@ def react_loop_node(state: AgentState) -> AgentState:
 
 {skills_prompt}"""
 
-    # 使用新版 create_agent API
     agent = create_agent(
-        model=llm,
+        llm,
         tools=tools,
         system_prompt=system_prompt,
     )
@@ -239,9 +258,8 @@ def react_loop_node(state: AgentState) -> AgentState:
     messages = state["messages"][-10:]
 
     try:
-        # 调用 agent
-        result = agent.invoke({"messages": messages})
-        # result 是 AgentState，包含 messages
+        # 使用 ainvoke 并传递 config，这样 workflow.astream_events 就能捕捉到 LLM token
+        result = await agent.ainvoke({"messages": messages}, config=config)
         response = result.get("messages", [])
         if response and hasattr(response[-1], "content"):
             final_response = response[-1].content
@@ -255,12 +273,12 @@ def react_loop_node(state: AgentState) -> AgentState:
 
 # ==================== General Chat Node ====================
 
-def chat_node(state: AgentState) -> AgentState:
+async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """闲聊节点
 
     处理一般对话，不调用工具。
+    支持使用 LangGraph astream_events 流式输出。
     """
-    from langchain_openai import ChatOpenAI
     from app.config.settings import create_llm
 
     llm = create_llm("dashscope", "chat")
@@ -275,10 +293,11 @@ def chat_node(state: AgentState) -> AgentState:
 - 保持友好的对话风格"""
 
     messages = state["messages"][-10:]
-    messages.insert(0, HumanMessage(content=system_prompt))
+    messages.insert(0, SystemMessage(content=system_prompt))
 
     try:
-        response = llm.invoke(messages)
+        # 使用 ainvoke 并传递 config
+        response = await llm.ainvoke(messages, config=config)
         return {"last_tool_result": response.content}
     except Exception as e:
         logger.error(f"Chat failed: {e}")
@@ -286,6 +305,7 @@ def chat_node(state: AgentState) -> AgentState:
 
 
 __all__ = [
+    "state_gate_node",
     "router_node",
     "extract_node",
     "confirm_node",

@@ -6,11 +6,15 @@
 - 用户确认节点
 """
 
-from typing import Optional, Generator
+from typing import Optional, Generator, AsyncGenerator
+import queue
+import threading
+import asyncio
 
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
-from app.agents.graph import run_workflow, stream_workflow
+from app.agents.graph import run_workflow
+from app.agents.graph.workflow import astream_workflow
 from app.utils.logger import logger
 
 
@@ -45,23 +49,12 @@ class ChatAgent:
         return self._session_state[session_id]
 
     def chat(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> str:
-        """处理用户消息（同步模式）
-
-        Args:
-            message: 用户消息
-            history: 对话历史 (LangChain BaseMessage 列表)
-            session_id: 会话 ID
-
-        Returns:
-            Agent 回复
-        """
+        """处理用户消息（同步模式）"""
         logger.info(f"ChatAgent processing: {message[:50]}...")
 
-        # 构建消息列表
         messages = list(history) if history else []
         messages.append(HumanMessage(content=message))
 
-        # 获取会话状态
         session_state = self._get_session_state(session_id)
 
         try:
@@ -77,44 +70,29 @@ class ChatAgent:
                 context=session_state.get("context", {}),
             )
 
-            # 更新会话状态
             self._update_session_state(session_id, result)
 
             response = result.get("last_tool_result", "")
             logger.info(f"ChatAgent response: {response[:50]}...")
-
-            # 更新历史
-            messages.append(AIMessage(content=response))
 
             return response
         except Exception as e:
             logger.error(f"ChatAgent error: {e}")
             return f"抱歉，我遇到了问题: {e}"
 
-    def chat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> Generator[str, None, None]:
-        """处理用户消息（流式模式）
+    async def achat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> AsyncGenerator[str, None]:
+        """处理用户消息（异步流式模式）"""
+        logger.info(f"ChatAgent streaming (async): {message[:50]}...")
 
-        Args:
-            message: 用户消息
-            history: 对话历史 (LangChain BaseMessage 列表)
-            session_id: 会话 ID
-
-        Yields:
-            Agent 回复的片段
-        """
-        logger.info(f"ChatAgent streaming: {message[:50]}...")
-
-        # 构建消息列表
         messages = list(history) if history else []
         messages.append(HumanMessage(content=message))
 
-        # 获取会话状态
         session_state = self._get_session_state(session_id)
 
         try:
-            full_response = ""
+            final_state = None
 
-            for event in stream_workflow(
+            async for event in astream_workflow(
                 messages=messages,
                 intent=session_state.get("intent"),
                 params=session_state.get("params"),
@@ -125,39 +103,86 @@ class ChatAgent:
                 last_tool_result=session_state.get("last_tool_result", ""),
                 context=session_state.get("context", {}),
             ):
-                node = event.get("node")
-                output = event.get("output", {})
+                event_type = event.get("type")
 
-                # 只输出最终结果节点的内容
-                if node in ["confirm", "react_loop", "general_chat", "store_and_mq"]:
-                    content = output.get("last_tool_result", "")
+                if event_type == "token":
+                    # LLM token 级流式输出
+                    content = event.get("content", "")
                     if content:
-                        # 计算新增内容
-                        new_content = content[len(full_response):]
-                        full_response = content
-                        if new_content:
-                            yield new_content
+                        yield content
 
-                # 检查是否在等待确认
-                if output.get("pending_confirmation"):
-                    session_state["pending_confirmation"] = True
+                elif event_type == "update":
+                    # 非 LLM 节点的状态更新
+                    content = event.get("content", "")
+                    if content:
+                        # 确保独立显示在前面，如果需要换行可以用 yield content + "\n\n"
+                        yield f"[{event.get('node', '系统')}] {content}\n\n"
+                    final_state = event.get("state")
+
+                elif event_type == "final":
+                    # 最终结果状态记录
+                    final_state = event.get("state", final_state)
+
+                elif event_type == "error":
+                    yield f"\n抱歉，我遇到了问题: {event.get('content')}"
 
             # 更新会话状态
-            session_state["last_tool_result"] = full_response
-            session_state["intent"] = "idle"
-            session_state["current_subgraph"] = None
+            if final_state:
+                self._update_session_state(session_id, final_state)
 
-            logger.info(f"ChatAgent streaming completed: {full_response[:50]}...")
+            logger.info("ChatAgent streaming completed")
 
         except Exception as e:
             logger.error(f"ChatAgent streaming error: {e}")
-            yield f"抱歉，我遇到了问题: {e}"
+            yield f"\n抱歉，我遇到了问题: {e}"
+
+    def chat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> Generator[str, None, None]:
+        """处理用户消息（同步流式模式的 Wrapper）
+        
+        专门适配如 Streamlit 等同步渲染框架，通过独立的后台线程事件循环运行异步的
+        achat_streaming 生成器，并将产出的 chunk 通过线程安全的 queue 推送过来。
+        """
+        q = queue.Queue()
+
+        async def run_async():
+            try:
+                async for chunk in self.achat_streaming(message, history, session_id):
+                    q.put(("chunk", chunk))
+            except Exception as e:
+                q.put(("error", e))
+            finally:
+                q.put(("done", None))
+
+        def thread_worker():
+            # 创建并设置当前线程的新事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(run_async())
+            finally:
+                loop.close()
+
+        # 启动后台线程执行流式调用
+        t = threading.Thread(target=thread_worker, daemon=True)
+        t.start()
+
+        # 在主线程中同步消费队列并 yield
+        while True:
+            item_type, item = q.get()
+            if item_type == "done":
+                break
+            elif item_type == "error":
+                # 返回错误或抛出异常
+                logger.error(f"Error caught in synchronous stream wrapper: {item}")
+                yield f"\n[Stream Error] {str(item)}"
+                break
+            elif item_type == "chunk":
+                yield item
 
     def _update_session_state(self, session_id: str, result: dict):
         """更新会话状态"""
         session_state = self._session_state[session_id]
 
-        # 更新关键状态
         if "intent" in result:
             session_state["intent"] = result["intent"]
         if "params" in result:

@@ -13,7 +13,7 @@
 4. **防御性编程**：在调用 LLM API、Qdrant 数据库和 RabbitMQ 时，必须包含 `try-except` 块，并在合适的地方（如 RabbitMQ Consumer）正确处理 `Nack` 或失败重试逻辑。
 5. **小步快跑（当前阶段限制）**：本项目采用敏捷开发。**目前已完成 Phase 1（核心数据流与异步答题阶段）**，请聚焦于 Phase 2 内容（图数据库、打分 Agent），不要提前实现 Phase 3 的内容（如微信接入、Redis 缓存）。
 6. **不要在业务代码中使用 Emoji 字符**。在开发 streamlit 前端时，可以适当使用 Emoji。
-7. **软件开发设计应当符合 Langchain/LangGraph 的最佳实践**，你需要尽可能少的重复造轮子，尽可能复用 Langchain 已有的组件
+7. **软件开发设计应当符合 Langchain/LangGraph 的最佳实践**，你需要尽可能少的重复造轮子，尽可能复用 Langchain 已有的组件。你可以使用 doc-langchain 工具来查阅相关 API
 8. **如果发生重构，不要进行向后兼容，你需要直接重构**
 9. **禁止在测试用例中写生产数据库，只允许读**
 10. **Agent 的消息必须是 Langchain 的消息，如 AIMessage, HumanMessage, BaseMessage**，不允许自定义字典结构

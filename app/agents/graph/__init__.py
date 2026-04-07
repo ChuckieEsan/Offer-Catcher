@@ -10,7 +10,7 @@ from app.agents.graph.workflow import (
     create_workflow,
     get_workflow,
     run_workflow,
-    stream_workflow,
+    astream_workflow,
 )
 
 __all__ = [
@@ -20,5 +20,5 @@ __all__ = [
     "create_workflow",
     "get_workflow",
     "run_workflow",
-    "stream_workflow",
+    "astream_workflow",
 ]

@@ -7,20 +7,30 @@ from app.agents.graph.state import AgentState
 from app.utils.logger import logger
 
 
+def state_gate(state: AgentState) -> str:
+    """状态门节点：优先检查 pending_confirmation
+
+    如果在等待用户确认，优先处理确认流程，避免被 router 误判。
+    """
+    pending_confirmation = state.get("pending_confirmation", False)
+    current_subgraph = state.get("current_subgraph")
+
+    logger.info(f"State gate: pending_confirmation={pending_confirmation}, current_subgraph={current_subgraph}")
+
+    if pending_confirmation and current_subgraph == "ingest":
+        return "handle_confirmation"
+    else:
+        return "router"
+
+
 def route_by_intent(state: AgentState) -> str:
     """根据意图路由到不同分支
 
     Returns:
-        分支名称：ingest / query / general
+        分支名称：ingest_flow / query_flow / general_chat
     """
     intent = state.get("intent", "general")
     logger.info(f"Routing by intent: {intent}")
-
-    # 检查是否有未完成的子图任务
-    if state.get("pending_confirmation"):
-        # 在等待确认时，优先处理用户对确认的回复
-        if state.get("current_subgraph") == "ingest":
-            return "handle_confirmation"
 
     # 根据意图路由
     if intent == "ingest":
@@ -84,6 +94,7 @@ def should_exit_subgraph(state: AgentState) -> bool:
 
 
 __all__ = [
+    "state_gate",
     "route_by_intent",
     "route_from_ingest",
     "route_by_confirmation",
