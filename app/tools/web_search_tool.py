@@ -202,7 +202,10 @@ from langchain_core.tools import tool
 
 @tool
 def search_web(query: str, max_results: int = 3) -> str:
-    """使用 Web 搜索获取最新信息
+    """联网搜索获取最新信息（仅在用户明确要求或本地题库无结果时使用）
+
+    注意：这是一个联网搜索工具，会访问互联网。
+    默认情况下应优先使用本地题库 search_questions。
 
     Args:
         query: 搜索关键词

@@ -8,7 +8,7 @@ from typing import Any, Generic, Optional, TypeVar
 
 from langchain_openai import ChatOpenAI
 
-from app.config.settings import create_llm
+from app.llm import create_llm
 from app.models.schemas import RouterResult, ScoreResult
 from app.utils.logger import logger
 from app.utils.agent import load_prompt

@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from app.agents.base import BaseAgent
-from app.config.settings import create_llm
+from app.llm import create_llm
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 from app.utils.image import build_vision_message_content

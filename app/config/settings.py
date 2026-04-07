@@ -6,46 +6,11 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
-from dotenv import load_dotenv
-
-from langchain_openai import ChatOpenAI
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
-
-
-# Provider 基础配置
-PROVIDERS_CONFIG = {
-    "siliconflow": {
-        "base_url": "https://api.siliconflow.cn/v1",
-        "models": {
-            "chat": "deepseek-chat",
-            "vision": "Qwen/Qwen3-VL-8B-Instruct",
-        }
-    },
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "models": {
-            "chat": "gpt-4o",
-            "vision": "gpt-4o",
-        }
-    },
-    "deepseek": {
-        "base_url": "https://api.deepseek.com",
-        "models": {
-            "chat": "deepseek-chat",
-        }
-    },
-    "dashscope": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "models": {
-            "chat": "qwen3.6-plus",
-            "vision": "qwen3.6-plus",
-        }
-    },
-}
 
 
 class Settings(BaseSettings):
@@ -53,21 +18,6 @@ class Settings(BaseSettings):
 
     所有配置项均可通过环境变量覆盖。
     支持 .env 文件自动加载。
-
-    Environment Variables:
-        SILICONFLOW_API_KEY: SiliconFlow API Key
-        OPENAI_API_KEY: OpenAI API Key
-        DEEPSEEK_API_KEY: DeepSeek API Key
-        DASHSCOPE_API_KEY: 阿里云百炼 DashScope API Key
-        TAVILY_API_KEY: Tavily Web Search API Key
-        QDRANT_HOST: Qdrant 服务地址（可选，默认 localhost）
-        QDRANT_PORT: Qdrant 端口（可选，默认 6333）
-        QDRANT_COLLECTION: Qdrant 集合名称（可选，默认 questions）
-        RABBITMQ_HOST: RabbitMQ 服务地址（可选，默认 localhost）
-        RABBITMQ_PORT: RabbitMQ 端口（可选，默认 5672）
-        RABBITMQ_USER: RabbitMQ 用户名（可选，默认 guest）
-        RABBITMQ_PASSWORD: RabbitMQ 密码（可选，默认 guest）
-        RABBITMQ_QUEUE: 队列名称（可选，默认 answer_tasks）
     """
 
     model_config = SettingsConfigDict(
@@ -236,48 +186,6 @@ class Settings(BaseSettings):
             f"@{self.rabbitmq_host}:{self.rabbitmq_port}/"
         )
 
-    def get_provider_config(self, provider: str) -> dict:
-        """获取指定 provider 的完整配置
-
-        Args:
-            provider: provider 名称
-
-        Returns:
-            包含 api_key, base_url, models 的字典
-        """
-        if provider not in PROVIDERS_CONFIG:
-            raise ValueError(f"Unknown provider: {provider}")
-
-        config = PROVIDERS_CONFIG[provider].copy()
-        config["api_key"] = getattr(self, f"{provider}_api_key")
-        return config
-
-
-def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
-    """工厂函数：创建 LLM 实例
-
-    Args:
-        provider: provider 名称 (siliconflow/openai/deepseek)
-        model_type: 模型类型 ("chat" 或 "vision")
-        **kwargs: 其他传递给 ChatOpenAI 的参数
-
-    Returns:
-        ChatOpenAI 实例
-    """
-    settings = get_settings()
-    config = settings.get_provider_config(provider)
-
-    model = config["models"].get(model_type)
-    if not model:
-        raise ValueError(f"Provider {provider} does not support model type: {model_type}")
-
-    return ChatOpenAI(
-        model=model,
-        api_key=config["api_key"],
-        base_url=config["base_url"],
-        **kwargs,
-    )
-
 
 @lru_cache
 def get_settings() -> Settings:
@@ -286,3 +194,6 @@ def get_settings() -> Settings:
     使用 LRU 缓存确保配置对象在整个应用生命周期内只加载一次。
     """
     return Settings()
+
+
+__all__ = ["Settings", "get_settings"]

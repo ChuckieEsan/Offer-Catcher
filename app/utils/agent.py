@@ -7,11 +7,13 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from app.utils.cache import cached
 from app.utils.logger import logger
 
 
+@cached
 def load_prompt(prompt_filename: str) -> str:
-    """加载 Prompt 模板
+    """加载 Prompt 模板（带缓存）
 
     Args:
         prompt_filename: Prompt 文件名（如 "router.md"）

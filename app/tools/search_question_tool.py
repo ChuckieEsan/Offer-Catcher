@@ -11,12 +11,15 @@ from app.db.qdrant_client import get_qdrant_manager
 
 @tool
 def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
-    """搜索题目库中的相关面试题
+    """搜索本地题库中的面试题（默认首选工具）
+
+    从本地向量数据库检索面试题目，无需联网。
+    应优先使用此工具进行题目检索。
 
     Args:
         query: 搜索关键词
-        company: 公司名称（可选）
-        position: 岗位名称（可选）
+        company: 公司名称（可选，用于精确筛选）
+        position: 岗位名称（可选，用于精确筛选）
         k: 返回数量，默认 5
 
     Returns:

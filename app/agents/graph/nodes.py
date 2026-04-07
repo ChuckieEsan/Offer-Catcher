@@ -6,13 +6,15 @@
 from langchain_core.messages import SystemMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
+from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
 from app.agents.router import get_router_agent
 from app.agents.vision_extractor import get_vision_extractor
 from app.utils.logger import logger
-from app.config.settings import create_llm
+from app.llm import get_llm
 from app.skills import get_skills_prompt
+from app.utils.cache import singleton
 from app.utils.agent import load_prompt
 from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
@@ -220,27 +222,24 @@ def query_node(state: AgentState) -> AgentState:
     return {"current_subgraph": "query"}
 
 
+@singleton
+def _get_react_agent() -> CompiledStateGraph:
+    """获取 ReAct Agent 实例（带缓存）"""
+    llm = get_llm("dashscope", "chat")
+    tools = [search_questions, search_web, query_graph]
+    skills_prompt = get_skills_prompt()
+    prompt_template = load_prompt("react_agent.md")
+    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
+    return create_agent(llm, tools=tools, system_prompt=system_prompt)
+
+
 async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
 
     执行一步 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
     支持使用 LangGraph astream_events 流式输出。
     """
-    # 构建 LLM 和工具
-    # 注意：MiniMax-M2.5 必须开启 thinking 模式
-    llm = create_llm("dashscope", "chat")
-    tools = [search_questions, search_web, query_graph]
-
-    # 加载外置的 Prompt 模板
-    skills_prompt = get_skills_prompt()
-    prompt_template = load_prompt("react_agent.md")
-    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
-
-    agent = create_agent(
-        llm,
-        tools=tools,
-        system_prompt=system_prompt,
-    )
+    agent = _get_react_agent()
 
     # 获取最近的消息
     messages: list[BaseMessage] = state["messages"][-10:]
@@ -261,20 +260,22 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
 # ==================== General Chat Node ====================
 
+@singleton
+def _get_chat_system_prompt() -> str:
+    """获取 Chat 系统 Prompt（带缓存）"""
+    skills_prompt = get_skills_prompt()
+    prompt_template = load_prompt("chat_agent.md")
+    return prompt_template.format(skills_prompt=skills_prompt)
+
+
 async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """闲聊节点
 
     处理一般对话，不调用工具。
     支持使用 LangGraph astream_events 流式输出。
     """
-    from app.config.settings import create_llm
-
-    llm = create_llm("dashscope", "chat")
-
-    # 加载外置的 Prompt 模板
-    skills_prompt = get_skills_prompt()
-    prompt_template = load_prompt("chat_agent.md")
-    system_prompt = prompt_template.format(skills_prompt=skills_prompt)
+    llm = get_llm("dashscope", "chat")
+    system_prompt = _get_chat_system_prompt()
 
     messages: list[BaseMessage] = state["messages"][-10:]
     messages.insert(0, SystemMessage(content=system_prompt))
