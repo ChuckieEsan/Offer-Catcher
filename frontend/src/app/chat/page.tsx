@@ -363,10 +363,21 @@ export default function ChatPage() {
                               // 内容为空时显示思考中
                               msg.content === "" ? (
                                 <ThinkingIndicator />
-                              ) : (
+                              ) : isStreaming && !isCompleted ? (
+                                // Streaming 中：使用 XMarkdown 流式渲染
                                 <XMarkdown
                                   content={msg.content}
-                                  streaming={isStreaming && !isCompleted}
+                                  streaming={{
+                                    hasNextChunk: true,
+                                    enableAnimation: true,
+                                    tail: true,
+                                  }}
+                                  className="markdown-body"
+                                />
+                              ) : (
+                                // 已完成：不传 streaming 配置
+                                <XMarkdown
+                                  content={msg.content}
                                   className="markdown-body"
                                 />
                               )
