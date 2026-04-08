@@ -30,7 +30,7 @@ def load_prompt_template(prompt_filename: str) -> ChatPromptTemplate:
         template = load_prompt_template("router.md")
         formatted = template.format(user_input="你好")
     """
-    prompt_path = Path(__file__).parent.parent / "prompts" / prompt_filename
+    prompt_path = Path(__file__).parent.parent / "agents" / "prompts" / prompt_filename
 
     if not prompt_path.exists():
         logger.warning(f"Prompt file not found: {prompt_path}")

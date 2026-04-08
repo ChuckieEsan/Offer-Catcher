@@ -26,7 +26,7 @@ class SkillLoader:
 
     def __init__(self, skills_dir: str = None):
         if skills_dir is None:
-            # 默认使用 app/skills 目录
+            # 默认使用 app/agents/skills 目录
             base_dir = Path(__file__).parent.parent
             skills_dir = base_dir / "skills"
         self.skills_dir = Path(skills_dir)
