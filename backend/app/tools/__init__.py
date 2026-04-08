@@ -6,12 +6,10 @@
 from app.tools.embedding_tool import EmbeddingTool, get_embedding_tool
 from app.tools.web_search_tool import WebSearchTool, get_web_search_tool, WebSearchResult
 from app.tools.memory_tools import (
+    get_user_memory,
     save_user_preferences,
     save_user_profile,
     update_learning_progress,
-    get_user_preferences,
-    get_user_profile,
-    get_learning_progress,
     clear_user_memory,
     UserContext,
 )
@@ -25,12 +23,10 @@ __all__ = [
     "get_web_search_tool",
     "WebSearchResult",
     # Memory Tools
+    "get_user_memory",
     "save_user_preferences",
     "save_user_profile",
     "update_learning_progress",
-    "get_user_preferences",
-    "get_user_profile",
-    "get_learning_progress",
     "clear_user_memory",
     "UserContext",
 ]

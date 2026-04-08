@@ -20,12 +20,10 @@ from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph
 from app.tools.memory_tools import (
+    get_user_memory,
     save_user_preferences,
     save_user_profile,
     update_learning_progress,
-    get_user_preferences,
-    get_user_profile,
-    get_learning_progress,
     clear_user_memory,
     UserContext,
 )
@@ -249,12 +247,10 @@ def _get_react_agent() -> CompiledStateGraph:
 
     # 长期记忆工具
     tools.extend([
+        get_user_memory,
         save_user_preferences,
         save_user_profile,
         update_learning_progress,
-        get_user_preferences,
-        get_user_profile,
-        get_learning_progress,
         clear_user_memory,
     ])
 

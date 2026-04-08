@@ -2,6 +2,10 @@
 
 提供用户画像、偏好设置、学习进度的读写能力。
 使用 ToolRuntime 注入 user_id，支持多用户场景。
+
+工具设计：
+- get_user_memory: 聚合读取工具，一次性返回所有用户信息
+- save_*: 独立写入工具，按需调用
 """
 
 from typing import Optional, Annotated, Any
@@ -41,6 +45,8 @@ def _parse_list_field(value: Any) -> list[str]:
     return [str(value)]
 
 
+# ==================== 输入模型 ====================
+
 class SaveUserProfileInput(BaseModel):
     """save_user_profile 工具的输入参数"""
     preferred_companies: Optional[list[str]] = Field(default=None, description="目标公司列表")
@@ -79,6 +85,64 @@ class UpdateLearningProgressInput(BaseModel):
         return _parse_list_field(v)
 
 
+# ==================== 聚合读取工具 ====================
+
+@tool
+def get_user_memory(
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
+) -> str:
+    """获取用户的完整记忆信息。当用户询问'你对我了解多少'或'我的信息是什么'时使用。
+
+    Returns:
+        一次性返回用户画像、偏好设置和学习进度的完整信息。
+    """
+    user_id = runtime.context.user_id
+    memory = get_long_term_memory()
+
+    lines = ["=== 用户记忆 ==="]
+
+    # 1. 用户画像
+    profile = memory.get_profile(user_id)
+    lines.append("\n【画像信息】")
+    if profile and (profile.preferred_companies or profile.target_position or profile.tech_stack):
+        if profile.preferred_companies:
+            lines.append(f"- 目标公司：{', '.join(profile.preferred_companies)}")
+        if profile.target_position:
+            lines.append(f"- 目标岗位：{profile.target_position}")
+        if profile.tech_stack:
+            lines.append(f"- 技术栈：{', '.join(profile.tech_stack)}")
+        if profile.experience_years:
+            lines.append(f"- 工作年限：{profile.experience_years} 年")
+    else:
+        lines.append("- 暂无画像信息")
+
+    # 2. 偏好设置
+    prefs = memory.get_preferences(user_id)
+    lines.append("\n【偏好设置】")
+    if prefs:
+        lang = "中文" if prefs.language == "zh" else "English"
+        lines.append(f"- 语言：{lang}")
+        lines.append(f"- 难度：{prefs.difficulty}")
+        lines.append(f"- 单次练习：{prefs.practice_batch_size} 道题")
+        lines.append(f"- 立即显示答案：{'是' if prefs.show_answer_immediately else '否'}")
+    else:
+        lines.append("- 暂无偏好设置")
+
+    # 3. 学习进度
+    progress = memory.get_progress(user_id)
+    lines.append("\n【学习进度】")
+    if progress:
+        lines.append(f"- 已掌握知识点：{len(progress.mastered_entities)} 个")
+        lines.append(f"- 待复习题目：{len(progress.pending_review_question_ids)} 道")
+        lines.append(f"- 累计答题：{progress.total_questions_answered} 道")
+    else:
+        lines.append("- 暂无学习进度记录")
+
+    return "\n".join(lines)
+
+
+# ==================== 写入工具 ====================
+
 @tool(args_schema=SaveUserPreferencesInput)
 def save_user_preferences(
     language: Optional[str] = None,
@@ -94,7 +158,6 @@ def save_user_preferences(
         difficulty: 难度偏好，easy/medium/hard
         practice_batch_size: 单次练习题目数量
         show_answer_immediately: 是否立即显示答案
-        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
@@ -142,7 +205,6 @@ def save_user_profile(
         target_position: 目标岗位
         tech_stack: 技术栈列表
         experience_years: 工作年限
-        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
@@ -187,7 +249,6 @@ def update_learning_progress(
     Args:
         mastered_entities: 新掌握的知识点列表
         completed_question_ids: 已完成的题目 ID 列表
-        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
@@ -224,112 +285,10 @@ def update_learning_progress(
 
 
 @tool
-def get_user_preferences(
-    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
-) -> str:
-    """获取用户偏好设置。当用户询问'我的设置是什么'时使用。
-
-    Args:
-        runtime: 运行时上下文（自动注入）
-
-    Returns:
-        用户偏好设置的文本描述
-    """
-    user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
-        prefs = memory.get_preferences(user_id)
-
-        if not prefs:
-            return "暂无用户偏好设置"
-
-        return (
-            f"当前偏好设置：\\n"
-            f"- 语言：{'中文' if prefs.language == 'zh' else 'English'}\\n"
-            f"- 难度：{prefs.difficulty}\\n"
-            f"- 单次练习：{prefs.practice_batch_size} 道题\\n"
-            f"- 立即显示答案：{'是' if prefs.show_answer_immediately else '否'}"
-        )
-    except Exception as e:
-        return f"获取偏好失败：{e}"
-
-
-@tool
-def get_user_profile(
-    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
-) -> str:
-    """获取用户画像。当用户询问'我的目标是什么'或'我记录了什么公司'时使用。
-
-    Args:
-        runtime: 运行时上下文（自动注入）
-
-    Returns:
-        用户画像的文本描述
-    """
-    user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
-        profile = memory.get_profile(user_id)
-
-        if not profile:
-            return "暂无用户画像"
-
-        lines = ["当前画像："]
-        if profile.preferred_companies:
-            lines.append(f"- 目标公司：{', '.join(profile.preferred_companies)}")
-        if profile.target_position:
-            lines.append(f"- 目标岗位：{profile.target_position}")
-        if profile.tech_stack:
-            lines.append(f"- 技术栈：{', '.join(profile.tech_stack)}")
-        if profile.experience_years:
-            lines.append(f"- 工作年限：{profile.experience_years} 年")
-
-        return "\\n".join(lines)
-    except Exception as e:
-        return f"获取画像失败：{e}"
-
-
-@tool
-def get_learning_progress(
-    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
-) -> str:
-    """获取学习进度。当用户询问'我的学习进度如何'时使用。
-
-    Args:
-        runtime: 运行时上下文（自动注入）
-
-    Returns:
-        学习进度的文本描述
-    """
-    user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
-        progress = memory.get_progress(user_id)
-
-        if not progress:
-            return "暂无学习进度记录"
-
-        return (
-            f"学习进度：\\n"
-            f"- 已掌握知识点：{len(progress.mastered_entities)} 个\\n"
-            f"- 待复习题目：{len(progress.pending_review_question_ids)} 道\\n"
-            f"- 累计答题：{progress.total_questions_answered} 道"
-        )
-    except Exception as e:
-        return f"获取进度失败：{e}"
-
-
-@tool
 def clear_user_memory(
     runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """清除用户记忆数据。当用户明确要求'清除我的所有数据'时使用。
-
-    Args:
-        runtime: 运行时上下文（自动注入）
-
-    Returns:
-        操作结果消息
     """
     user_id = runtime.context.user_id
     try:
@@ -345,12 +304,10 @@ def clear_user_memory(
 
 
 __all__ = [
+    "get_user_memory",
     "save_user_preferences",
     "save_user_profile",
     "update_learning_progress",
-    "get_user_preferences",
-    "get_user_profile",
-    "get_learning_progress",
     "clear_user_memory",
     "UserContext",
 ]

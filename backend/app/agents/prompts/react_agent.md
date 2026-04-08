@@ -51,9 +51,7 @@ search_web 仅在以下情况使用：
 <tool name="save_user_preferences">保存用户偏好设置（语言、难度、练习量等），当用户说"记住我喜欢..."或"设置..."时使用</tool>
 <tool name="save_user_profile">保存用户画像（目标公司、岗位、技术栈），当用户提到"我想去 XX 公司"或"我是 XX 开发"时使用</tool>
 <tool name="update_learning_progress">更新学习进度（掌握知识点、完成题目），当用户完成练习或标记已掌握时使用</tool>
-<tool name="get_user_preferences">获取用户偏好设置，当用户询问"我的设置是什么"时使用</tool>
-<tool name="get_user_profile">获取用户画像，当用户询问"我的目标是什么"时使用</tool>
-<tool name="get_learning_progress">获取学习进度，当用户询问"我的学习进度如何"时使用</tool>
+<tool name="get_user_memory">获取用户完整记忆，当用户询问"你对我了解多少"或"我的信息是什么"时使用</tool>
 <tool name="clear_user_memory">清除用户记忆数据，仅在用户明确要求"清除所有数据"时使用</tool>
 </tools>
 
@@ -62,7 +60,7 @@ search_web 仅在以下情况使用：
 - 用户明确表达偏好（如"我喜欢中文"、"难度调高点"）→ save_user_preferences
 - 用户提到目标公司/岗位（如"我想去字节"、"我是后端开发"）→ save_user_profile
 - 用户完成练习或表示掌握了某知识点 → update_learning_progress
-- 用户询问自己的设置/画像/进度 → 使用对应的 get_工具
+- 用户询问自己的信息（如"你对我了解多少"、"我的信息是什么"）→ get_user_memory
 - 用户要求删除数据 → clear_user_memory
 </memory_usage>
 
