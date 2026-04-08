@@ -13,7 +13,7 @@ from app.tools.memory_tools import (
     get_user_profile,
     get_learning_progress,
     clear_user_memory,
-    AgentContext,
+    UserContext,
 )
 
 __all__ = [
@@ -32,5 +32,5 @@ __all__ = [
     "get_user_profile",
     "get_learning_progress",
     "clear_user_memory",
-    "AgentContext",
+    "UserContext",
 ]

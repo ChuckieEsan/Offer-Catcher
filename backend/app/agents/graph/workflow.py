@@ -125,13 +125,13 @@ async def run_workflow(
         "messages": messages,
     }
 
-    # 将 user_id 放入 context 中
+    # 将 user_id 放入 session_context 中
     if user_id:
-        initial_state["context"] = {"user_id": user_id}
+        initial_state["session_context"] = {"user_id": user_id}
 
     # 如果有额外的状态覆盖（通常不需要）
     for key in ["intent", "params", "extracted_interview", "pending_confirmation",
-                "confirmed_data", "current_subgraph", "last_tool_result", "context"]:
+                "confirmed_data", "current_subgraph", "last_tool_result", "session_context"]:
         if key in kwargs and kwargs[key] is not None:
             initial_state[key] = kwargs[key]  # type: ignore
 
@@ -184,13 +184,13 @@ async def astream_workflow(
         "messages": messages,
     }
 
-    # 将 user_id 放入 context 中
+    # 将 user_id 放入 session_context 中
     if user_id:
-        initial_state["context"] = {"user_id": user_id}
+        initial_state["session_context"] = {"user_id": user_id}
 
     # 如果有额外的状态覆盖（通常不需要）
     for key in ["intent", "params", "extracted_interview", "pending_confirmation",
-                "confirmed_data", "current_subgraph", "last_tool_result", "context"]:
+                "confirmed_data", "current_subgraph", "last_tool_result", "session_context"]:
         if key in kwargs and kwargs[key] is not None:
             initial_state[key] = kwargs[key]  # type: ignore
 

@@ -10,6 +10,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
 from app.agents.vision_extractor import get_vision_extractor
+from app.memory import get_user_context_prompt
 from app.utils.logger import logger
 from app.utils.telemetry import traced_async
 from app.llm import get_llm
@@ -26,6 +27,7 @@ from app.tools.memory_tools import (
     get_user_profile,
     get_learning_progress,
     clear_user_memory,
+    UserContext,
 )
 
 
@@ -79,16 +81,12 @@ def router_node(state: AgentState) -> AgentState:
     response = llm.invoke(messages)
     intent = response.content.strip().lower()
 
-    # 获取当前上下文
-    current_context = dict(state.get("context", {}))
-
     logger.info(f"Router result: intent={intent}")
 
-    # 只返回内部状态，不返回 last_tool_result 以免泄露到前端
+    # 只返回内部状态，session_context 由 LangGraph 自动保留
     return {
         "intent": intent,
         "params": {},
-        "context": current_context,
     }
 
 
@@ -115,18 +113,18 @@ def extract_node(state: AgentState) -> AgentState:
         # 暂时默认从文本提取
         result = extractor.extract(source=user_input, source_type="text")
 
-        # 更新上下文（公司/岗位）
-        new_context = dict(state.get("context", {}))
+        # 更新会话上下文（公司/岗位）
+        new_session_context = dict(state.get("session_context", {}))
         if result.company:
-            new_context["company"] = result.company
+            new_session_context["company"] = result.company
         if result.position:
-            new_context["position"] = result.position
+            new_session_context["position"] = result.position
 
         return {
             "extracted_interview": result,
             "pending_confirmation": True,
             "current_subgraph": "ingest",
-            "context": new_context,
+            "session_context": new_session_context,
         }
     except Exception as e:
         logger.error(f"Extract failed: {e}")
@@ -265,7 +263,8 @@ def _get_react_agent() -> CompiledStateGraph:
     system_prompt = prompt.messages[0].prompt.template
     # 移除 skills_prompt 占位符（暂时不使用 skill 系统）
     system_prompt = system_prompt.replace("{{ skills_prompt }}", "")
-    return create_agent(llm, tools=tools, system_prompt=system_prompt)
+    # 添加 context_schema 以支持 ToolRuntime 注入 user_id
+    return create_agent(llm, tools=tools, system_prompt=system_prompt, context_schema=UserContext)
 
 
 def _apply_message_trimming(
@@ -332,31 +331,34 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     all_messages: list[BaseMessage] = state.get("messages", [])
     messages: list[BaseMessage] = _apply_message_trimming(all_messages)
 
-    # 获取用户 ID 并检索长期记忆上下文
-    context = state.get("context", {})
-    user_id = context.get("user_id")
-    if user_id:
-        try:
-            from app.memory import get_user_context_prompt
-            user_context = get_user_context_prompt(user_id)
-            # 将用户上下文插入到 system message 中
-            # 找到 system message 并追加上下文
-            for i, msg in enumerate(messages):
-                if getattr(msg, "type", "") == "system":
-                    original_content = getattr(msg, "content", "")
-                    if user_context not in original_content:
-                        new_content = original_content + "\n\n" + user_context
-                        messages[i] = msg.__class__(content=new_content)
-                    break
-            logger.info(f"Injected user context for user {user_id}")
-        except Exception as e:
-            logger.warning(f"Failed to inject user context: {e}")
+    # 从会话上下文获取用户 ID
+    session_context = state.get("session_context", {})
+    user_id = session_context.get("user_id") or "default_user"
+
+    # 注入长期记忆上下文到 System Prompt
+    try:
+        user_context_prompt = get_user_context_prompt(user_id)
+        # 找到 system message 并追加上下文
+        for i, msg in enumerate(messages):
+            if getattr(msg, "type", "") == "system":
+                original_content = getattr(msg, "content", "")
+                if user_context_prompt not in original_content:
+                    messages[i] = msg.__class__(content=original_content + "\n\n" + user_context_prompt)
+                break
+        logger.debug(f"Injected user context for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Failed to inject user context: {e}")
 
     logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 
     try:
-        # 直接调用 agent，外层的 astream_events 会自动捕获内部的 token 流
-        result = await agent.ainvoke({"messages": messages}, config=config)
+        user_runtime_context = UserContext(user_id=user_id)
+
+        result = await agent.ainvoke(
+            {"messages": messages},
+            context=user_runtime_context,
+            config=config
+        )
 
         # 提取最终响应
         if result and "messages" in result:

@@ -27,6 +27,7 @@ export interface ConversationListResponse {
 export interface ChatRequest {
   message: string;
   conversation_id: string;
+  user_id: string;  // 用户 ID，用于长期记忆
 }
 
 export interface ChatResponse {

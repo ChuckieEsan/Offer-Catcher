@@ -1,13 +1,13 @@
 """长期记忆读写工具
 
 提供用户画像、偏好设置、学习进度的读写能力。
+使用 ToolRuntime 注入 user_id，支持多用户场景。
 """
 
 from typing import Optional
-from dataclasses import dataclass
 
 from langchain.tools import ToolRuntime, tool
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.memory.long_term import (
     get_long_term_memory,
@@ -15,13 +15,7 @@ from app.memory.long_term import (
     UserPreferences,
     LearningProgress,
 )
-
-
-@dataclass
-class AgentContext:
-    """Agent 运行时上下文"""
-    user_id: str
-    conversation_id: Optional[str] = None
+from app.tools.context import UserContext
 
 
 @tool
@@ -30,6 +24,7 @@ def save_user_preferences(
     difficulty: Optional[str] = Field(default=None, description="难度偏好：easy/medium/hard"),
     practice_batch_size: Optional[int] = Field(default=None, description="单次练习题目数量"),
     show_answer_immediately: Optional[bool] = Field(default=None, description="是否立即显示答案"),
+    runtime: ToolRuntime[UserContext] = None,
 ) -> str:
     """保存用户偏好设置。当用户明确说'记住我喜欢...'或'设置难度为...'时使用。
 
@@ -38,25 +33,27 @@ def save_user_preferences(
         difficulty: 难度偏好，easy/medium/hard
         practice_batch_size: 单次练习题目数量
         show_answer_immediately: 是否立即显示答案
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
 
         # 先读取现有偏好
-        existing = memory.get_preferences("default_user")
+        existing = memory.get_preferences(user_id)
 
         # 更新字段
         prefs = UserPreferences(
             language=language or (existing.language if existing else "zh"),
             difficulty=difficulty or (existing.difficulty if existing else "medium"),
             practice_batch_size=practice_batch_size or (existing.practice_batch_size if existing else 5),
-            show_answer_immediately=show_answer_immediately or (existing.show_answer_immediately if existing else False),
+            show_answer_immediately=show_answer_immediately if show_answer_immediately is not None else (existing.show_answer_immediately if existing else False),
         )
 
-        memory.save_preferences("default_user", prefs)
+        memory.save_preferences(user_id, prefs)
 
         result_parts = []
         if language:
@@ -77,6 +74,7 @@ def save_user_profile(
     target_position: Optional[str] = Field(default=None, description="目标岗位"),
     tech_stack: Optional[list[str]] = Field(default=None, description="技术栈列表"),
     experience_years: Optional[int] = Field(default=None, description="工作年限"),
+    runtime: ToolRuntime[UserContext] = None,
 ) -> str:
     """保存用户画像。当用户提到'我想去 XX 公司'或'我是 XX 开发'时使用。
 
@@ -85,24 +83,26 @@ def save_user_profile(
         target_position: 目标岗位
         tech_stack: 技术栈列表
         experience_years: 工作年限
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
 
-        existing = memory.get_profile("default_user")
+        existing = memory.get_profile(user_id)
 
         profile = UserProfile(
-            user_id="default_user",
+            user_id=user_id,
             preferred_companies=preferred_companies or (existing.preferred_companies if existing else []),
             target_position=target_position or (existing.target_position if existing else ""),
             tech_stack=tech_stack or (existing.tech_stack if existing else []),
             experience_years=experience_years or (existing.experience_years if existing else None),
         )
 
-        memory.save_profile("default_user", profile)
+        memory.save_profile(user_id, profile)
 
         result_parts = []
         if preferred_companies:
@@ -121,20 +121,23 @@ def save_user_profile(
 def update_learning_progress(
     mastered_entities: Optional[list[str]] = Field(default=None, description="新掌握的知识点"),
     completed_question_ids: Optional[list[str]] = Field(default=None, description="已完成的题目 ID"),
+    runtime: ToolRuntime[UserContext] = None,
 ) -> str:
     """更新学习进度。当用户完成练习或标记知识点为'已掌握'时使用。
 
     Args:
         mastered_entities: 新掌握的知识点列表
         completed_question_ids: 已完成的题目 ID 列表
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
 
-        existing = memory.get_progress("default_user")
+        existing = memory.get_progress(user_id)
 
         # 合并已掌握的知识点（去重）
         existing_entities = existing.mastered_entities if existing else []
@@ -152,7 +155,7 @@ def update_learning_progress(
             last_review_date=existing.last_review_date if existing else None,
         )
 
-        memory.save_progress("default_user", progress)
+        memory.save_progress(user_id, progress)
 
         return (
             f"已更新学习进度："
@@ -164,15 +167,21 @@ def update_learning_progress(
 
 
 @tool
-def get_user_preferences() -> str:
+def get_user_preferences(
+    runtime: ToolRuntime[UserContext] = None,
+) -> str:
     """获取用户偏好设置。当用户询问'我的设置是什么'时使用。
+
+    Args:
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         用户偏好设置的文本描述
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
-        prefs = memory.get_preferences("default_user")
+        prefs = memory.get_preferences(user_id)
 
         if not prefs:
             return "暂无用户偏好设置"
@@ -189,15 +198,21 @@ def get_user_preferences() -> str:
 
 
 @tool
-def get_user_profile() -> str:
+def get_user_profile(
+    runtime: ToolRuntime[UserContext] = None,
+) -> str:
     """获取用户画像。当用户询问'我的目标是什么'或'我记录了什么公司'时使用。
+
+    Args:
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         用户画像的文本描述
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
-        profile = memory.get_profile("default_user")
+        profile = memory.get_profile(user_id)
 
         if not profile:
             return "暂无用户画像"
@@ -218,15 +233,21 @@ def get_user_profile() -> str:
 
 
 @tool
-def get_learning_progress() -> str:
+def get_learning_progress(
+    runtime: ToolRuntime[UserContext] = None,
+) -> str:
     """获取学习进度。当用户询问'我的学习进度如何'时使用。
+
+    Args:
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         学习进度的文本描述
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
-        progress = memory.get_progress("default_user")
+        progress = memory.get_progress(user_id)
 
         if not progress:
             return "暂无学习进度记录"
@@ -242,23 +263,29 @@ def get_learning_progress() -> str:
 
 
 @tool
-def clear_user_memory() -> str:
+def clear_user_memory(
+    runtime: ToolRuntime[UserContext] = None,
+) -> str:
     """清除用户记忆数据。当用户明确要求'清除我的所有数据'时使用。
+
+    Args:
+        runtime: 运行时上下文（自动注入）
 
     Returns:
         操作结果消息
     """
+    user_id = runtime.context.user_id
     try:
         memory = get_long_term_memory()
 
         # 清空画像
-        memory.save_profile("default_user", UserProfile(user_id="default_user"))
+        memory.save_profile(user_id, UserProfile(user_id=user_id))
 
         # 清空偏好
-        memory.save_preferences("default_user", UserPreferences())
+        memory.save_preferences(user_id, UserPreferences())
 
         # 清空进度
-        memory.save_progress("default_user", LearningProgress())
+        memory.save_progress(user_id, LearningProgress())
 
         return "已清除所有用户记忆数据"
     except Exception as e:
@@ -273,5 +300,5 @@ __all__ = [
     "get_user_profile",
     "get_learning_progress",
     "clear_user_memory",
-    "AgentContext",
+    "UserContext",
 ]

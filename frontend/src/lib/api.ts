@@ -24,6 +24,29 @@ import type {
 // 如需直接连接后端（绕过代理），设置 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
+const USER_ID_KEY = "offer_catcher_user_id";
+
+/**
+ * 获取用户 ID（用于长期记忆和会话管理）
+ * 如果不存在则自动生成
+ *
+ * TODO: 测试完成后，移除下面的 "return 'default_user'" 行，
+ * 启用后续的 UUID 生成逻辑以支持多用户
+ */
+export function getUserId(): string {
+  return "default_user";
+  // if (typeof window === "undefined") {
+  //   return "default_user";
+  // }
+  //
+  // let userId = localStorage.getItem(USER_ID_KEY);
+  // if (!userId) {
+  //   userId = crypto.randomUUID();
+  //   localStorage.setItem(USER_ID_KEY, userId);
+  // }
+  // return userId;
+}
+
 export const api = axios.create({
   baseURL: API_BASE,
   timeout: 60000,
@@ -32,31 +55,44 @@ export const api = axios.create({
 // ========== Conversation API ==========
 
 export async function getConversations(limit: number = 50): Promise<ConversationListResponse> {
-  const res = await api.get("/conversations", { params: { limit } });
+  const res = await api.get("/conversations", {
+    params: { limit },
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }
 
 export async function createConversation(title: string = "新对话"): Promise<Conversation> {
-  const res = await api.post("/conversations", { title });
+  const res = await api.post("/conversations", { title }, {
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }
 
 export async function getConversation(id: string): Promise<ConversationDetail> {
-  const res = await api.get(`/conversations/${id}`);
+  const res = await api.get(`/conversations/${id}`, {
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }
 
 export async function updateConversation(id: string, title: string): Promise<Conversation> {
-  const res = await api.put(`/conversations/${id}`, { title });
+  const res = await api.put(`/conversations/${id}`, { title }, {
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  await api.delete(`/conversations/${id}`);
+  await api.delete(`/conversations/${id}`, {
+    headers: { "X-User-ID": getUserId() },
+  });
 }
 
 export async function generateTitle(id: string): Promise<Conversation> {
-  const res = await api.post(`/conversations/${id}/generate-title`);
+  const res = await api.post(`/conversations/${id}/generate-title`, {}, {
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }
 
@@ -70,7 +106,7 @@ export async function generateTitle(id: string): Promise<Conversation> {
  * Next.js 代理对 SSE 流式响应支持不完善，会导致流被缓冲
  */
 export async function chatStream(
-  request: ChatRequest,
+  request: ChatRequest & { user_id?: string },
   callbacks: {
     onChunk: (chunk: string) => void;
     onDone: () => void;

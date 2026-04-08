@@ -11,6 +11,21 @@ from typing_extensions import TypedDict
 from app.models.schemas import ExtractedInterview
 
 
+class SessionContext(TypedDict, total=False):
+    """会话上下文
+
+    存储当前会话的运行时状态信息。
+
+    Attributes:
+        user_id: 用户唯一标识
+        company: 当前公司
+        position: 当前岗位
+    """
+    user_id: str
+    company: str
+    position: str
+
+
 class AgentState(TypedDict, total=False):
     """LangGraph Agent 状态
 
@@ -25,7 +40,7 @@ class AgentState(TypedDict, total=False):
         confirmed_data: 用户是否已确认（用于确认节点）
         current_subgraph: 当前子图：None/ingest/query
         last_tool_result: 上次工具调用结果
-        context: 全局上下文（company, position 等）
+        session_context: 会话上下文（company, position, user_id 等）
         error: 错误信息
     """
 
@@ -47,11 +62,11 @@ class AgentState(TypedDict, total=False):
     # 工具调用结果
     last_tool_result: str
 
-    # 全局上下文
-    context: dict
+    # 会话上下文（运行时状态，如 company, position, user_id）
+    session_context: SessionContext
 
     # 错误信息
     error: Optional[str]
 
 
-__all__ = ["AgentState"]
+__all__ = ["AgentState", "SessionContext"]

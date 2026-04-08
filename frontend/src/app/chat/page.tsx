@@ -29,6 +29,7 @@ import {
   updateConversation,
   generateTitle,
   chatStream,
+  getUserId,
 } from "@/lib/api";
 import type { Conversation, Message } from "@/types";
 
@@ -223,6 +224,7 @@ export default function ChatPage() {
       {
         message: currentInput,
         conversation_id: activeConversation,
+        user_id: getUserId(),
       },
       {
         onChunk: (chunk) => {

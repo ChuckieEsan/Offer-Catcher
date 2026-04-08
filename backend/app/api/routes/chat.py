@@ -23,16 +23,12 @@ class ChatRequest(BaseModel):
     """对话请求"""
     message: str
     conversation_id: str
-    user_id: Optional[str] = None  # 可选的用户 ID，用于长期记忆
+    user_id: Optional[str] = None  # 用户 ID，用于长期记忆
 
 
 class ChatResponse(BaseModel):
     """对话响应"""
     response: str
-
-
-# 默认用户 ID
-DEFAULT_USER_ID = "default_user"
 
 
 # ========== API Endpoints ==========
@@ -48,12 +44,13 @@ async def chat_stream(request: ChatRequest):
     - PostgresClient 同步消息用于前端展示
 
     Args:
-        request: 包含 message 和 conversation_id
+        request: 包含 message, conversation_id 和可选的 user_id
 
     Returns:
         SSE 流式响应
     """
-    logger.info(f"Chat stream: conversation={request.conversation_id}, message={request.message[:50]}...")
+    user_id = request.user_id or "default_user"
+    logger.info(f"Chat stream: user={user_id}, conversation={request.conversation_id}, message={request.message[:50]}...")
 
     agent = get_chat_agent()
     pg = get_postgres_client()
@@ -66,7 +63,7 @@ async def chat_stream(request: ChatRequest):
             async for chunk in agent.achat_streaming(
                 message=request.message,
                 conversation_id=request.conversation_id,
-                user_id=request.user_id or DEFAULT_USER_ID,
+                user_id=user_id,
             ):
                 response_chunks.append(chunk)
                 yield f"data: {json.dumps(chunk)}\n\n"
@@ -78,13 +75,13 @@ async def chat_stream(request: ChatRequest):
             try:
                 full_response = "".join(response_chunks)
                 pg.add_message(
-                    DEFAULT_USER_ID,
+                    user_id,
                     request.conversation_id,
                     "user",
                     request.message
                 )
                 pg.add_message(
-                    DEFAULT_USER_ID,
+                    user_id,
                     request.conversation_id,
                     "assistant",
                     full_response
