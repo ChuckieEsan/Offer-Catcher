@@ -8,12 +8,12 @@ import {
   Button,
   Upload,
   App,
-  List,
   Tag,
   Typography,
   Spin,
   Image,
   Space,
+  Divider,
 } from "antd";
 import { UploadOutlined, InboxOutlined, CheckOutlined, FileImageOutlined } from "@ant-design/icons";
 import MainLayout from "@/components/MainLayout";
@@ -245,32 +245,29 @@ export default function ExtractPage() {
             </Paragraph>
           </div>
 
-          <List
-            dataSource={result.questions}
-            renderItem={(q, i) => (
-              <List.Item>
-                <div style={{ width: "100%" }}>
-                  <div style={{ marginBottom: 8 }}>
-                    <Tag color={questionTypeColor[q.question_type] || "default"}>
-                      {q.question_type}
-                    </Tag>
-                    <span style={{ marginLeft: 8, fontWeight: 500 }}>
-                      {i + 1}. {q.question_text}
-                    </span>
-                  </div>
-                  {q.core_entities && q.core_entities.length > 0 && (
-                    <Space size={[4, 8]} wrap>
-                      {q.core_entities.map((e) => (
-                        <Tag key={e} color="geekblue" style={{ fontSize: 12 }}>
-                          {e}
-                        </Tag>
-                      ))}
-                    </Space>
-                  )}
+          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+            {result.questions.map((q, i) => (
+              <div key={i} style={{ padding: "12px 0", borderBottom: i < result.questions.length - 1 ? "1px solid #f0f0f0" : "none" }}>
+                <div style={{ marginBottom: 8 }}>
+                  <Tag color={questionTypeColor[q.question_type] || "default"}>
+                    {q.question_type}
+                  </Tag>
+                  <span style={{ marginLeft: 8, fontWeight: 500 }}>
+                    {i + 1}. {q.question_text}
+                  </span>
                 </div>
-              </List.Item>
-            )}
-          />
+                {q.core_entities && q.core_entities.length > 0 && (
+                  <Space size={[4, 8]} wrap>
+                    {q.core_entities.map((e) => (
+                      <Tag key={e} color="geekblue" style={{ fontSize: 12 }}>
+                        {e}
+                      </Tag>
+                    ))}
+                  </Space>
+                )}
+              </div>
+            ))}
+          </Space>
 
           <div style={{ marginTop: 16, textAlign: "right" }}>
             <Button onClick={() => {

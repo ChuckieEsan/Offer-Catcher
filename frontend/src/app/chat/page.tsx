@@ -17,6 +17,7 @@ import {
   SendOutlined,
   DeleteOutlined,
   LoadingOutlined,
+  EditOutlined,
 } from "@ant-design/icons";
 import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
@@ -25,6 +26,8 @@ import {
   createConversation,
   getConversation,
   deleteConversation,
+  updateConversation,
+  generateTitle,
   chatStream,
 } from "@/lib/api";
 import type { Conversation, Message } from "@/types";
@@ -62,8 +65,20 @@ export default function ChatPage() {
   // 记录已完成的消息 ID，用于切换渲染模式
   const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
 
+  // 标题编辑状态
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+
   // Refs
   const listRef = useRef<HTMLDivElement>(null);
+  const conversationsRef = useRef<Conversation[]>(conversations);
+  const messagesRef = useRef<Message[]>(messages);
+
+  // 更新 refs
+  useEffect(() => {
+    conversationsRef.current = conversations;
+    messagesRef.current = messages;
+  }, [conversations, messages]);
 
   // 加载会话列表
   useEffect(() => {
@@ -150,6 +165,34 @@ export default function ChatPage() {
     }
   };
 
+  // 标题编辑相关
+  const handleStartEditTitle = (conv: Conversation) => {
+    setEditingConversationId(conv.id);
+    setEditingTitle(conv.title);
+  };
+
+  const handleSaveTitle = async (id: string) => {
+    if (!editingTitle.trim()) {
+      setEditingConversationId(null);
+      return;
+    }
+    try {
+      const updated = await updateConversation(id, editingTitle.trim());
+      setConversations((prev) =>
+        prev.map((c) => c.id === updated.id ? updated : c)
+      );
+      message.success("标题已更新");
+    } catch (error) {
+      message.error("更新标题失败");
+    }
+    setEditingConversationId(null);
+  };
+
+  const handleCancelEditTitle = () => {
+    setEditingConversationId(null);
+    setEditingTitle("");
+  };
+
   const handleSend = useCallback(async () => {
     if (!input.trim() || streaming || !activeConversation) return;
 
@@ -196,6 +239,24 @@ export default function ChatPage() {
           setStreamingMessageId(null);
           // 标记消息已完成，触发从 streaming 模式切换到 complete 模式
           setCompletedMessageIds((prev) => new Set([...prev, aiMessageId]));
+
+          // 自动生成标题（消息数达到 6 条且标题为"新对话"）
+          const currentConv = conversationsRef.current.find((c) => c.id === activeConversation);
+          if (currentConv && currentConv.title === "新对话") {
+            // 计算消息总数（包括刚添加的 2 条消息）
+            const totalMessages = messagesRef.current.length + 2;
+            if (totalMessages >= 6) {
+              generateTitle(activeConversation)
+                .then((updated) => {
+                  setConversations((prev) =>
+                    prev.map((c) => c.id === updated.id ? updated : c)
+                  );
+                })
+                .catch((err) => {
+                  console.error("Failed to generate title:", err);
+                });
+            }
+          }
         },
         onError: (error) => {
           setStreaming(false);
@@ -262,37 +323,75 @@ export default function ChatPage() {
                     justifyContent: "space-between",
                   }}
                 >
-                  <div style={{ flex: 1, overflow: "hidden" }}>
-                    <div
-                      style={{
-                        fontWeight: activeConversation === conv.id ? 600 : 400,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {conv.title}
-                    </div>
+                  <div style={{ flex: 1, overflow: "hidden", marginRight: 8 }}>
+                    {editingConversationId === conv.id ? (
+                      <Input
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onBlur={() => handleSaveTitle(conv.id)}
+                        onPressEnter={(e) => {
+                          e.preventDefault();
+                          handleSaveTitle(conv.id);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            handleCancelEditTitle();
+                          }
+                        }}
+                        size="small"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ width: "100%" }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          fontWeight: activeConversation === conv.id ? 600 : 400,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditTitle(conv);
+                        }}
+                      >
+                        {conv.title}
+                      </div>
+                    )}
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {formatDate(conv.updated_at)}
                     </Text>
                   </div>
-                  <Popconfirm
-                    title="确定删除此对话？"
-                    onConfirm={(e) => {
-                      e?.stopPropagation();
-                      handleDeleteConversation(conv.id);
-                    }}
-                    onCancel={(e) => e?.stopPropagation()}
-                  >
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<DeleteOutlined />}
-                      danger
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </Popconfirm>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {editingConversationId !== conv.id && (
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditTitle(conv);
+                        }}
+                      />
+                    )}
+                    <Popconfirm
+                      title="确定删除此对话？"
+                      onConfirm={(e) => {
+                        e?.stopPropagation();
+                        handleDeleteConversation(conv.id);
+                      }}
+                      onCancel={(e) => e?.stopPropagation()}
+                    >
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        danger
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </Popconfirm>
+                  </div>
                 </div>
               ))}
             </div>

@@ -55,6 +55,11 @@ export async function deleteConversation(id: string): Promise<void> {
   await api.delete(`/conversations/${id}`);
 }
 
+export async function generateTitle(id: string): Promise<Conversation> {
+  const res = await api.post(`/conversations/${id}/generate-title`);
+  return res.data;
+}
+
 // ========== Chat API ==========
 
 /**

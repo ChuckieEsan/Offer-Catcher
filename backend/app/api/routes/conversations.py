@@ -9,6 +9,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.db.postgres_client import get_postgres_client
+from app.agents.title_generator import get_title_generator_agent
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -162,3 +163,58 @@ async def delete_conversation(conversation_id: str):
         raise HTTPException(status_code=404, detail="会话不存在")
 
     return {"success": True}
+
+
+@router.post("/{conversation_id}/generate-title", response_model=ConversationResponse)
+async def generate_conversation_title(conversation_id: str):
+    """自动生成会话标题
+
+    根据对话内容生成简洁的标题，适用于标题为"新对话"的会话。
+    """
+    logger.info(f"Generate title for conversation: {conversation_id}")
+
+    pg = get_postgres_client()
+
+    # 获取会话
+    conv = pg.get_conversation(DEFAULT_USER_ID, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    # 只有标题为"新对话"时才自动生成
+    if conv.title != "新对话":
+        logger.info(f"Title already customized: {conv.title}, skip generation")
+        return ConversationResponse(
+            id=conv.id,
+            title=conv.title,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+        )
+
+    # 获取消息
+    messages = pg.get_messages(DEFAULT_USER_ID, conversation_id)
+
+    if len(messages) < 6:
+        logger.info(f"Messages count {len(messages)} < 6, skip generation")
+        return ConversationResponse(
+            id=conv.id,
+            title=conv.title,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+        )
+
+    # 生成标题
+    agent = get_title_generator_agent()
+    new_title = agent.generate_title(messages)
+
+    # 更新标题
+    pg.update_conversation_title(DEFAULT_USER_ID, conversation_id, new_title)
+
+    # 获取更新后的会话
+    updated_conv = pg.get_conversation(DEFAULT_USER_ID, conversation_id)
+
+    return ConversationResponse(
+        id=updated_conv.id,
+        title=updated_conv.title,
+        created_at=updated_conv.created_at,
+        updated_at=updated_conv.updated_at,
+    )
