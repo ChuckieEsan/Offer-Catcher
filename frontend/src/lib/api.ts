@@ -154,7 +154,14 @@ function processSSELine(
       return;
     }
 
-    onChunk(data);
+    try {
+      // Backend now sends json.dumps(chunk) to preserve newlines
+      const parsedChunk = JSON.parse(data);
+      onChunk(parsedChunk);
+    } catch (e) {
+      // Fallback in case backend sends raw strings not json encoded
+      onChunk(data);
+    }
   }
 }
 

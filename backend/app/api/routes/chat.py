@@ -4,6 +4,7 @@
 状态由 LangGraph Checkpointer 自动管理，消息同步到 PostgresClient。
 """
 
+import json
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -65,7 +66,7 @@ async def chat_stream(request: ChatRequest):
                 conversation_id=request.conversation_id
             ):
                 response_chunks.append(chunk)
-                yield f"data: {chunk}\n\n"
+                yield f"data: {json.dumps(chunk)}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield f"data: [ERROR] {str(e)}\n\n"

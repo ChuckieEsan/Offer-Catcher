@@ -110,11 +110,11 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         """
         if source_type == "text":
             content = [
-                {"type": "text", "text": self.prompt_template + "\n\n" + "以下是需要分析的内容：\n" + source}
+                {"type": "text", "text": self._prompt_template + "\n\n" + "以下是需要分析的内容：\n" + source}
             ]
         elif source_type == "image":
             # 支持单个图片路径或多个图片路径列表
-            content = build_vision_message_content(self.prompt_template, source)
+            content = build_vision_message_content(self._prompt_template, source)
         else:
             raise ValueError(f"Invalid source_type: {source_type}")
 

@@ -18,7 +18,7 @@ import {
   DeleteOutlined,
   LoadingOutlined,
 } from "@ant-design/icons";
-import { MemoizedMarkdown, StreamingMarkdown } from "@/components/MemoizedMarkdown";
+import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
 import {
   getConversations,
@@ -32,11 +32,6 @@ import type { Conversation, Message } from "@/types";
 const { Sider, Content } = Layout;
 const { TextArea } = Input;
 const { Title, Text, Paragraph } = Typography;
-
-// AI 消息组件 - 使用 MemoizedMarkdown
-function AIMessage({ content, id }: { content: string; id: string }) {
-  return <MemoizedMarkdown content={content} id={id} className="markdown-body" />;
-}
 
 // 思考中提示组件
 function ThinkingIndicator() {
@@ -63,9 +58,9 @@ export default function ChatPage() {
   // 输入状态
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState("");
-  const [thinking, setThinking] = useState(false);
-  const [streamComplete, setStreamComplete] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  // 记录已完成的消息 ID，用于切换渲染模式
+  const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
 
   // Refs
   const listRef = useRef<HTMLDivElement>(null);
@@ -80,7 +75,7 @@ export default function ChatPage() {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [messages, streamingContent, thinking]);
+  }, [messages]);
 
   const loadConversations = async () => {
     setLoadingConversations(true);
@@ -105,11 +100,14 @@ export default function ChatPage() {
     setActiveConversation(id);
     setLoadingMessages(true);
     setMessages([]);
-    setStreamingContent("");
-    setThinking(false);
+    setStreamingMessageId(null);
+    setCompletedMessageIds(new Set());
 
     try {
       const res = await getConversation(id);
+      // 历史消息全部标记为已完成
+      const completedIds = new Set(res.messages.map((m) => m.id));
+      setCompletedMessageIds(completedIds);
       setMessages(res.messages);
     } catch (error) {
       message.error("加载消息失败");
@@ -124,8 +122,8 @@ export default function ChatPage() {
       setConversations((prev) => [conv, ...prev]);
       setActiveConversation(conv.id);
       setMessages([]);
-      setStreamingContent("");
-      setThinking(false);
+      setStreamingMessageId(null);
+      setCompletedMessageIds(new Set());
       message.success("创建新对话");
     } catch (error) {
       message.error("创建会话失败");
@@ -155,22 +153,28 @@ export default function ChatPage() {
   const handleSend = useCallback(async () => {
     if (!input.trim() || streaming || !activeConversation) return;
 
+    const userMessageId = `temp_${Date.now()}`;
     const userMessage: Message = {
-      id: `temp_${Date.now()}`,
+      id: userMessageId,
       role: "user",
       content: input,
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // 添加 AI 消息（流式输出时持续更新）
+    const aiMessageId = `ai_${Date.now()}`;
+    const aiMessage: Message = {
+      id: aiMessageId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, aiMessage]);
     const currentInput = input;
     setInput("");
-    setStreaming(true);  // 开始流式输出
-    setThinking(true);  // 开始思考
-    setStreamingContent("");
-    setStreamComplete(false);  // 重置完成状态
-
-    let responseText = "";
+    setStreaming(true);
+    setStreamingMessageId(aiMessageId);
 
     await chatStream(
       {
@@ -179,36 +183,25 @@ export default function ChatPage() {
       },
       {
         onChunk: (chunk) => {
-          // 收到第一个 chunk，停止思考状态
-          if (!responseText) {
-            setThinking(false);
-          }
-          responseText += chunk;
-          setStreamingContent(responseText);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, content: msg.content + chunk }
+                : msg
+            )
+          );
         },
         onDone: () => {
-          setThinking(false);
-          setStreamComplete(true);  // 标记流式完成
-          // 延迟一点添加消息，让 Markdown 有时间渲染
-          setTimeout(() => {
-            if (responseText) {
-              const aiMessage: Message = {
-                id: `ai_${Date.now()}`,
-                role: "assistant",
-                content: responseText,
-                created_at: new Date().toISOString(),
-              };
-              setMessages((prev) => [...prev, aiMessage]);
-            }
-            setStreamingContent("");
-            setStreaming(false);
-            setStreamComplete(false);
-          }, 100);
+          setStreaming(false);
+          setStreamingMessageId(null);
+          // 标记消息已完成，触发从 streaming 模式切换到 complete 模式
+          setCompletedMessageIds((prev) => new Set([...prev, aiMessageId]));
         },
         onError: (error) => {
-          setThinking(false);
-          message.error(`错误: ${error}`);
           setStreaming(false);
+          setStreamingMessageId(null);
+          setMessages((prev) => prev.filter((msg) => msg.id !== aiMessageId));
+          message.error(`错误: ${error}`);
         },
       }
     );
@@ -335,7 +328,7 @@ export default function ChatPage() {
                   <div style={{ textAlign: "center", padding: 40 }}>
                     <Spin />
                   </div>
-                ) : messages.length === 0 && !streamingContent && !thinking ? (
+                ) : messages.length === 0 ? (
                   <div style={{ textAlign: "center", padding: 40 }}>
                     <Title level={4} type="secondary">
                       开始对话
@@ -346,54 +339,46 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   <>
-                    {messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                          marginBottom: 16,
-                        }}
-                      >
-                        <Card
-                          size="small"
+                    {messages.map((msg) => {
+                      const isStreaming = msg.id === streamingMessageId;
+                      const isCompleted = completedMessageIds.has(msg.id);
+
+                      return (
+                        <div
+                          key={msg.id}
                           style={{
-                            maxWidth: "80%",
-                            background: msg.role === "user" ? "#e6f7ff" : "#fff",
+                            display: "flex",
+                            justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                            marginBottom: 16,
                           }}
                         >
-                          {msg.role === "assistant" ? (
-                            <AIMessage content={msg.content} id={msg.id} />
-                          ) : (
-                            <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                              {msg.content}
-                            </Paragraph>
-                          )}
-                        </Card>
-                      </div>
-                    ))}
-
-                    {/* 思考中提示 */}
-                    {thinking && (
-                      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
-                        <Card size="small" style={{ maxWidth: "80%", background: "#fff" }}>
-                          <ThinkingIndicator />
-                        </Card>
-                      </div>
-                    )}
-
-                    {/* 流式输出内容 */}
-                    {streamingContent && (
-                      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 16 }}>
-                        <Card size="small" style={{ maxWidth: "80%", background: "#fff" }}>
-                          <StreamingMarkdown
-                            content={streamingContent}
-                            isComplete={streamComplete}
-                            id="streaming"
-                          />
-                        </Card>
-                      </div>
-                    )}
+                          <Card
+                            size="small"
+                            style={{
+                              maxWidth: "80%",
+                              background: msg.role === "user" ? "#e6f7ff" : "#fff",
+                            }}
+                          >
+                            {msg.role === "assistant" ? (
+                              // 内容为空时显示思考中
+                              msg.content === "" ? (
+                                <ThinkingIndicator />
+                              ) : (
+                                <XMarkdown
+                                  content={msg.content}
+                                  streaming={isStreaming && !isCompleted}
+                                  className="markdown-body"
+                                />
+                              )
+                            ) : (
+                              <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                                {msg.content}
+                              </Paragraph>
+                            )}
+                          </Card>
+                        </div>
+                      );
+                    })}
                   </>
                 )}
               </div>
@@ -412,13 +397,13 @@ export default function ChatPage() {
                         handleSend();
                       }
                     }}
-                    disabled={streaming || thinking}
+                    disabled={streaming}
                   />
                   <Button
                     type="primary"
                     icon={<SendOutlined />}
                     onClick={handleSend}
-                    loading={streaming || thinking}
+                    loading={streaming}
                     disabled={!input.trim()}
                   >
                     发送
@@ -468,16 +453,6 @@ export default function ChatPage() {
           padding-left: 1em;
           margin: 0.5em 0;
           color: #666;
-        }
-        .typing-cursor {
-          display: inline-block;
-          animation: blink 1s infinite;
-          color: #1890ff;
-          margin-left: 2px;
-        }
-        @keyframes blink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0; }
         }
       `}</style>
     </MainLayout>
