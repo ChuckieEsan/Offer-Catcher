@@ -19,15 +19,20 @@ def extract_interview_questions(
     当用户上传面试经验图片、分享面经文本时自动调用此工具。
 
     Args:
-        source: 输入内容（文本/图片路径/URL/Base64）
+        source: 输入内容（文本/图片路径）
         source_type: 输入类型 "text" | "image"
 
     Returns:
         提取的面经信息，包含公司、岗位、题目列表
+
+    Note:
+        图片输入会自动进行 OCR 识别，然后结构化提取。
     """
     try:
-        extractor = get_vision_extractor(provider="siliconflow")
-        result = extractor.extract(source, source_type)
+        extractor = get_vision_extractor()
+        # 图片默认使用 OCR，文本直接处理
+        use_ocr = (source_type == "image")
+        result = extractor.extract(source, source_type, use_ocr=use_ocr)
 
         # 构建可读输出
         output_parts = [f"公司: {result.company}"]

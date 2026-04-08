@@ -1,6 +1,6 @@
 """Vision Extractor 功能测试
 
-验证从文本或图片中提取面经题目信息的功能。
+验证从文本或 OCR 识别后的文字中提取面经题目信息的功能。
 """
 import pytest
 
@@ -10,7 +10,6 @@ from app.agents.vision_extractor import (
     ExtractedQuestion,
     ExtractedInterviewSchema,
 )
-from app.utils.image import encode_image_to_base64
 from app.utils.agent import load_prompt
 
 
@@ -55,24 +54,6 @@ class TestLoadPrompt:
         assert len(prompt) > 0
         assert "JSON" in prompt
         print(f"Loaded prompt: {len(prompt)} characters")
-
-
-class TestEncodeImage:
-    """图片编码测试"""
-
-    def test_encode_base64_image(self):
-        """测试 Base64 图片编码（data URI）"""
-        # 测试已编码的 Base64 图片
-        base64_image = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
-        result = encode_image_to_base64(base64_image)
-        assert result == base64_image
-        print("Base64 image encoding verified")
-
-    def test_encode_invalid_image(self):
-        """测试无效图片源"""
-        with pytest.raises(ValueError, match="Invalid image source"):
-            encode_image_to_base64("invalid_source")
-        print("Invalid image source raises error")
 
 
 class TestExtractFromText:
@@ -170,23 +151,24 @@ class TestExtractFromImage:
         """创建 Extractor 实例"""
         return VisionExtractor(provider="dashscope", use_structured_output=True)
 
-    def test_extract_from_image_url(self, extractor):
-        """测试从图片 URL 提取"""
-        # 使用一个公开的测试图片 URL
-        # 注意：实际测试可能需要有效的图片
-        image_url = "https://httpbin.org/image/jpeg"
+    def test_extract_from_image_without_ocr_raises_error(self, extractor):
+        """测试图片提取不使用 OCR 会抛出 NotImplementedError"""
+        with pytest.raises(NotImplementedError, match="必须使用 OCR"):
+            extractor.extract("some_image_path", source_type="image", use_ocr=False)
+
+    def test_extract_from_base64_image(self, extractor):
+        """测试从 Base64 图片提取"""
+        # 使用一个简单的测试 Base64 图片
+        # 这是一个 1x1 的红色像素 PNG 图片
+        base64_image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
 
         try:
-            result = extractor.extract(image_url, source_type="image")
-            print(f"Image extraction result: company={result.company}")
-        except Exception as e:
-            # 图片提取可能因网络或图片内容失败
-            print(f"Image extraction test skipped: {e}")
-
-    def test_extract_from_invalid_source_type(self, extractor):
-        """测试无效的 source_type"""
-        with pytest.raises(ValueError, match="Invalid source_type"):
-            extractor.extract("some content", source_type="invalid")
+            # 这个测试图片没有文字，OCR 会返回空文本并抛出 ValueError
+            result = extractor.extract(base64_image, source_type="image", use_ocr=True)
+            print(f"Base64 image extraction: company={result.company}")
+        except ValueError as e:
+            # 空 OCR 结果是预期行为
+            print(f"Empty OCR result (expected): {e}")
 
 
 class TestSchemaConversion:

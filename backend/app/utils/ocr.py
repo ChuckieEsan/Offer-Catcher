@@ -1,14 +1,16 @@
 """OCR 工具模块
 
 使用 EasyOCR 进行文字识别。
+支持本地文件路径、URL 和 Base64 编码的图片。
 """
 
+import base64
 import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.request import urlopen
 
 import easyocr
-from langchain_core.messages import HumanMessage
 
 from app.utils.logger import logger
 
@@ -38,37 +40,119 @@ def get_ocr_reader(langs: list = None) -> easyocr.Reader:
     return _ocr_reader
 
 
-def ocr_image(image_path: str) -> str:
+def _normalize_image_source(image_source: str) -> Path:
+    """将图片源标准化为本地文件路径
+
+    支持以下输入类型：
+    - 本地文件路径：直接返回
+    - URL：下载到临时文件
+    - Base64：解码保存到临时文件
+
+    Args:
+        image_source: 图片源（文件路径/URL/Base64）
+
+    Returns:
+        本地文件路径 Path 对象
+
+    Raises:
+        ValueError: 无效的图片源
+    """
+    # 已经是本地文件路径
+    if not image_source.startswith("http") and not image_source.startswith("data:"):
+        path = Path(image_source)
+        if path.exists():
+            return path
+        raise ValueError(f"Image file not found: {image_source}")
+
+    # Base64 编码的图片
+    if image_source.startswith("data:image"):
+        # 提取 Base64 数据
+        if "," in image_source:
+            base64_data = image_source.split(",", 1)[1]
+        else:
+            raise ValueError("Invalid Base64 image format")
+
+        # 检测图片格式
+        if "png" in image_source:
+            suffix = ".png"
+        elif "webp" in image_source:
+            suffix = ".webp"
+        elif "gif" in image_source:
+            suffix = ".gif"
+        else:
+            suffix = ".jpg"
+
+        # 解码并保存到临时文件
+        image_data = base64.b64decode(base64_data)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(image_data)
+            logger.info(f"Base64 image saved to temp file: {tmp.name}")
+            return Path(tmp.name)
+
+    # URL 图片
+    if image_source.startswith("http://") or image_source.startswith("https://"):
+        try:
+            with urlopen(image_source) as response:
+                image_data = response.read()
+
+            # 从 URL 或 Content-Type 推断格式
+            content_type = response.headers.get("Content-Type", "image/jpeg")
+            if "png" in content_type:
+                suffix = ".png"
+            elif "webp" in content_type:
+                suffix = ".webp"
+            elif "gif" in content_type:
+                suffix = ".gif"
+            else:
+                suffix = ".jpg"
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(image_data)
+                logger.info(f"URL image saved to temp file: {tmp.name}")
+                return Path(tmp.name)
+        except Exception as e:
+            logger.error(f"Failed to download image from URL: {e}")
+            raise ValueError(f"Failed to download image: {image_source}")
+
+    raise ValueError(f"Invalid image source: {image_source}")
+
+
+def ocr_image(image_source: str) -> str:
     """对单张图片进行 OCR 识别
 
     Args:
-        image_path: 图片路径
+        image_source: 图片源（文件路径/URL/Base64）
 
     Returns:
         识别出的文本内容
     """
-    # 检查文件类型，如果是 webp 先转换为 png
-    image_path = Path(image_path)
     temp_path = None
-
-    if image_path.suffix.lower() == ".webp":
-        from PIL import Image
-        with Image.open(image_path) as img:
-            if img.mode in ("RGBA", "LA", "P"):
-                img = img.convert("RGB")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                temp_path = tmp.name
-                img.save(temp_path, "PNG")
-        image_path = temp_path
-
-    reader = get_ocr_reader()
-
     try:
+        # 标准化图片源为本地文件路径
+        image_path = _normalize_image_source(image_source)
+
+        # 记录是否是临时文件（需要清理）
+        if not Path(image_source).exists():
+            temp_path = image_path
+
+        # 检查文件类型，如果是 webp 先转换为 png
+        if image_path.suffix.lower() == ".webp":
+            from PIL import Image
+            with Image.open(image_path) as img:
+                if img.mode in ("RGBA", "LA", "P"):
+                    img = img.convert("RGB")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    temp_path = tmp.name
+                    img.save(temp_path, "PNG")
+            image_path = Path(temp_path)
+
+        reader = get_ocr_reader()
+
         # 进行 OCR 识别
         result = reader.readtext(str(image_path))
 
         if not result:
-            logger.warning(f"No text detected in image: {image_path}")
+            logger.warning(f"No text detected in image: {image_source}")
             return ""
 
         # 提取所有识别出的文本（按从上到下的顺序）
@@ -79,11 +163,11 @@ def ocr_image(image_path: str) -> str:
             text_lines.append(text)
 
         full_text = "\n".join(text_lines)
-        logger.info(f"OCR detected {len(text_lines)} lines from {image_path}")
+        logger.info(f"OCR detected {len(text_lines)} lines from image")
         return full_text
 
     except Exception as e:
-        logger.error(f"OCR failed for {image_path}: {e}")
+        logger.error(f"OCR failed for {image_source}: {e}")
         raise
     finally:
         # 清理临时文件
@@ -91,40 +175,28 @@ def ocr_image(image_path: str) -> str:
             Path(temp_path).unlink()
 
 
-def ocr_images(
-    image_paths: list[str],
-    prompt: str = "经文本解析后，用户上传了如下图片内容：",
-) -> HumanMessage:
-    """对多张图片进行 OCR 识别并返回 HumanMessage
-
-    符合 LangChain 最佳实践，直接返回可用于 Agent 的消息对象。
+def ocr_images(image_sources: list[str]) -> str:
+    """对多张图片进行 OCR 识别并返回合并后的文本
 
     Args:
-        image_paths: 图片路径列表
-        prompt: 提示词，默认分析面试题目
+        image_sources: 图片源列表（文件路径/URL/Base64）
 
     Returns:
-        HumanMessage 对象，可直接传给 Agent
+        合并后的 OCR 识别文本
     """
     all_texts = []
 
-    for i, image_path in enumerate(image_paths):
-        logger.info(f"OCR processing image {i + 1}/{len(image_paths)}: {image_path}")
-        text = ocr_image(image_path)
+    for i, image_source in enumerate(image_sources):
+        logger.info(f"OCR processing image {i + 1}/{len(image_sources)}")
+        text = ocr_image(image_source)
         if text:
             all_texts.append(f"--- 第 {i + 1} 张图片 ---")
             all_texts.append(text)
 
     full_text = "\n\n".join(all_texts)
-    logger.info(f"OCR completed: {len(image_paths)} images -> {len(all_texts)} sections")
+    logger.info(f"OCR completed: {len(image_sources)} images -> {len(all_texts)} sections")
 
-    # 构建消息内容
-    content = [
-        {"type": "text", "text": prompt},
-        {"type": "text", "text": f"--- OCR 识别结果 ---\n{full_text}"},
-    ]
-
-    return HumanMessage(content=content)
+    return full_text
 
 
 def cleanup_ocr_reader() -> None:

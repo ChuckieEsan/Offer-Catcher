@@ -4,11 +4,10 @@
 """
 
 from fastapi import APIRouter, UploadFile, File, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import tempfile
 import os
-import base64
 
 from app.agents.vision_extractor import get_vision_extractor
 from app.pipelines.ingestion import get_ingestion_pipeline
@@ -23,6 +22,14 @@ router = APIRouter(prefix="/extract", tags=["extract"])
 class TextExtractRequest(BaseModel):
     """文本提取请求"""
     text: str
+
+
+class ImageExtractRequest(BaseModel):
+    """图片提取请求（支持 Base64 和 URL）"""
+    images: List[str] = Field(
+        ...,
+        description="图片源列表，支持 Base64 编码（data:image/xxx;base64,...）或 URL"
+    )
 
 
 class ExtractResponse(BaseModel):
@@ -68,13 +75,12 @@ async def extract_text(request: TextExtractRequest):
 @router.post("/image", response_model=ExtractResponse)
 async def extract_image(
     images: List[UploadFile] = File(...),
-    use_ocr: bool = Form(False)
 ):
-    """从图片提取面经
+    """从上传的图片文件提取面经
 
-    上传一张或多张图片，返回结构化的面经数据。
+    上传一张或多张图片文件，OCR 识别后返回结构化的面经数据。
     """
-    logger.info(f"Extract from {len(images)} images, use_ocr={use_ocr}")
+    logger.info(f"Extract from {len(images)} uploaded files")
 
     # 保存上传的图片到临时文件
     temp_paths = []
@@ -87,7 +93,7 @@ async def extract_image(
 
     try:
         extractor = get_vision_extractor()
-        result = extractor.extract(temp_paths, source_type="image", use_ocr=use_ocr)
+        result = extractor.extract(temp_paths, source_type="image", use_ocr=True)
 
         return ExtractResponse(
             company=result.company,
@@ -99,6 +105,32 @@ async def extract_image(
         for path in temp_paths:
             if os.path.exists(path):
                 os.unlink(path)
+
+
+@router.post("/image/base64", response_model=ExtractResponse)
+async def extract_image_base64(request: ImageExtractRequest):
+    """从 Base64 或 URL 图片提取面经
+
+    接收 Base64 编码的图片或图片 URL，OCR 识别后返回结构化的面经数据。
+
+    Args:
+        request: 包含图片源列表的请求，每个元素可以是：
+            - Base64 编码：data:image/jpeg;base64,/9j/4AAQ...
+            - URL：https://example.com/image.jpg
+
+    Returns:
+        ExtractResponse 结构化的面经数据
+    """
+    logger.info(f"Extract from {len(request.images)} Base64/URL images")
+
+    extractor = get_vision_extractor()
+    result = extractor.extract(request.images, source_type="image", use_ocr=True)
+
+    return ExtractResponse(
+        company=result.company,
+        position=result.position,
+        questions=result.questions
+    )
 
 
 @router.post("/confirm", response_model=ConfirmResponse)
