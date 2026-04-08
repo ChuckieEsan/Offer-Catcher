@@ -27,6 +27,17 @@ async def lifespan(app: FastAPI):
     graph_client = get_graph_client()
     graph_client.connect()
 
+    # 初始化长期记忆存储
+    from app.memory import get_long_term_memory
+    try:
+        memory = get_long_term_memory()
+        if memory.initialized:
+            logger.info("Long-term memory initialized")
+        else:
+            logger.warning("Long-term memory not fully initialized (using fallback)")
+    except Exception as e:
+        logger.warning(f"Long-term memory init failed: {e}")
+
     logger.info("Offer-Catcher API started")
 
     yield

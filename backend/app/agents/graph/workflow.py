@@ -100,6 +100,7 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
 async def run_workflow(
     messages: list[BaseMessage],
     thread_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     **kwargs
 ) -> AgentState:
     """运行工作流（异步模式，带持久化）
@@ -110,6 +111,7 @@ async def run_workflow(
     Args:
         messages: 当前消息（通常只有一条用户消息）
         thread_id: 会话 ID（用于持久化）
+        user_id: 用户 ID（用于长期记忆检索）
         **kwargs: 可选的状态覆盖（通常不需要）
 
     Returns:
@@ -122,6 +124,10 @@ async def run_workflow(
     initial_state: AgentState = {
         "messages": messages,
     }
+
+    # 将 user_id 放入 context 中
+    if user_id:
+        initial_state["context"] = {"user_id": user_id}
 
     # 如果有额外的状态覆盖（通常不需要）
     for key in ["intent", "params", "extracted_interview", "pending_confirmation",
@@ -145,6 +151,7 @@ async def run_workflow(
 async def astream_workflow(
     messages: list[BaseMessage],
     thread_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     **kwargs
 ) -> AsyncGenerator[dict, None]:
     """运行工作流（流式模式，异步）
@@ -164,6 +171,7 @@ async def astream_workflow(
     Args:
         messages: 当前消息（通常只有一条用户消息）
         thread_id: 会话 ID（用于持久化）
+        user_id: 用户 ID（用于长期记忆检索）
         **kwargs: 可选的状态覆盖（通常不需要）
 
     Yields:
@@ -175,6 +183,10 @@ async def astream_workflow(
     initial_state: AgentState = {
         "messages": messages,
     }
+
+    # 将 user_id 放入 context 中
+    if user_id:
+        initial_state["context"] = {"user_id": user_id}
 
     # 如果有额外的状态覆盖（通常不需要）
     for key in ["intent", "params", "extracted_interview", "pending_confirmation",

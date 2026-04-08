@@ -43,7 +43,8 @@ class ChatAgent:
     async def achat_streaming(
         self,
         message: str,
-        conversation_id: str
+        conversation_id: str,
+        user_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """处理用户消息（异步流式模式）
 
@@ -54,6 +55,7 @@ class ChatAgent:
         Args:
             message: 用户消息
             conversation_id: 会话 ID（同时作为 thread_id）
+            user_id: 用户 ID（用于长期记忆检索，可选）
 
         Yields:
             流式输出的内容片段
@@ -68,6 +70,7 @@ class ChatAgent:
                 messages=[HumanMessage(content=message)],
                 # 其他状态字段不传，由 Checkpointer 恢复
                 thread_id=conversation_id,
+                user_id=user_id,  # 传入 user_id 以检索长期记忆
             ):
                 event_type = event.get("type")
 
@@ -99,7 +102,8 @@ class ChatAgent:
     def chat_streaming(
         self,
         message: str,
-        conversation_id: str
+        conversation_id: str,
+        user_id: Optional[str] = None,
     ) -> Generator[str, None, None]:
         """处理用户消息（同步流式模式的 Wrapper）
 
@@ -110,7 +114,7 @@ class ChatAgent:
 
         async def run_async():
             try:
-                async for chunk in self.achat_streaming(message, conversation_id):
+                async for chunk in self.achat_streaming(message, conversation_id, user_id):
                     q.put(("chunk", chunk))
             except Exception as e:
                 q.put(("error", e))

@@ -18,6 +18,15 @@ from app.utils.agent import load_prompt_template
 from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph
+from app.tools.memory_tools import (
+    save_user_preferences,
+    save_user_profile,
+    update_learning_progress,
+    get_user_preferences,
+    get_user_profile,
+    get_learning_progress,
+    clear_user_memory,
+)
 
 
 # ==================== State Gate Node ====================
@@ -236,13 +245,75 @@ def store_and_mq_node(state: AgentState) -> AgentState:
 def _get_react_agent() -> CompiledStateGraph:
     """获取 ReAct Agent 实例（带缓存）"""
     llm = get_llm("dashscope", "chat")
+
+    # 基础工具
     tools = [search_questions, search_web, query_graph]
+
+    # 长期记忆工具
+    tools.extend([
+        save_user_preferences,
+        save_user_profile,
+        update_learning_progress,
+        get_user_preferences,
+        get_user_profile,
+        get_learning_progress,
+        clear_user_memory,
+    ])
+
     prompt = load_prompt_template("react_agent.md")
     # 提取原始模板字符串（create_agent 接受 str）
     system_prompt = prompt.messages[0].prompt.template
     # 移除 skills_prompt 占位符（暂时不使用 skill 系统）
     system_prompt = system_prompt.replace("{{ skills_prompt }}", "")
     return create_agent(llm, tools=tools, system_prompt=system_prompt)
+
+
+def _apply_message_trimming(
+    messages: list[BaseMessage],
+    max_messages: int = 10,
+    max_tokens: int = 8000
+) -> list[BaseMessage]:
+    """应用消息裁剪策略
+
+    策略：
+    1. 保留 SystemMessage（如果有）
+    2. 保留最近 N 条消息
+    3. 如果 token 超限，进一步裁剪
+
+    Args:
+        messages: 原始消息列表
+        max_messages: 最大消息数量，默认 10 条
+        max_tokens: 最大 token 数（估算），默认 8000
+
+    Returns:
+        裁剪后的消息列表
+    """
+    if len(messages) <= max_messages:
+        return messages
+
+    # 分离 system message 和普通消息
+    system_messages = [m for m in messages if getattr(m, "type", "") == "system"]
+    other_messages = [m for m in messages if getattr(m, "type", "") != "system"]
+
+    # 保留最近的 N 条
+    trimmed = other_messages[-max_messages:]
+
+    # 如果有 system message，放在最前面
+    if system_messages:
+        trimmed = [system_messages[0]] + trimmed
+
+    # Token 估算（简化：每条约 200 token）
+    estimated_tokens = sum(len(getattr(m, "content", "")) // 3 for m in trimmed)
+    if estimated_tokens > max_tokens:
+        # 进一步裁剪，只保留最近一半
+        trim_count = len(trimmed) // 2
+        if system_messages:
+            trimmed = [system_messages[0]] + trimmed[-trim_count:]
+        else:
+            trimmed = trimmed[-trim_count:]
+        logger.info(f"Trimmed messages due to token limit: {estimated_tokens} -> {sum(len(getattr(m, 'content', '')) // 3 for m in trimmed)} tokens")
+
+    return trimmed
 
 
 @traced_async
@@ -257,9 +328,31 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     """
     agent = _get_react_agent()
 
-    # 获取最近的消息
-    messages: list[BaseMessage] = state["messages"][-10:]
-    logger.info(f"ReAct loop starting with {len(messages)} messages")
+    # 获取消息并应用裁剪策略
+    all_messages: list[BaseMessage] = state.get("messages", [])
+    messages: list[BaseMessage] = _apply_message_trimming(all_messages)
+
+    # 获取用户 ID 并检索长期记忆上下文
+    context = state.get("context", {})
+    user_id = context.get("user_id")
+    if user_id:
+        try:
+            from app.memory import get_user_context_prompt
+            user_context = get_user_context_prompt(user_id)
+            # 将用户上下文插入到 system message 中
+            # 找到 system message 并追加上下文
+            for i, msg in enumerate(messages):
+                if getattr(msg, "type", "") == "system":
+                    original_content = getattr(msg, "content", "")
+                    if user_context not in original_content:
+                        new_content = original_content + "\n\n" + user_context
+                        messages[i] = msg.__class__(content=new_content)
+                    break
+            logger.info(f"Injected user context for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to inject user context: {e}")
+
+    logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 
     try:
         # 直接调用 agent，外层的 astream_events 会自动捕获内部的 token 流

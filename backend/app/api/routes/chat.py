@@ -5,6 +5,7 @@
 """
 
 import json
+from typing import Optional
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -22,6 +23,7 @@ class ChatRequest(BaseModel):
     """对话请求"""
     message: str
     conversation_id: str
+    user_id: Optional[str] = None  # 可选的用户 ID，用于长期记忆
 
 
 class ChatResponse(BaseModel):
@@ -63,7 +65,8 @@ async def chat_stream(request: ChatRequest):
         try:
             async for chunk in agent.achat_streaming(
                 message=request.message,
-                conversation_id=request.conversation_id
+                conversation_id=request.conversation_id,
+                user_id=request.user_id or DEFAULT_USER_ID,
             ):
                 response_chunks.append(chunk)
                 yield f"data: {json.dumps(chunk)}\n\n"
