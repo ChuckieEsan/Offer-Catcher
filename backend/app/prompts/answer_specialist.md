@@ -4,14 +4,14 @@
 你的任务是根据提供的外部搜索资料，为候选人生成一份专业、结构化、具备深度的高分面试标准答案。
 
 ## 📥 面试场景与上下文
-- **目标公司**：{company}
-- **目标岗位**：{position}
-- **面试题目**：{question}
-- **核心考点**：{core_entities}
+- **目标公司**：{{ company }}
+- **目标岗位**：{{ position }}
+- **面试题目**：{{ question }}
+- **核心考点**：{{ core_entities }}
 
 ## 🔎 外部检索知识参考
 <search_context>
-{context}
+{{ context }}
 </search_context>
 
 ---

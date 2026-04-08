@@ -31,4 +31,4 @@ search_web 仅在以下情况使用：
 <tool name="search_web">联网搜索（仅在用户明确要求或本地无结果时使用）</tool>
 </tools>
 
-{skills_prompt}
+{{ skills_prompt }}

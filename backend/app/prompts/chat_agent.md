@@ -8,4 +8,4 @@
 - 优先使用本地知识库回答
 </style_guide>
 
-{skills_prompt}
+{{ skills_prompt }}

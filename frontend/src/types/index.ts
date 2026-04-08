@@ -1,19 +1,36 @@
 // API 类型定义
 
 export interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationDetail {
+  conversation: Conversation;
+  messages: Message[];
+}
+
+export interface ConversationListResponse {
+  items: Conversation[];
+  total: number;
 }
 
 export interface ChatRequest {
   message: string;
-  session_id: string;
-  history: Message[];
+  conversation_id: string;
 }
 
 export interface ChatResponse {
   response: string;
-  intent?: string;
 }
 
 export interface Question {

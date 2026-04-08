@@ -3,7 +3,9 @@
 import axios from "axios";
 import type {
   ChatRequest,
-  ChatResponse,
+  Conversation,
+  ConversationDetail,
+  ConversationListResponse,
   Question,
   QuestionListResponse,
   SearchRequest,
@@ -23,12 +25,33 @@ export const api = axios.create({
   timeout: 60000,
 });
 
-// ========== Chat API ==========
+// ========== Conversation API ==========
 
-export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  const res = await api.post("/chat", request);
+export async function getConversations(limit: number = 50): Promise<ConversationListResponse> {
+  const res = await api.get("/conversations", { params: { limit } });
   return res.data;
 }
+
+export async function createConversation(title: string = "新对话"): Promise<Conversation> {
+  const res = await api.post("/conversations", { title });
+  return res.data;
+}
+
+export async function getConversation(id: string): Promise<ConversationDetail> {
+  const res = await api.get(`/conversations/${id}`);
+  return res.data;
+}
+
+export async function updateConversation(id: string, title: string): Promise<Conversation> {
+  const res = await api.put(`/conversations/${id}`, { title });
+  return res.data;
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await api.delete(`/conversations/${id}`);
+}
+
+// ========== Chat API ==========
 
 /**
  * 流式聊天 API
@@ -78,19 +101,15 @@ export async function chatStream(
       const { done, value } = await reader.read();
 
       if (done) {
-        // 处理缓冲区中剩余的数据
         if (buffer.trim()) {
           processSSELine(buffer, onChunk, safeOnDone);
         }
         break;
       }
 
-      // 将新数据追加到缓冲区
       buffer += decoder.decode(value, { stream: true });
 
-      // 按行分割处理
       const lines = buffer.split("\n");
-      // 保留最后一个可能不完整的行
       buffer = lines.pop() || "";
 
       for (const line of lines) {
@@ -106,15 +125,11 @@ export async function chatStream(
   }
 }
 
-/**
- * 处理 SSE 格式的单行数据
- */
 function processSSELine(
   line: string,
   onChunk: (chunk: string) => void,
   onDone: () => void
 ): void {
-  // SSE 格式: "data: xxx"
   if (line.startsWith("data: ")) {
     const data = line.slice(6);
 
@@ -128,7 +143,6 @@ function processSSELine(
       return;
     }
 
-    // 正常内容
     onChunk(data);
   }
 }

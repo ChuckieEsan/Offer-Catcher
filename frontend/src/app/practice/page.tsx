@@ -6,11 +6,9 @@ import {
   Select,
   Button,
   Input,
-  message,
   Typography,
   Tag,
   Statistic,
-  List,
   Spin,
   Drawer,
   Space,
@@ -78,7 +76,7 @@ export default function PracticePage() {
       const withAnswer = res.results.filter((r) => r.question_answer);
       setQuestions(withAnswer);
     } catch (error) {
-      message.error("加载失败");
+      console.error("加载失败");
     } finally {
       setLoading(false);
     }
@@ -93,13 +91,8 @@ export default function PracticePage() {
       });
       const withAnswer = res.results.filter((r) => r.question_answer);
       setQuestions(withAnswer);
-      if (withAnswer.length > 0) {
-        message.success(`找到 ${withAnswer.length} 道带答案的题目`);
-      } else {
-        message.warning("未找到带答案的题目");
-      }
     } catch (error) {
-      message.error("搜索失败");
+      console.error("搜索失败");
     } finally {
       setLoading(false);
     }
@@ -115,9 +108,8 @@ export default function PracticePage() {
       const res = await search({ query: "", company: selectedCompany, k: 50 });
       const withAnswer = res.results.filter((r) => r.question_answer);
       setQuestions(withAnswer);
-      message.success(`找到 ${withAnswer.length} 道题目`);
     } catch (error) {
-      message.error("搜索失败");
+      console.error("搜索失败");
     } finally {
       setLoading(false);
     }
@@ -133,9 +125,8 @@ export default function PracticePage() {
       const res = await search({ query: "", core_entities: [selectedEntity], k: 50 });
       const withAnswer = res.results.filter((r) => r.question_answer);
       setQuestions(withAnswer);
-      message.success(`找到 ${withAnswer.length} 道题目`);
     } catch (error) {
-      message.error("搜索失败");
+      console.error("搜索失败");
     } finally {
       setLoading(false);
     }
@@ -147,9 +138,8 @@ export default function PracticePage() {
       const res = await search({ query: "", mastery_level: selectedMastery ?? 0, k: 50 });
       const withAnswer = res.results.filter((r) => r.question_answer);
       setQuestions(withAnswer);
-      message.success(`找到 ${withAnswer.length} 道题目`);
     } catch (error) {
-      message.error("搜索失败");
+      console.error("搜索失败");
     } finally {
       setLoading(false);
     }
@@ -157,7 +147,6 @@ export default function PracticePage() {
 
   const handleRandomPick = () => {
     if (questions.length === 0) {
-      message.warning("没有可选题目，请先加载");
       return;
     }
     const randomIndex = Math.floor(Math.random() * questions.length);
@@ -168,7 +157,6 @@ export default function PracticePage() {
 
   const handleSubmit = async () => {
     if (!selectedQuestion || !userAnswer.trim()) {
-      message.warning("请选择题目并输入答案");
       return;
     }
     setScoring(true);
@@ -178,9 +166,8 @@ export default function PracticePage() {
         user_answer: userAnswer,
       });
       setScoreResult(result);
-      message.success("评分完成");
     } catch (error) {
-      message.error("评分失败");
+      console.error("评分失败");
     } finally {
       setScoring(false);
     }
@@ -203,7 +190,7 @@ export default function PracticePage() {
       label: "随机抽题",
       children: (
         <Card>
-          <Space direction="vertical" style={{ width: "100%" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Space>
               <Button icon={<ReloadOutlined />} onClick={handleRandomPick} type="primary">
                 随机抽题
@@ -211,7 +198,7 @@ export default function PracticePage() {
               <Button onClick={loadRandomQuestions}>刷新题库</Button>
             </Space>
             <span style={{ color: "#666" }}>共 {questions.length} 道带答案的题目可选</span>
-          </Space>
+          </div>
         </Card>
       ),
     },
@@ -320,7 +307,7 @@ export default function PracticePage() {
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results);
                 } catch (error) {
-                  message.error("搜索失败");
+                  console.error("搜索失败");
                 } finally {
                   setLoading(false);
                 }
@@ -336,7 +323,7 @@ export default function PracticePage() {
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results);
                 } catch (error) {
-                  message.error("搜索失败");
+                  console.error("搜索失败");
                 } finally {
                   setLoading(false);
                 }
@@ -346,40 +333,40 @@ export default function PracticePage() {
             </Button>
           </Space.Compact>
           {questions.length > 0 && (
-            <List
-              style={{ marginTop: 16 }}
-              dataSource={questions}
-              renderItem={(q) => (
-                <List.Item
-                  actions={[
-                    <Button
-                      size="small"
-                      icon={<EyeOutlined />}
-                      onClick={() => setAnswerDrawer({ visible: true, question: q })}
-                    >
-                      查看答案
-                    </Button>,
-                  ]}
+            <div style={{ marginTop: 16 }}>
+              {questions.map((q) => (
+                <div
+                  key={q.question_id}
+                  style={{
+                    padding: "12px 0",
+                    borderBottom: "1px solid #f0f0f0",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
                 >
-                  <List.Item.Meta
-                    title={
-                      <span>
-                        <Tag color="blue">{q.company}</Tag>
-                        {q.question_text.slice(0, 50)}...
+                  <div style={{ flex: 1 }}>
+                    <div>
+                      <Tag color="blue">{q.company}</Tag>
+                      {q.question_text.slice(0, 50)}...
+                    </div>
+                    <Space style={{ marginTop: 4 }}>
+                      <Tag>{q.question_type}</Tag>
+                      <span style={{ color: q.question_answer ? "#52c41a" : "#999", fontSize: 12 }}>
+                        {q.question_answer ? "有答案" : "待生成"}
                       </span>
-                    }
-                    description={
-                      <Space>
-                        <Tag>{q.question_type}</Tag>
-                        <span style={{ color: q.question_answer ? "#52c41a" : "#999" }}>
-                          {q.question_answer ? "有答案" : "待生成"}
-                        </span>
-                      </Space>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
+                    </Space>
+                  </div>
+                  <Button
+                    size="small"
+                    icon={<EyeOutlined />}
+                    onClick={() => setAnswerDrawer({ visible: true, question: q })}
+                  >
+                    查看答案
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
         </Card>
       ),
@@ -457,22 +444,22 @@ export default function PracticePage() {
                 {scoreResult.strengths.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <Title level={5}>优点</Title>
-                    <List
-                      size="small"
-                      dataSource={scoreResult.strengths}
-                      renderItem={(item) => <List.Item style={{ color: "#3f8600" }}>✓ {item}</List.Item>}
-                    />
+                    {scoreResult.strengths.map((item, i) => (
+                      <div key={i} style={{ color: "#3f8600", padding: "4px 0" }}>
+                        ✓ {item}
+                      </div>
+                    ))}
                   </div>
                 )}
 
                 {scoreResult.improvements.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <Title level={5}>改进建议</Title>
-                    <List
-                      size="small"
-                      dataSource={scoreResult.improvements}
-                      renderItem={(item) => <List.Item style={{ color: "#fa8c16" }}>→ {item}</List.Item>}
-                    />
+                    {scoreResult.improvements.map((item, i) => (
+                      <div key={i} style={{ color: "#fa8c16", padding: "4px 0" }}>
+                        → {item}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -507,33 +494,34 @@ export default function PracticePage() {
         </div>
       ) : !loading && mode !== "quick" && questions.length > 0 ? (
         <Card title={`可选题目 (${questions.length})`}>
-          <List
-            dataSource={questions.slice(0, 20)}
-            renderItem={(q) => (
-              <List.Item
-                actions={[
-                  <Button size="small" onClick={() => handleSelectQuestion(q)}>
-                    选择
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={
-                    <span>
-                      <Tag color="blue">{q.company}</Tag>
-                      {q.question_text.slice(0, 40)}...
-                    </span>
-                  }
-                  description={
-                    <Space>
-                      <Tag>{q.question_type}</Tag>
-                      {q.core_entities?.slice(0, 3).map((e) => <Tag key={e} color="geekblue">{e}</Tag>)}
-                    </Space>
-                  }
-                />
-              </List.Item>
-            )}
-          />
+          {questions.slice(0, 20).map((q) => (
+            <div
+              key={q.question_id}
+              style={{
+                padding: "12px 0",
+                borderBottom: "1px solid #f0f0f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div>
+                  <Tag color="blue">{q.company}</Tag>
+                  {q.question_text.slice(0, 40)}...
+                </div>
+                <Space style={{ marginTop: 4 }}>
+                  <Tag>{q.question_type}</Tag>
+                  {q.core_entities?.slice(0, 3).map((e) => (
+                    <Tag key={e} color="geekblue">{e}</Tag>
+                  ))}
+                </Space>
+              </div>
+              <Button size="small" onClick={() => handleSelectQuestion(q)}>
+                选择
+              </Button>
+            </div>
+          ))}
         </Card>
       ) : null}
 
@@ -541,7 +529,7 @@ export default function PracticePage() {
       <Drawer
         title="题目详情"
         placement="right"
-        width={500}
+        size="large"
         open={answerDrawer.visible}
         onClose={() => setAnswerDrawer({ visible: false, question: null })}
       >

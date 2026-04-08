@@ -43,7 +43,9 @@ class AnswerSpecialistAgent(BaseAgent):
         context: str,
     ) -> str:
         """构建 Prompt"""
-        return self.prompt_template.format(
+        if self._prompt_template is None:
+            raise ValueError("Prompt template not loaded")
+        return self._prompt_template.format(
             company=question.company,
             position=question.position,
             question=question.question_text,

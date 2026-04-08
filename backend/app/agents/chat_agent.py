@@ -3,7 +3,11 @@
 基于 LangGraph ReAct 工作流，支持：
 - 多模式对话（导入面经、查询、闲聊）
 - 流式输出
-- 用户确认节点
+- 通过 Checkpointer 自动状态恢复
+
+状态管理：
+- 完全依赖 LangGraph Checkpointer（PostgreSQL）
+- 移除内存状态存储，避免数据不一致
 """
 
 from typing import Optional, Generator, AsyncGenerator
@@ -26,89 +30,44 @@ class ChatAgent:
     - search_web: Web 搜索
     - query_graph: 图数据库查询
     - extract_interview: 提取面经（带确认流程）
+
+    状态管理：
+    - 使用 conversation_id 作为 thread_id
+    - Checkpointer 自动恢复和保存状态
+    - 无需手动维护会话状态
     """
 
     def __init__(self, provider: str = "dashscope") -> None:
         self.provider = provider
-        # 会话状态存储
-        self._session_state: dict[str, dict] = {}
 
-    def _get_session_state(self, session_id: str = "default") -> dict:
-        """获取会话状态"""
-        if session_id not in self._session_state:
-            self._session_state[session_id] = {
-                "intent": "idle",
-                "params": {},
-                "extracted_interview": None,
-                "pending_confirmation": False,
-                "confirmed_data": False,
-                "current_subgraph": None,
-                "last_tool_result": "",
-                "context": {},
-            }
-        return self._session_state[session_id]
+    async def achat_streaming(
+        self,
+        message: str,
+        conversation_id: str
+    ) -> AsyncGenerator[str, None]:
+        """处理用户消息（异步流式模式）
 
-    def chat(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> str:
-        """处理用户消息（同步模式，使用 asyncio.run 包装）"""
-        logger.info(f"ChatAgent processing: {message[:50]}...")
+        状态由 LangGraph Checkpointer 自动管理：
+        - 执行前：根据 conversation_id (thread_id) 恢复之前的 AgentState
+        - 执行后：自动保存新的 AgentState
 
-        messages = list(history) if history else []
-        messages.append(HumanMessage(content=message))
+        Args:
+            message: 用户消息
+            conversation_id: 会话 ID（同时作为 thread_id）
 
-        session_state = self._get_session_state(session_id)
-
-        try:
-            # run_workflow 现在是异步函数，使用 asyncio.run 调用
-            result = asyncio.run(run_workflow(
-                messages=messages,
-                intent=session_state.get("intent"),
-                params=session_state.get("params"),
-                extracted_interview=session_state.get("extracted_interview"),
-                pending_confirmation=session_state.get("pending_confirmation", False),
-                confirmed_data=session_state.get("confirmed_data", False),
-                current_subgraph=session_state.get("current_subgraph"),
-                last_tool_result=session_state.get("last_tool_result", ""),
-                context=session_state.get("context", {}),
-                thread_id=session_id,
-            ))
-
-            self._update_session_state(session_id, result)
-
-            response = result.get("last_tool_result", "")
-            logger.info(f"ChatAgent response: {response[:50]}...")
-
-            return response
-        except Exception as e:
-            logger.error(f"ChatAgent error: {e}")
-            return f"抱歉，我遇到了问题: {e}"
-
-    async def achat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> AsyncGenerator[str, None]:
-        """处理用户消息（异步流式模式，带持久化）
-
-        session_id 作为 thread_id 传递给 LangGraph，
-        实现状态持久化。
+        Yields:
+            流式输出的内容片段
         """
-        logger.info(f"ChatAgent streaming (async): {message[:50]}..., thread_id={session_id}")
-
-        messages = list(history) if history else []
-        messages.append(HumanMessage(content=message))
-
-        session_state = self._get_session_state(session_id)
+        logger.info(f"ChatAgent streaming: conversation={conversation_id}, message={message[:50]}...")
 
         try:
             final_state = None
 
             async for event in astream_workflow(
-                messages=messages,
-                intent=session_state.get("intent"),
-                params=session_state.get("params"),
-                extracted_interview=session_state.get("extracted_interview"),
-                pending_confirmation=session_state.get("pending_confirmation", False),
-                confirmed_data=session_state.get("confirmed_data", False),
-                current_subgraph=session_state.get("current_subgraph"),
-                last_tool_result=session_state.get("last_tool_result", ""),
-                context=session_state.get("context", {}),
-                thread_id=session_id,  # 关键：传递 thread_id
+                # 只传入当前消息，历史由 Checkpointer 恢复
+                messages=[HumanMessage(content=message)],
+                # 其他状态字段不传，由 Checkpointer 恢复
+                thread_id=conversation_id,
             ):
                 event_type = event.get("type")
 
@@ -122,7 +81,6 @@ class ChatAgent:
                     # 非 LLM 节点的状态更新
                     content = event.get("content", "")
                     if content:
-                        # 确保独立显示在前面，如果需要换行可以用 yield content + "\n\n"
                         yield f"[{event.get('node', '系统')}] {content}\n\n"
                     final_state = event.get("state")
 
@@ -133,19 +91,19 @@ class ChatAgent:
                 elif event_type == "error":
                     yield f"\n抱歉，我遇到了问题: {event.get('content')}"
 
-            # 更新会话状态
-            if final_state:
-                self._update_session_state(session_id, final_state)
-
             logger.info("ChatAgent streaming completed")
 
         except Exception as e:
             logger.error(f"ChatAgent streaming error: {e}")
             yield f"\n抱歉，我遇到了问题: {e}"
 
-    def chat_streaming(self, message: str, history: Optional[list[BaseMessage]] = None, session_id: str = "default") -> Generator[str, None, None]:
+    def chat_streaming(
+        self,
+        message: str,
+        conversation_id: str
+    ) -> Generator[str, None, None]:
         """处理用户消息（同步流式模式的 Wrapper）
-        
+
         专门适配如 Streamlit 等同步渲染框架，通过独立的后台线程事件循环运行异步的
         achat_streaming 生成器，并将产出的 chunk 通过线程安全的 queue 推送过来。
         """
@@ -153,7 +111,7 @@ class ChatAgent:
 
         async def run_async():
             try:
-                async for chunk in self.achat_streaming(message, history, session_id):
+                async for chunk in self.achat_streaming(message, conversation_id):
                     q.put(("chunk", chunk))
             except Exception as e:
                 q.put(("error", e))
@@ -161,7 +119,6 @@ class ChatAgent:
                 q.put(("done", None))
 
         def thread_worker():
-            # 创建并设置当前线程的新事件循环
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -169,48 +126,19 @@ class ChatAgent:
             finally:
                 loop.close()
 
-        # 启动后台线程执行流式调用
         t = threading.Thread(target=thread_worker, daemon=True)
         t.start()
 
-        # 在主线程中同步消费队列并 yield
         while True:
             item_type, item = q.get()
             if item_type == "done":
                 break
             elif item_type == "error":
-                # 返回错误或抛出异常
-                logger.error(f"Error caught in synchronous stream wrapper: {item}")
+                logger.error(f"Error in synchronous stream wrapper: {item}")
                 yield f"\n[Stream Error] {str(item)}"
                 break
             elif item_type == "chunk":
                 yield item
-
-    def _update_session_state(self, session_id: str, result: dict):
-        """更新会话状态"""
-        session_state = self._session_state[session_id]
-
-        if "intent" in result:
-            session_state["intent"] = result["intent"]
-        if "params" in result:
-            session_state["params"] = result["params"]
-        if "extracted_interview" in result:
-            session_state["extracted_interview"] = result["extracted_interview"]
-        if "pending_confirmation" in result:
-            session_state["pending_confirmation"] = result["pending_confirmation"]
-        if "confirmed_data" in result:
-            session_state["confirmed_data"] = result["confirmed_data"]
-        if "current_subgraph" in result:
-            session_state["current_subgraph"] = result["current_subgraph"]
-        if "last_tool_result" in result:
-            session_state["last_tool_result"] = result["last_tool_result"]
-        if "context" in result:
-            session_state["context"].update(result["context"])
-
-    def clear_session(self, session_id: str = "default"):
-        """清除会话状态"""
-        if session_id in self._session_state:
-            del self._session_state[session_id]
 
 
 # 全局单例

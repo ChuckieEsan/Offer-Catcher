@@ -148,11 +148,18 @@ export default function QuestionsPage() {
       const res = await regenerateAnswer(id);
       hide();
       message.success("生成成功");
-      // 更新当前查看/编辑的内容
+      // 更新当前查看的内容
       if (viewDrawer.question?.question_id === id) {
         setViewDrawer({
           visible: true,
           question: { ...viewDrawer.question, question_answer: res.question_answer },
+        });
+      }
+      // 更新编辑弹窗的内容
+      if (editModal.question?.question_id === id) {
+        setEditModal({
+          ...editModal,
+          editAnswer: res.question_answer,
         });
       }
       loadQuestions();
@@ -236,7 +243,7 @@ export default function QuestionsPage() {
     {
       title: "操作",
       key: "actions",
-      width: 200,
+      width: 240,
       fixed: "right" as const,
       render: (_: unknown, record: Question) => (
         <Space size="small">
@@ -305,7 +312,7 @@ export default function QuestionsPage() {
         columns={columns}
         rowKey="question_id"
         loading={loading}
-        scroll={{ x: 720 }}
+        scroll={{ x: 780 }}
         pagination={{
           current: page,
           pageSize,
@@ -384,16 +391,18 @@ export default function QuestionsPage() {
 
             <div style={{ marginTop: 24, textAlign: "right" }}>
               <Space>
-                {!viewDrawer.question.question_answer && (
+                <Popconfirm
+                  title={viewDrawer.question.question_answer ? "确定重新生成答案？现有答案将被覆盖" : "确定生成答案？"}
+                  onConfirm={() => handleRegenerate(viewDrawer.question!.question_id)}
+                >
                   <Button
-                    type="primary"
+                    type={viewDrawer.question.question_answer ? "default" : "primary"}
                     icon={<ReloadOutlined />}
                     loading={regenerating === viewDrawer.question?.question_id}
-                    onClick={() => handleRegenerate(viewDrawer.question!.question_id)}
                   >
-                    生成答案
+                    {viewDrawer.question.question_answer ? "重新生成" : "生成答案"}
                   </Button>
-                )}
+                </Popconfirm>
                 <Button icon={<EditOutlined />} onClick={() => handleEdit(viewDrawer.question!)}>
                   编辑
                 </Button>

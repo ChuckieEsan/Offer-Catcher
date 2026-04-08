@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat, extract, score, questions, search, stats
+from app.api.routes import chat, extract, score, questions, search, stats, conversations
 from app.utils.logger import logger
 from app.utils.warmup import warmup
 
@@ -55,6 +55,7 @@ app.add_middleware(
 )
 
 # 注册路由
+app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(extract.router, prefix="/api/v1")
 app.include_router(score.router, prefix="/api/v1")
