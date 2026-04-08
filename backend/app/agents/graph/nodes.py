@@ -244,46 +244,41 @@ def _get_react_agent() -> CompiledStateGraph:
 async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
 
-    执行一步 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
-    支持使用 LangGraph astream_events 流式输出。
+    执行 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
 
     Note:
-        使用 astream_events 而不是 astream，以支持 token 级流式输出。
-        必须将 config 传递给内部的 astream_events，这样外层才能捕获 token 流。
+        使用 ainvoke 而不是 astream_events，让外层的 astream_events 自动捕获 token 流。
+        LangGraph 会递归地捕获所有子图的事件，包括 LLM 的 token 流。
     """
     agent = _get_react_agent()
 
     # 获取最近的消息
     messages: list[BaseMessage] = state["messages"][-10:]
+    logger.info(f"ReAct loop starting with {len(messages)} messages")
 
     try:
-        # 使用 astream_events 并传递 config，以支持流式输出
-        final_result = None
-        async for event in agent.astream_events({"messages": messages}, config=config, version="v2"):
-            kind = event.get("event")
-            name = event.get("name")
-
-            # 捕获 Agent 完成时的最终结果
-            # 注意：create_agent 创建的 graph 名称是 "LangGraph"
-            if kind == "on_chain_end" and name == "LangGraph":
-                final_result = event.get("data", {}).get("output")
+        # 直接调用 agent，外层的 astream_events 会自动捕获内部的 token 流
+        result = await agent.ainvoke({"messages": messages}, config=config)
 
         # 提取最终响应
-        if final_result:
-            if isinstance(final_result, dict):
-                response = final_result.get("messages", [])
-                if response and hasattr(response[-1], "content"):
-                    final_response = response[-1].content
-                else:
-                    final_response = str(final_result)
+        if result and "messages" in result:
+            last_message = result["messages"][-1]
+            if hasattr(last_message, "content"):
+                final_response = last_message.content
             else:
-                final_response = str(final_result)
+                final_response = str(last_message)
+            logger.info(f"ReAct completed, response length: {len(final_response)}")
         else:
-            final_response = "无响应"
+            logger.warning("ReAct loop returned empty result")
+            final_response = "抱歉，我无法处理这个请求。"
 
-        return {"last_tool_result": final_response}
+        # 返回消息列表，让外层能正确更新状态
+        return {
+            "messages": result.get("messages", []),
+            "last_tool_result": final_response,
+        }
     except Exception as e:
-        logger.error(f"ReAct loop failed: {e}")
+        logger.error(f"ReAct loop failed: {e}", exc_info=True)
         return {"last_tool_result": f"查询失败: {e}"}
 
 

@@ -71,6 +71,16 @@ class PostgresClient:
                 database=self.database,
             )
             logger.info(f"PostgreSQL connected: {self.host}:{self.port}/{self.database}")
+        elif self._conn.closed == 0:
+            # 检查是否有未完成的事务，如果有则 rollback
+            try:
+                # 尝试执行一个简单查询来检查事务状态
+                with self._conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+            except psycopg2.errors.InFailedSqlTransaction:
+                # 事务已中止，需要 rollback
+                logger.warning("PostgreSQL transaction aborted, rolling back")
+                self._conn.rollback()
         return self._conn
 
     def init_tables(self):

@@ -134,11 +134,20 @@ def init_telemetry(service_name: str = "offer-catcher") -> None:
     _tracer = trace.get_tracer(service_name)
 
     # 初始化 Metrics (Prometheus Exporter - 暴露 HTTP 端点)
-    # Prometheus 会抓取 http://localhost:9464/metrics
-    prometheus_reader = PrometheusMetricReader(port=prometheus_port)
+    # PrometheusMetricReader 不接受 port 参数，需要用 prometheus_client 启动 HTTP server
+    from prometheus_client import start_http_server
+
+    prometheus_reader = PrometheusMetricReader()
     metric_provider = MeterProvider(resource=resource, metric_readers=[prometheus_reader])
     metrics.set_meter_provider(metric_provider)
     _meter = metrics.get_meter(service_name)
+
+    # 启动 Prometheus HTTP server
+    try:
+        start_http_server(prometheus_port)
+        logger.info(f"Prometheus metrics server started on port {prometheus_port}")
+    except Exception as e:
+        logger.warning(f"Failed to start Prometheus server: {e}")
 
     # 创建工具调用指标
     _tool_call_counter = _meter.create_counter(

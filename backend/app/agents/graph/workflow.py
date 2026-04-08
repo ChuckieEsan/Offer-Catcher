@@ -227,7 +227,7 @@ async def astream_workflow(
                         final_state = output
 
                     elif isinstance(output, dict) and "last_tool_result" in output:
-                        if name in ["extract", "confirm", "handle_confirmation", "store_and_mq"]:
+                        if name in ["extract", "confirm", "handle_confirmation", "store_and_mq", "react_loop"]:
                             content = output.get("last_tool_result", "")
                             if content:
                                 yield {

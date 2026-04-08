@@ -72,16 +72,15 @@ class ChatAgent:
                 event_type = event.get("type")
 
                 if event_type == "token":
-                    # LLM token 级流式输出
+                    # LLM token 级流式输出 - 这是主要内容
                     content = event.get("content", "")
                     if content:
                         yield content
 
                 elif event_type == "update":
-                    # 非 LLM 节点的状态更新
-                    content = event.get("content", "")
-                    if content:
-                        yield f"[{event.get('node', '系统')}] {content}\n\n"
+                    # 工具调用完成的状态更新
+                    # 不输出内容，因为 token 流已经包含了 LLM 的输出
+                    # 只记录状态用于后续处理
                     final_state = event.get("state")
 
                 elif event_type == "final":

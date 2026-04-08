@@ -60,6 +60,9 @@ export async function deleteConversation(id: string): Promise<void> {
 /**
  * 流式聊天 API
  * 使用 Fetch API 处理 SSE 流式响应
+ *
+ * 注意：直接调用后端，绕过 Next.js rewrites 代理
+ * Next.js 代理对 SSE 流式响应支持不完善，会导致流被缓冲
  */
 export async function chatStream(
   request: ChatRequest,
@@ -79,8 +82,12 @@ export async function chatStream(
     }
   };
 
+  // 直接调用后端，绕过 Next.js rewrites 代理
+  // SSE 流式响应需要直接连接后端
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
   try {
-    const response = await fetch(`${API_BASE}/chat/stream`, {
+    const response = await fetch(`${apiUrl}/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
