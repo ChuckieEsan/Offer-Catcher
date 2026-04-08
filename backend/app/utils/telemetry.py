@@ -2,6 +2,10 @@
 
 提供全链路追踪和指标收集能力。
 
+架构:
+- Traces: OTLP → Jaeger (端口 4317)
+- Metrics: Prometheus Exporter → 暴露 /metrics 端点 → Prometheus 抓取
+
 装饰器风格与项目保持一致：@traced, @traced_async
 """
 
@@ -13,12 +17,13 @@ from typing import Any, Callable, Optional, TypeVar, Union
 
 from opentelemetry import trace, metrics
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
+# Prometheus exporter - 暴露 HTTP 端点供 Prometheus 抓取
+from opentelemetry.exporter.prometheus import PrometheusMetricReader
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
@@ -113,6 +118,7 @@ def init_telemetry(service_name: str = "offer-catcher") -> None:
         return
 
     otlp_endpoint = getattr(settings, 'otlp_endpoint', 'http://localhost:4317')
+    prometheus_port = getattr(settings, 'prometheus_port', 9464)
 
     # 创建资源
     resource = Resource.create({
@@ -120,20 +126,17 @@ def init_telemetry(service_name: str = "offer-catcher") -> None:
         "service.version": "1.0.0",
     })
 
-    # 初始化 Tracer
+    # 初始化 Tracer (发送到 Jaeger)
     trace_provider = TracerProvider(resource=resource)
     otlp_trace_exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
     trace_provider.add_span_processor(BatchSpanProcessor(otlp_trace_exporter))
     trace.set_tracer_provider(trace_provider)
     _tracer = trace.get_tracer(service_name)
 
-    # 初始化 Metrics
-    otlp_metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
-    metric_reader = PeriodicExportingMetricReader(
-        otlp_metric_exporter,
-        export_interval_millis=60000
-    )
-    metric_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+    # 初始化 Metrics (Prometheus Exporter - 暴露 HTTP 端点)
+    # Prometheus 会抓取 http://localhost:9464/metrics
+    prometheus_reader = PrometheusMetricReader(port=prometheus_port)
+    metric_provider = MeterProvider(resource=resource, metric_readers=[prometheus_reader])
     metrics.set_meter_provider(metric_provider)
     _meter = metrics.get_meter(service_name)
 
@@ -188,7 +191,7 @@ def init_telemetry(service_name: str = "offer-catcher") -> None:
         unit="1"
     )
 
-    logger.info(f"OpenTelemetry initialized: service={service_name}, endpoint={otlp_endpoint}")
+    logger.info(f"OpenTelemetry initialized: service={service_name}, traces={otlp_endpoint}, metrics=prometheus:{prometheus_port}")
 
 
 def get_tracer() -> trace.Tracer:

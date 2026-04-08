@@ -10,7 +10,7 @@ import {
   Modal,
   Drawer,
   Input,
-  message,
+  App,
   Popconfirm,
   Typography,
   Space,
@@ -33,6 +33,7 @@ const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
 
 export default function QuestionsPage() {
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
@@ -64,6 +65,14 @@ export default function QuestionsPage() {
 
   // 重新生成状态
   const [regenerating, setRegenerating] = useState<string | null>(null);
+
+  // 答案预览 Modal
+  const [previewModal, setPreviewModal] = useState<{
+    visible: boolean;
+    questionId: string;
+    questionText: string;
+    newAnswer: string;
+  }>({ visible: false, questionId: "", questionText: "", newAnswer: "" });
 
   useEffect(() => {
     loadCompanies();
@@ -143,31 +152,56 @@ export default function QuestionsPage() {
 
   const handleRegenerate = async (id: string) => {
     setRegenerating(id);
-    const hide = message.loading("正在重新生成答案...", 0);
+    const hide = message.loading("正在生成新答案...", 0);
     try {
-      const res = await regenerateAnswer(id);
+      // preview=true 只生成不保存
+      const res = await regenerateAnswer(id, true);
       hide();
-      message.success("生成成功");
-      // 更新当前查看的内容
-      if (viewDrawer.question?.question_id === id) {
-        setViewDrawer({
-          visible: true,
-          question: { ...viewDrawer.question, question_answer: res.question_answer },
-        });
-      }
-      // 更新编辑弹窗的内容
-      if (editModal.question?.question_id === id) {
-        setEditModal({
-          ...editModal,
-          editAnswer: res.question_answer,
-        });
-      }
-      loadQuestions();
+
+      // 获取题目文本用于显示
+      const question = questions.find(q => q.question_id === id);
+      const questionText = question?.question_text || viewDrawer.question?.question_text || "";
+
+      // 显示预览 Modal
+      setPreviewModal({
+        visible: true,
+        questionId: id,
+        questionText,
+        newAnswer: res.question_answer,
+      });
     } catch (error) {
       hide();
       message.error("生成失败");
     } finally {
       setRegenerating(null);
+    }
+  };
+
+  // 确认保存新答案
+  const handleConfirmAnswer = async () => {
+    const { questionId, newAnswer } = previewModal;
+    try {
+      await updateQuestion(questionId, { question_answer: newAnswer });
+      message.success("答案已保存");
+
+      // 更新当前查看的内容
+      if (viewDrawer.question?.question_id === questionId) {
+        setViewDrawer({
+          visible: true,
+          question: { ...viewDrawer.question, question_answer: newAnswer },
+        });
+      }
+      // 更新编辑弹窗的内容
+      if (editModal.question?.question_id === questionId) {
+        setEditModal({
+          ...editModal,
+          editAnswer: newAnswer,
+        });
+      }
+      setPreviewModal({ visible: false, questionId: "", questionText: "", newAnswer: "" });
+      loadQuestions();
+    } catch (error) {
+      message.error("保存失败");
     }
   };
 
@@ -391,18 +425,14 @@ export default function QuestionsPage() {
 
             <div style={{ marginTop: 24, textAlign: "right" }}>
               <Space>
-                <Popconfirm
-                  title={viewDrawer.question.question_answer ? "确定重新生成答案？现有答案将被覆盖" : "确定生成答案？"}
-                  onConfirm={() => handleRegenerate(viewDrawer.question!.question_id)}
-                >
-                  <Button
+                <Button
                     type={viewDrawer.question.question_answer ? "default" : "primary"}
                     icon={<ReloadOutlined />}
                     loading={regenerating === viewDrawer.question?.question_id}
+                    onClick={() => handleRegenerate(viewDrawer.question!.question_id)}
                   >
                     {viewDrawer.question.question_answer ? "重新生成" : "生成答案"}
                   </Button>
-                </Popconfirm>
                 <Button icon={<EditOutlined />} onClick={() => handleEdit(viewDrawer.question!)}>
                   编辑
                 </Button>
@@ -472,6 +502,40 @@ export default function QuestionsPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 答案预览确认 Modal */}
+      <Modal
+        title="预览新答案"
+        open={previewModal.visible}
+        onOk={handleConfirmAnswer}
+        onCancel={() => setPreviewModal({ visible: false, questionId: "", questionText: "", newAnswer: "" })}
+        width={700}
+        okText="确认保存"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Title level={5}>题目</Title>
+          <Paragraph style={{ background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
+            {previewModal.questionText}
+          </Paragraph>
+        </div>
+        <div>
+          <Title level={5}>新答案</Title>
+          <div
+            style={{
+              background: "#f5f5f5",
+              padding: 12,
+              borderRadius: 4,
+              maxHeight: 400,
+              overflow: "auto",
+            }}
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {previewModal.newAnswer}
+            </ReactMarkdown>
+          </div>
+        </div>
       </Modal>
     </MainLayout>
   );

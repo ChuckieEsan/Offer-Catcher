@@ -223,8 +223,15 @@ export async function deleteQuestion(id: string): Promise<void> {
   await api.delete(`/questions/${id}`);
 }
 
-export async function regenerateAnswer(id: string): Promise<{ question_answer: string }> {
-  const res = await api.post(`/questions/${id}/regenerate`);
+export async function regenerateAnswer(
+  id: string,
+  preview: boolean = true
+): Promise<{ question_answer: string }> {
+  // LLM + Web Search 耗时较长，设置 3 分钟超时
+  const res = await api.post(`/questions/${id}/regenerate`, null, {
+    params: { preview },
+    timeout: 180000,  // 3 分钟
+  });
   return res.data;
 }
 

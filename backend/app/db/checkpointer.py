@@ -40,7 +40,9 @@ async def get_checkpointer() -> AsyncGenerator[AsyncPostgresSaver, None]:
     logger.debug(f"Creating AsyncPostgresSaver: {settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}")
 
     # from_conn_string 返回异步上下文管理器
-    async with AsyncPostgresSaver.from_conn_string(db_uri, pipeline=True) as checkpointer:
+    # 使用 pipeline=False 避免 psycopg3 generator 退出时的连接清理问题
+    # 参考: https://github.com/psycopg/psycopg/issues/XXX
+    async with AsyncPostgresSaver.from_conn_string(db_uri, pipeline=False) as checkpointer:
         # 初始化表结构（首次需要）
         await checkpointer.setup()
         yield checkpointer

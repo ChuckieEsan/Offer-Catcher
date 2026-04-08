@@ -7,7 +7,7 @@ import {
   Input,
   Button,
   Upload,
-  message,
+  App,
   List,
   Tag,
   Typography,
@@ -23,6 +23,7 @@ const { Title, Paragraph } = Typography;
 const { Dragger } = Upload;
 
 export default function ExtractPage() {
+  const { message } = App.useApp();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{

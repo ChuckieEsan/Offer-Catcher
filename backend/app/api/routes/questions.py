@@ -10,10 +10,31 @@ import asyncio
 
 from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
-from app.models.schemas import QdrantQuestionPayload, SearchResult
+from app.models.schemas import QdrantQuestionPayload, SearchResult, QuestionItem
+from app.models.enums import QuestionType, MasteryLevel
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/questions", tags=["questions"])
+
+
+# ========== Helper Functions ==========
+
+def payload_to_question_item(payload: QdrantQuestionPayload) -> QuestionItem:
+    """将 QdrantQuestionPayload 转换为 QuestionItem
+
+    存储模型 → 业务模型
+    """
+    return QuestionItem(
+        question_id=payload.question_id,
+        question_text=payload.question_text,
+        company=payload.company,
+        position=payload.position,
+        question_type=QuestionType(payload.question_type),
+        core_entities=payload.core_entities,
+        mastery_level=MasteryLevel(payload.mastery_level),
+        metadata=payload.metadata,
+        cluster_ids=payload.cluster_ids,
+    )
 
 
 # ========== Request/Response Models ==========
@@ -147,24 +168,36 @@ async def delete_question(question_id: str):
 
 
 @router.post("/{question_id}/regenerate", response_model=RegenerateResponse)
-async def regenerate_answer(question_id: str):
+async def regenerate_answer(question_id: str, preview: bool = Query(True, description="是否仅预览（不保存）")):
     """重新生成答案
 
-    调用 LLM 重新生成标准答案。
+    Args:
+        question_id: 题目 ID
+        preview: 是否仅预览。默认 True，只返回新答案不保存。
+                 设为 False 时会直接保存到数据库。
+
+    Returns:
+        生成的新答案
     """
-    logger.info(f"Regenerate answer: {question_id}")
+    logger.info(f"Regenerate answer: {question_id}, preview={preview}")
 
     qdrant = get_qdrant_manager()
-    question = qdrant.get_question(question_id)
+    question_payload = qdrant.get_question(question_id)
 
-    if not question:
+    if not question_payload:
         raise HTTPException(status_code=404, detail="题目不存在")
 
-    # 调用 Answer Specialist 生成答案
-    specialist = get_answer_specialist()
-    answer = specialist.generate_answer(question)
+    # 存储模型 → 业务模型
+    question_item = payload_to_question_item(question_payload)
 
-    # 更新答案
-    qdrant.update_question(question_id, question_answer=answer)
+    # 在线程池中运行同步的 LLM 调用，避免阻塞事件循环
+    specialist = get_answer_specialist()
+    loop = asyncio.get_event_loop()
+    answer = await loop.run_in_executor(None, specialist.generate_answer, question_item)
+
+    # 仅当 preview=False 时才保存
+    if not preview:
+        qdrant.update_question(question_id, question_answer=answer)
+        logger.info(f"Answer saved for question: {question_id}")
 
     return RegenerateResponse(question_answer=answer)

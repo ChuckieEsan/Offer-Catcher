@@ -175,12 +175,16 @@ class Settings(BaseSettings):
 
     # OpenTelemetry 配置
     otlp_endpoint: str = Field(
-        description="OpenTelemetry OTLP endpoint",
+        description="OpenTelemetry OTLP endpoint (Jaeger traces)",
         default="http://localhost:4317",
     )
     telemetry_enabled: bool = Field(
         description="是否启用 OpenTelemetry",
         default=False,
+    )
+    prometheus_port: int = Field(
+        description="Prometheus metrics 暴露端口",
+        default=9464,
     )
 
     @property

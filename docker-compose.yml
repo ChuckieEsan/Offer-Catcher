@@ -46,15 +46,30 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # OpenTelemetry 可观测性后端 (Jaeger All-in-One)
+  # OpenTelemetry 可观测性后端 (Jaeger All-in-One - Traces)
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
       - "16686:16686"  # Jaeger UI
-      - "4317:4317"    # OTLP gRPC
+      - "4317:4317"    # OTLP gRPC (Traces only)
       - "4318:4318"    # OTLP HTTP
     environment:
       COLLECTOR_OTLP_ENABLED: true
+
+  # Prometheus - Metrics 存储
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    ports:
+      - "9090:9090"    # Prometheus UI
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # 允许访问主机上的服务
 
 volumes:
   qdrant_data:
@@ -62,3 +77,4 @@ volumes:
   neo4j_data:
   redis_data:
   postgres_data:
+  prometheus_data:

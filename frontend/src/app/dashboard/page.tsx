@@ -9,7 +9,7 @@ import {
   Table,
   Typography,
   Spin,
-  message,
+  App,
 } from "antd";
 import {
   FileTextOutlined,
@@ -24,6 +24,7 @@ import type { CompanyStats, EntityStats } from "@/types";
 const { Title } = Typography;
 
 export default function DashboardPage() {
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<{
     total_questions: number;
