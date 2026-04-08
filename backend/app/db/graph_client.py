@@ -519,7 +519,7 @@ class Neo4jGraphClient:
 
         try:
             with self._driver.session(database=self.settings.neo4j_database) as session:
-                session.run(question_id=question_id, cluster_id=cluster_id)
+                session.run(query, question_id=question_id, cluster_id=cluster_id)
             logger.debug(f"Created BELONGS_TO relationship: {question_id} -> {cluster_id}")
             return True
         except Exception as e:

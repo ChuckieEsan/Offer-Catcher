@@ -67,11 +67,17 @@ class IngestionPipeline:
     def _create_context(self, question: QuestionItem) -> str:
         """创建用于 embedding 的上下文（静态前缀策略）
 
-        格式："考点标签：xxx,yyy | 题目：xxx"
+        格式："公司：xxx | 岗位：xxx | 类型：xxx | 考点：xxx | 题目：xxx"
         """
         entities = question.core_entities or []
         entities_str = ",".join(entities) if entities else "综合"
-        return f"考点标签：{entities_str} | 题目：{question.question_text}"
+        return (
+            f"公司：{question.company} | "
+            f"岗位：{question.position} | "
+            f"类型：{question.question_type.value} | "
+            f"考点：{entities_str} | "
+            f"题目：{question.question_text}"
+        )
 
     def _create_payload(self, question: QuestionItem) -> QdrantQuestionPayload:
         """创建 Qdrant Payload"""

@@ -240,6 +240,8 @@ def _get_react_agent() -> CompiledStateGraph:
     prompt = load_prompt_template("react_agent.md")
     # 提取原始模板字符串（create_agent 接受 str）
     system_prompt = prompt.messages[0].prompt.template
+    # 移除 skills_prompt 占位符（暂时不使用 skill 系统）
+    system_prompt = system_prompt.replace("{{ skills_prompt }}", "")
     return create_agent(llm, tools=tools, system_prompt=system_prompt)
 
 

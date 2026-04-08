@@ -175,7 +175,13 @@ class ClusteringService:
         for q in all_questions:
             entities = q.core_entities or []
             entities_str = ",".join(entities) if entities else "综合"
-            texts.append(f"考点标签：{entities_str} | 题目：{q.question_text}")
+            texts.append(
+                f"公司：{q.company} | "
+                f"岗位：{q.position} | "
+                f"类型：{q.question_type.value} | "
+                f"考点：{entities_str} | "
+                f"题目：{q.question_text}"
+            )
 
         logger.info("Generating embeddings...")
         embeddings = self.embedding_tool.embed_texts(texts)
