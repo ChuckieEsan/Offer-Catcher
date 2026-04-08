@@ -1,28 +1,31 @@
 """Answer Worker 入口脚本
 
-支持两种消费模式：
-1. 异步模式（默认）：基于协程的异步消费
-2. 线程池模式：基于 ThreadPoolExecutor，每个线程独立 channel
+使用线程池模式消费 RabbitMQ 消息，每个线程独立连接和 channel。
+适用于 LLM 调用等阻塞型任务，实现真正的并发处理。
 
-可通过环境变量 WORKER_MODE 选择：
-- async: 异步协程模式（默认）
-- thread_pool: 线程池模式
+运行方式：
+    # 默认 4 个工作线程
+    PYTHONPATH=. uv run python workers/answer_worker.py
+
+    # 指定线程数
+    WORKER_THREADS=8 PYTHONPATH=. uv run python workers/answer_worker.py
 """
 
 import asyncio
 import os
+import signal
+import sys
 
 from app.agents.answer_specialist import get_answer_specialist
 from app.db.qdrant_client import get_qdrant_manager
-from app.mq.consumer import get_consumer
 from app.mq.thread_pool_consumer import get_thread_pool_consumer
 from app.models.schemas import MQTaskMessage
 from app.models.schemas import QuestionItem, QuestionType, MasteryLevel
 from app.utils.logger import logger
 
 
-async def process_answer_task(task: MQTaskMessage) -> bool:
-    """处理答案生成任务
+def process_answer_task(task: MQTaskMessage) -> bool:
+    """处理答案生成任务（同步函数）
 
     Args:
         task: MQ 消息
@@ -51,18 +54,11 @@ async def process_answer_task(task: MQTaskMessage) -> bool:
         )
 
         # 2. 生成答案
-        
         agent = get_answer_specialist(provider="dashscope")
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant
         qdrant.update_question(task.question_id, question_answer=answer)
-        
-        # 这里的协程模式并不是真并发，因为这些操作是阻塞的
-        # 如果要求协程模式下真并发，可以采用如下策略
-        # answer = await asyncio.to_thread(agent.generate_answer, question)
-        # 写入 Qdrant（同步阻塞调用 -> 放到线程池）
-        # await asyncio.to_thread(qdrant.update_question, task.question_id, answer)
 
         logger.info(f"Answer generated and saved for: {task.question_id}")
         return True
@@ -74,41 +70,37 @@ async def process_answer_task(task: MQTaskMessage) -> bool:
 
 async def main():
     """主函数"""
-    worker_mode = os.getenv("WORKER_MODE", "async").lower()
-
-    logger.info(f"Starting Answer Worker in {worker_mode} mode...")
-
-    if worker_mode == "thread_pool":
-        await run_thread_pool_mode()
-    else:
-        await run_async_mode()
-
-
-async def run_async_mode():
-    """异步协程模式（默认）"""
-    logger.info("Using async coroutine consumer (prefetch=5)")
-    consumer = await get_consumer(prefetch_count=5)
-    logger.info("Worker started, waiting for messages...")
-    await consumer.consume(process_answer_task)
-
-
-async def run_thread_pool_mode():
-    """线程池模式"""
     num_threads = int(os.getenv("WORKER_THREADS", "4"))
-    logger.info(f"Using thread pool consumer ({num_threads} threads)")
+    prefetch_count = int(os.getenv("PREFETCH_COUNT", "1"))
+
+    logger.info(f"Starting Answer Worker (thread pool mode, {num_threads} threads, prefetch={prefetch_count})")
 
     consumer = await get_thread_pool_consumer(
-        num_threads=num_threads, prefetch_count=1
+        num_threads=num_threads,
+        prefetch_count=prefetch_count,
     )
-    await consumer.start(process_answer_task)
-    logger.info(f"Thread pool worker started with {num_threads} threads, waiting for messages...")
 
-    # 保持主线程运行
-    try:
-        await asyncio.Event().wait()
-    except asyncio.CancelledError:
-        logger.info("Worker cancelled, stopping...")
-        await consumer.stop()
+    # 设置信号处理器（优雅关闭）
+    loop = asyncio.get_event_loop()
+    stop_event = asyncio.Event()
+
+    def signal_handler():
+        logger.info("Received shutdown signal, stopping worker...")
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, signal_handler)
+
+    # 启动消费者
+    await consumer.start(process_answer_task)
+    logger.info(f"Worker started with {num_threads} threads, waiting for messages...")
+
+    # 等待停止信号
+    await stop_event.wait()
+
+    # 停止消费者
+    await consumer.stop()
+    logger.info("Worker stopped")
 
 
 if __name__ == "__main__":
