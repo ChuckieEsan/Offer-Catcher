@@ -14,22 +14,20 @@ class RedisClient:
 
     def __init__(self):
         settings = get_settings()
-        self._client: Optional[redis.Redis] = None
         self.ttl = settings.redis_ttl
+        # 直接建立连接（不再延迟加载）
+        self._client = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            password=settings.redis_password or None,
+            db=settings.redis_db,
+            decode_responses=True,
+        )
+        logger.info(f"Redis connected: {settings.redis_host}:{settings.redis_port}")
 
     @property
     def client(self) -> redis.Redis:
         """获取 Redis 连接"""
-        if self._client is None:
-            settings = get_settings()
-            self._client = redis.Redis(
-                host=settings.redis_host,
-                port=settings.redis_port,
-                password=settings.redis_password or None,
-                db=settings.redis_db,
-                decode_responses=True,
-            )
-            logger.info(f"Redis connected: {settings.redis_host}:{settings.redis_port}")
         return self._client
 
     def _make_key(self, user_id: str, conversation_id: str) -> str:
@@ -150,7 +148,6 @@ class RedisClient:
         """关闭连接"""
         if self._client:
             self._client.close()
-            self._client = None
 
 
 # 全局单例

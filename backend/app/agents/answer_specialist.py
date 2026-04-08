@@ -33,13 +33,12 @@ class AnswerSpecialistAgent(BaseAgent):
             provider: LLM Provider 名称，默认 dashscope
         """
         super().__init__(provider)
-        self._web_search: Optional[WebSearchTool] = None
+        # 直接初始化 Web Search 工具（不再延迟加载）
+        self._web_search = get_web_search_tool(max_results=5)
 
     @property
     def web_search(self) -> WebSearchTool:
         """获取 Web Search 工具"""
-        if self._web_search is None:
-            self._web_search = get_web_search_tool(max_results=5)
         return self._web_search
 
     def _build_prompt(

@@ -34,9 +34,11 @@ class QdrantManager:
             collection_name: 可选的集合名称，用于测试或使用独立的集合
         """
         self.settings = get_settings()
-        self._client: Optional[QdrantClient] = None
         # 如果提供了 collection_name，则使用它；否则使用配置中的默认值
         self._collection_name = collection_name
+        # 直接建立连接（不再延迟加载）
+        self._client = QdrantClient(url=self.settings.qdrant_url)
+        logger.info(f"Qdrant client connected: {self.settings.qdrant_url}")
 
     @property
     def collection_name(self) -> str:
@@ -45,14 +47,7 @@ class QdrantManager:
 
     @property
     def client(self) -> QdrantClient:
-        """获取 Qdrant 客户端单例（延迟加载）"""
-        if self._client is None:
-            try:
-                self._client = QdrantClient(url=self.settings.qdrant_url)
-                logger.info(f"Qdrant client connected: {self.settings.qdrant_url}")
-            except Exception as e:
-                logger.error(f"Failed to connect to Qdrant: {e}")
-                raise
+        """获取 Qdrant 客户端"""
         return self._client
 
     def create_collection_if_not_exists(

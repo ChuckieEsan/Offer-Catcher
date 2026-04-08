@@ -33,28 +33,27 @@ class BaseAgent(Generic[T]):
     _prompt_filename: str = ""
     _structured_output_schema: Optional[type] = None  # Pydantic 模型类
 
-    def __init__(self, provider: str = "dashscope") -> None:
+    def __init__(self, provider: str = "dashscope", llm_kwargs: Optional[dict] = None) -> None:
         """初始化 Agent
 
         Args:
             provider: LLM Provider 名称，默认 dashscope
+            llm_kwargs: 额外的 LLM 参数，如 {"extra_body": {"enable_thinking": False}}
         """
         self.provider = provider
-        self._llm: Optional[ChatOpenAI] = None
-        self._structured_llm: Optional[ChatOpenAI] = None
+        self._llm_kwargs: dict = llm_kwargs or {}
         # 加载 prompt 模板（优先使用 ChatPromptTemplate）
         self._prompt_template: Optional[ChatPromptTemplate] = None
         if self._prompt_filename:
             self._prompt_template = load_prompt_template(self._prompt_filename)
-        # 子类可覆盖此属性来传递额外的 LLM 参数
-        self._llm_kwargs: dict = {}
+        # 直接创建 LLM 实例（不再延迟加载）
+        self._llm = create_llm(self.provider, "chat", **self._llm_kwargs)
+        self._structured_llm: Optional[ChatOpenAI] = None
         logger.info(f"{self.__class__.__name__} initialized with provider: {provider}")
 
     @property
     def llm(self) -> ChatOpenAI:
-        """获取 LLM 实例（延迟加载）"""
-        if self._llm is None:
-            self._llm = create_llm(self.provider, "chat", **self._llm_kwargs)
+        """获取 LLM 实例"""
         return self._llm
 
     @property

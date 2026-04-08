@@ -48,18 +48,17 @@ class WebSearchTool:
             max_results: 最大返回结果数，默认 5
         """
         self.max_results = max_results
-        self._tool: Optional[TavilySearch] = None
+        # 直接初始化工具（不再延迟加载）
+        settings = get_settings()
+        self._tool = TavilySearch(
+            max_results=self.max_results,
+            tavily_api_key=settings.tavily_api_key,
+        )
         logger.info(f"Web search tool initialized, max_results={max_results}")
 
     @property
     def tool(self) -> TavilySearch:
-        """获取 Tavily 工具实例（延迟加载）"""
-        if self._tool is None:
-            settings = get_settings()
-            self._tool = TavilySearch(
-                max_results=self.max_results,
-                tavily_api_key=settings.tavily_api_key,
-            )
+        """获取 Tavily 工具实例"""
         return self._tool
 
     def search(

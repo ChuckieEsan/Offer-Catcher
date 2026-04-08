@@ -59,9 +59,7 @@ class ScorerAgent(BaseAgent[ScoreResult]):
         Args:
             provider: LLM Provider 名称，默认 dashscope
         """
-        super().__init__(provider)
-        # 禁用 thinking 模式，避免与 structured output 冲突
-        self._llm_kwargs = {"extra_body": {"enable_thinking": False}}
+        super().__init__(provider, llm_kwargs={"extra_body": {"enable_thinking": False}})
         self._qdrant_manager = get_qdrant_manager()
 
     def _build_prompt(

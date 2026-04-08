@@ -21,9 +21,7 @@ class RouterAgent(BaseAgent[RouterResult]):
     _structured_output_schema = RouterResult
 
     def __init__(self, provider: str = "dashscope") -> None:
-        super().__init__(provider)
-        # 禁用 thinking 模式，避免与 structured output 冲突
-        self._llm_kwargs = {"extra_body": {"enable_thinking": False}}
+        super().__init__(provider, llm_kwargs={"extra_body": {"enable_thinking": False}})
 
     def _parse_response_fallback(self, response: str) -> RouterResult:
         """手动解析 LLM 响应（降级方案）"""

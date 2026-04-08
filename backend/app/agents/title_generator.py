@@ -19,9 +19,7 @@ class TitleGeneratorAgent(BaseAgent[str]):
     _prompt_filename = "title_generator.md"
 
     def __init__(self, provider: str = "dashscope") -> None:
-        super().__init__(provider)
-        # 禁用 thinking 模式，标题生成需要简洁输出
-        self._llm_kwargs = {"extra_body": {"enable_thinking": False}}
+        super().__init__(provider, llm_kwargs={"extra_body": {"enable_thinking": False}})
 
     def generate_title(self, messages: List[Message]) -> str:
         """生成会话标题

@@ -61,11 +61,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             provider: LLM Provider 名称，默认 dashscope
             use_structured_output: 是否使用 structured output，默认 True
         """
-        super().__init__(provider)
-        self.use_structured_output = use_structured_output
         # dashscope 需要关闭 thinking mode 才能使用 structured output
-        if provider == "dashscope":
-            self._llm_kwargs = {"extra_body": {"enable_thinking": False}}
+        llm_kwargs = {"extra_body": {"enable_thinking": False}} if provider == "dashscope" else None
+        super().__init__(provider, llm_kwargs=llm_kwargs)
+        self.use_structured_output = use_structured_output
 
     def _build_prompt(self, text: str) -> str:
         """构建完整的 Prompt
