@@ -1,6 +1,11 @@
 """Answer Specialist Agent
 
 从 RabbitMQ 消费任务，使用 Web Search Tool 搜索资料并生成答案。
+
+TODO: 添加流式生成支持
+    - 新增 generate_answer_stream() 异步生成器方法
+    - 使用 LLM 的 astream() 实现逐 token 输出
+    - 配合 FastAPI StreamingResponse 使用 SSE 协议
 """
 
 from typing import Optional

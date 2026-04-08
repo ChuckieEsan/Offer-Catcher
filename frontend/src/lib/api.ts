@@ -223,16 +223,43 @@ export async function deleteQuestion(id: string): Promise<void> {
   await api.delete(`/questions/${id}`);
 }
 
+/**
+ * 重新生成答案
+ *
+ * TODO: 改用 SSE 流式接口
+ *   - 后端改为 StreamingResponse，实时返回生成内容
+ *   - 前端使用 EventSource 或 fetch + ReadableStream 接收
+ *   - 用户可以看到生成进度，体验更好
+ */
 export async function regenerateAnswer(
   id: string,
   preview: boolean = true
 ): Promise<{ question_answer: string }> {
-  // LLM + Web Search 耗时较长，设置 3 分钟超时
-  const res = await api.post(`/questions/${id}/regenerate`, null, {
-    params: { preview },
-    timeout: 180000,  // 3 分钟
-  });
-  return res.data;
+  // LLM + Web Search 耗时较长（可能超过 60 秒）
+  // 直接调用后端，绕过 Next.js rewrites 代理的超时限制
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  // 使用 AbortController 实现超时（3 分钟）
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+  try {
+    const res = await fetch(`${apiUrl}/questions/${id}/regenerate?preview=${preview}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // ========== Search API ==========

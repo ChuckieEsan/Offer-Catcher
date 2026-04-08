@@ -171,6 +171,10 @@ async def delete_question(question_id: str):
 async def regenerate_answer(question_id: str, preview: bool = Query(True, description="是否仅预览（不保存）")):
     """重新生成答案
 
+    TODO: 改用 SSE 流式返回，避免长时间等待
+          - 后端: 改为 StreamingResponse，流式返回生成过程
+          - 前端: 使用 EventSource 接收流式数据，实时显示生成进度
+
     Args:
         question_id: 题目 ID
         preview: 是否仅预览。默认 True，只返回新答案不保存。
