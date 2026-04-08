@@ -1,4 +1,6 @@
 // API 客户端
+// 通过 Next.js rewrites 代理，使用相对路径避免跨域
+// 开发时可通过 NEXT_PUBLIC_API_URL 环境变量覆盖（用于直接连接后端调试）
 
 import axios from "axios";
 import type {
@@ -18,7 +20,9 @@ import type {
   EntityStats,
 } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+// 默认使用相对路径（通过 Next.js rewrites 代理）
+// 如需直接连接后端（绕过代理），设置 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export const api = axios.create({
   baseURL: API_BASE,
