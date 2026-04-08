@@ -1,15 +1,14 @@
 """LangGraph 节点实现
 
-包含 router、ingest_flow、query_flow 等核心节点。
+包含 router、ingest_flow、react_loop 等核心节点。
 """
 
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
-from app.agents.router import get_router_agent
 from app.agents.vision_extractor import get_vision_extractor
 from app.utils.logger import logger
 from app.utils.telemetry import traced_async
@@ -35,36 +34,53 @@ def state_gate_node(state: AgentState) -> AgentState:
 
 # ==================== Router Node ====================
 
-def router_node(state: AgentState) -> AgentState:
-    """意图识别节点
+# 轻量级路由 Prompt（二分类）
+ROUTER_PROMPT = """判断用户意图：
+- 如果用户要"录入/上传/导入"面经，回复：ingest
+- 其他情况回复：other
 
-    使用 Router Agent 分析用户输入，识别意图并提取参数。
+只回复一个词，不要其他内容。"""
+
+
+def router_node(state: AgentState) -> AgentState:
+    """轻量级路由节点：二分类判断是否需要 ingest 流程
+
+    使用轻量 prompt 和最小上下文，延迟约 200-500ms。
+
+    Note:
+        此节点仅用于内部路由决策，不返回任何用户可见内容。
+        避免返回 last_tool_result 以免泄露到前端。
+
+    Args:
+        state: 当前状态
+
+    Returns:
+        包含 intent、params 和 context 的状态更新
     """
     user_input = state["messages"][-1].content
     logger.info(f"Router processing: {user_input[:50]}...")
 
-    # 使用 Router Agent
-    router = get_router_agent()
-    result = router.route(user_input)
+    # 使用轻量 LLM 调用进行二分类
+    llm = get_llm("dashscope", "chat")
+    messages = [
+        SystemMessage(content=ROUTER_PROMPT),
+        HumanMessage(content=user_input),
+    ]
+
+    response = llm.invoke(messages)
+    intent = response.content.strip().lower()
 
     # 获取当前上下文
     current_context = dict(state.get("context", {}))
 
-    # 如果识别到公司/岗位，更新上下文（显式返回）
-    if result.params.get("company"):
-        current_context["company"] = result.params["company"]
-    if result.params.get("position"):
-        current_context["position"] = result.params["position"]
+    logger.info(f"Router result: intent={intent}")
 
-    # 返回完整的状态更新
-    new_state: AgentState = {
-        "intent": result.intent.value,
-        "params": result.params,
+    # 只返回内部状态，不返回 last_tool_result 以免泄露到前端
+    return {
+        "intent": intent,
+        "params": {},
         "context": current_context,
     }
-
-    logger.info(f"Router result: intent={result.intent.value}, params={result.params}")
-    return new_state
 
 
 # ==================== Ingest Flow Nodes ====================
@@ -106,7 +122,7 @@ def extract_node(state: AgentState) -> AgentState:
     except Exception as e:
         logger.error(f"Extract failed: {e}")
         return {
-            "last_tool_result": f"提取失败: {e}",
+            "last_tool_result": f"提取失败：{e}",
             "pending_confirmation": False,
         }
 
@@ -214,29 +230,16 @@ def store_and_mq_node(state: AgentState) -> AgentState:
     }
 
 
-# ==================== Query Flow Node ====================
-
-def query_node(state: AgentState) -> AgentState:
-    """查询节点 - ReAct 循环入口
-
-    使用 LangGraph ReAct 模式，让 LLM 自主决策调用工具。
-    本节点负责初始化 ReAct 循环，后续通过 should_continue 边判断是否继续。
-    """
-    # 这个节点只是标记进入 ReAct 循环
-    # 实际的工具调用在 react_loop 节点中进行
-    return {"current_subgraph": "query"}
-
+# ==================== ReAct Loop Node ====================
 
 @singleton
 def _get_react_agent() -> CompiledStateGraph:
     """获取 ReAct Agent 实例（带缓存）"""
     llm = get_llm("dashscope", "chat")
     tools = [search_questions, search_web, query_graph]
-    # skills_prompt = get_skills_prompt()
     prompt = load_prompt_template("react_agent.md")
     # 提取原始模板字符串（create_agent 接受 str）
     system_prompt = prompt.messages[0].prompt.template
-    # system_prompt = system_prompt.format(skills_prompt=skills_prompt)
     return create_agent(llm, tools=tools, system_prompt=system_prompt)
 
 
@@ -279,50 +282,7 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
         }
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}", exc_info=True)
-        return {"last_tool_result": f"查询失败: {e}"}
-
-
-# ==================== General Chat Node ====================
-
-@singleton
-def _get_chat_system_prompt() -> str:
-    """获取 Chat 系统 Prompt（带缓存）"""
-    # skills_prompt = get_skills_prompt()
-    prompt = load_prompt_template("chat_agent.md")
-    # 提取原始模板字符串
-    system_prompt = prompt.messages[0].prompt.template
-    # return system_prompt.format(skills_prompt=skills_prompt)
-    return system_prompt
-
-
-@traced_async
-async def chat_node(state: AgentState, config: RunnableConfig) -> AgentState:
-    """闲聊节点
-
-    处理一般对话，不调用工具。
-    支持使用 LangGraph astream_events 流式输出。
-
-    Note:
-        使用 astream 而不是 ainvoke，以支持 LLM 的真正流式输出。
-        workflow.astream_events 会捕获 LLM 的 token 流。
-    """
-    llm = get_llm("dashscope", "chat")
-    system_prompt = _get_chat_system_prompt()
-
-    messages: list[BaseMessage] = state["messages"][-10:]
-    messages.insert(0, SystemMessage(content=system_prompt))
-
-    try:
-        # 使用 astream 进行流式输出，config 会被传递给外层
-        full_content = ""
-        async for chunk in llm.astream(messages, config=config):
-            if chunk.content:
-                full_content += chunk.content
-
-        return {"last_tool_result": full_content}
-    except Exception as e:
-        logger.error(f"Chat failed: {e}")
-        return {"last_tool_result": f"抱歉，我遇到了问题: {e}"}
+        return {"last_tool_result": f"查询失败：{e}"}
 
 
 __all__ = [
@@ -332,7 +292,5 @@ __all__ = [
     "confirm_node",
     "handle_confirmation_node",
     "store_and_mq_node",
-    "query_node",
     "react_loop_node",
-    "chat_node",
 ]

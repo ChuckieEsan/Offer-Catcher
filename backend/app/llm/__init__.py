@@ -38,8 +38,8 @@ PROVIDERS_CONFIG = {
     "dashscope": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "models": {
-            "chat": "qwen3.6-plus",
-            "vision": "qwen3.6-plus",
+            "chat": "qwen3.5-35b-a3b",
+            "vision": "qwen3.5-35b-a3b",
         }
     },
 }

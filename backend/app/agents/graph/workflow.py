@@ -5,12 +5,11 @@
 
 工作流结构：
 START → state_gate → (router / handle_confirmation)
-router → (extract / query_entry / general_chat)
+router → (extract / react_loop)
 extract → confirm → END
 handle_confirmation → (store_and_mq / extract / END)
 store_and_mq → END
-query_entry → react_loop → END
-general_chat → END
+react_loop → END
 """
 
 from typing import AsyncGenerator, Optional
@@ -49,12 +48,8 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
     workflow.add_node("handle_confirmation", nodes.handle_confirmation_node)
     workflow.add_node("store_and_mq", nodes.store_and_mq_node)
 
-    # Query Flow 节点
-    workflow.add_node("query_entry", nodes.query_node)
+    # ReAct Loop 节点
     workflow.add_node("react_loop", nodes.react_loop_node)
-
-    # General Chat 节点
-    workflow.add_node("general_chat", nodes.chat_node)
 
     # 设置入口
     workflow.set_entry_point("state_gate")
@@ -75,8 +70,7 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
         edges.route_by_intent,
         {
             "ingest_flow": "extract",
-            "query_flow": "query_entry",
-            "general_chat": "general_chat",
+            "react_flow": "react_loop",
         }
     )
 
@@ -97,12 +91,8 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
     # Store → 结束
     workflow.add_edge("store_and_mq", END)
 
-    # Query Entry → ReAct 循环 → 结束
-    workflow.add_edge("query_entry", "react_loop")
+    # ReAct Loop → 结束
     workflow.add_edge("react_loop", END)
-
-    # General Chat → 结束
-    workflow.add_edge("general_chat", END)
 
     return workflow.compile(checkpointer=checkpointer)
 
@@ -207,10 +197,18 @@ async def astream_workflow(
 
             async for event in workflow.astream_events(initial_state, config=config, version="v2"):
                 kind = event.get("event")
-                name = event.get("name")
+                name = event.get("name", "")
+                metadata = event.get("metadata", {})
+
+                # 获取 LangGraph 节点名称（用于过滤 router 节点）
+                langgraph_node = metadata.get("langgraph_node", "")
+                if langgraph_node == "router":
+                    continue
 
                 # 1. 捕获 LLM 的流式输出 (Token)
                 if kind == "on_chat_model_stream":
+                    # 过滤 router 节点的 token 流，避免泄露意图分类结果
+
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         yield {
@@ -226,7 +224,9 @@ async def astream_workflow(
                     if name == "MainWorkflow":
                         final_state = output
 
+                    # 过滤内部节点（router 等）的输出，避免泄露到前端
                     elif isinstance(output, dict) and "last_tool_result" in output:
+                        # 只输出用户可见的节点结果
                         if name in ["extract", "confirm", "handle_confirmation", "store_and_mq", "react_loop"]:
                             content = output.get("last_tool_result", "")
                             if content:

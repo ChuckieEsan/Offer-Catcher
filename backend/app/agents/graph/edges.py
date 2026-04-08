@@ -24,21 +24,18 @@ def state_gate(state: AgentState) -> str:
 
 
 def route_by_intent(state: AgentState) -> str:
-    """根据意图路由到不同分支
+    """根据 router_node 的输出路由
 
     Returns:
-        分支名称：ingest_flow / query_flow / general_chat
+        分支名称：ingest_flow / react_flow
     """
-    intent = state.get("intent", "general")
+    intent = state.get("intent", "other")
     logger.info(f"Routing by intent: {intent}")
 
-    # 根据意图路由
     if intent == "ingest":
         return "ingest_flow"
-    elif intent == "query":
-        return "query_flow"
     else:
-        return "general_chat"
+        return "react_flow"
 
 
 def route_from_ingest(state: AgentState) -> str:

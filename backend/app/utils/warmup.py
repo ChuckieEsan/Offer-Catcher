@@ -81,15 +81,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] LLM init failed: {e}")
 
-    # 7. Router Agent
-    try:
-        from app.agents.router import get_router_agent
-        get_router_agent()
-        logger.info("[Warmup] Router Agent initialized")
-    except Exception as e:
-        logger.warning(f"[Warmup] Router Agent init failed: {e}")
-
-    # 8. Scorer Agent
+    # 7. Scorer Agent
     try:
         from app.agents.scorer import get_scorer_agent
         get_scorer_agent()
@@ -97,7 +89,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Scorer Agent init failed: {e}")
 
-    # 9. Vision Extractor
+    # 8. Vision Extractor
     try:
         from app.agents.vision_extractor import get_vision_extractor
         get_vision_extractor()
@@ -123,11 +115,10 @@ def warmup() -> None:
 
     # ========== Tier 3: Workflow & Pipelines ==========
 
-    # 12. ReAct Agent & Chat Prompt
+    # 12. ReAct Agent
     try:
-        from app.agents.graph.nodes import _get_react_agent, _get_chat_system_prompt
+        from app.agents.graph.nodes import _get_react_agent
         _get_react_agent()
-        _get_chat_system_prompt()
         logger.info("[Warmup] ReAct Agent initialized")
     except Exception as e:
         logger.warning(f"[Warmup] ReAct Agent init failed: {e}")
