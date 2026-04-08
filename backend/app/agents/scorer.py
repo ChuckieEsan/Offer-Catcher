@@ -53,13 +53,13 @@ class ScorerAgent(BaseAgent[ScoreResult]):
     _prompt_filename = "scorer.md"
     _structured_output_schema = ScoreResult
 
-    def __init__(self, provider: str = "dashscope") -> None:
+    def __init__(self, provider: str = "deepseek") -> None:
         """初始化 Scorer Agent
 
         Args:
-            provider: LLM Provider 名称，默认 dashscope
+            provider: LLM Provider 名称，默认 deepseek
         """
-        super().__init__(provider, llm_kwargs={"extra_body": {"enable_thinking": False}})
+        super().__init__(provider)
         self._qdrant_manager = get_qdrant_manager()
 
     def _build_prompt(
@@ -222,7 +222,7 @@ class ScorerAgent(BaseAgent[ScoreResult]):
 _scorer_agent: Optional[ScorerAgent] = None
 
 
-def get_scorer_agent(provider: str = "dashscope") -> ScorerAgent:
+def get_scorer_agent(provider: str = "deepseek") -> ScorerAgent:
     """获取 Scorer Agent 单例
 
     Args:

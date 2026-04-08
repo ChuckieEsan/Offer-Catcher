@@ -72,7 +72,7 @@ def router_node(state: AgentState) -> AgentState:
     logger.info(f"Router processing: {user_input[:50]}...")
 
     # 使用轻量 LLM 调用进行二分类
-    llm = get_llm("dashscope", "chat")
+    llm = get_llm("deepseek", "chat")
     messages = [
         SystemMessage(content=ROUTER_PROMPT),
         HumanMessage(content=user_input),
@@ -242,7 +242,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
 @singleton
 def _get_react_agent() -> CompiledStateGraph:
     """获取 ReAct Agent 实例（带缓存）"""
-    llm = get_llm("dashscope", "chat")
+    llm = get_llm("deepseek", "chat")
 
     # 基础工具
     tools = [search_questions, search_web, query_graph]

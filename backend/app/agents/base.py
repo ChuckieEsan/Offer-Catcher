@@ -33,11 +33,11 @@ class BaseAgent(Generic[T]):
     _prompt_filename: str = ""
     _structured_output_schema: Optional[type] = None  # Pydantic 模型类
 
-    def __init__(self, provider: str = "dashscope", llm_kwargs: Optional[dict] = None) -> None:
+    def __init__(self, provider: str = "deepseek", llm_kwargs: Optional[dict] = None) -> None:
         """初始化 Agent
 
         Args:
-            provider: LLM Provider 名称，默认 dashscope
+            provider: LLM Provider 名称，默认 deepseek
             llm_kwargs: 额外的 LLM 参数，如 {"extra_body": {"enable_thinking": False}}
         """
         self.provider = provider
@@ -141,7 +141,7 @@ _singleton_instances: dict[str, BaseAgent] = {}
 
 
 # 单例模式的辅助函数
-def create_singleton(cls: type[BaseAgent], provider: str = "dashscope") -> BaseAgent:
+def create_singleton(cls: type[BaseAgent], provider: str = "deepseek") -> BaseAgent:
     """创建或获取 Agent 单例
 
     Args:

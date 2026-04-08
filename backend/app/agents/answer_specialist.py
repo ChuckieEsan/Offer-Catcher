@@ -26,11 +26,11 @@ class AnswerSpecialistAgent(BaseAgent):
     _prompt_filename = "answer_specialist.md"
     _structured_output_schema = None  # 不使用 structured output
 
-    def __init__(self, provider: str = "dashscope"):
+    def __init__(self, provider: str = "deepseek"):
         """初始化 Answer Specialist
 
         Args:
-            provider: LLM Provider 名称，默认 dashscope
+            provider: LLM Provider 名称，默认 deepseek
         """
         super().__init__(provider)
         # 直接初始化 Web Search 工具（不再延迟加载）
@@ -97,7 +97,7 @@ class AnswerSpecialistAgent(BaseAgent):
 _answer_specialist: Optional[AnswerSpecialistAgent] = None
 
 
-def get_answer_specialist(provider: str = "dashscope") -> AnswerSpecialistAgent:
+def get_answer_specialist(provider: str = "deepseek") -> AnswerSpecialistAgent:
     """获取 Answer Specialist 单例"""
     global _answer_specialist
     if _answer_specialist is None:

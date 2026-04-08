@@ -54,7 +54,7 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         )
 
         # 2. 生成答案
-        agent = get_answer_specialist(provider="dashscope")
+        agent = get_answer_specialist(provider="deepseek")
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant

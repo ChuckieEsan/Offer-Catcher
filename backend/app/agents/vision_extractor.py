@@ -54,16 +54,14 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
     _prompt_filename = "vision_extractor.md"
     _structured_output_schema = ExtractedInterviewSchema
 
-    def __init__(self, provider: str = "dashscope", use_structured_output: bool = True):
+    def __init__(self, provider: str = "deepseek", use_structured_output: bool = True):
         """初始化 Vision Extractor
 
         Args:
-            provider: LLM Provider 名称，默认 dashscope
+            provider: LLM Provider 名称，默认 deepseek
             use_structured_output: 是否使用 structured output，默认 True
         """
-        # dashscope 需要关闭 thinking mode 才能使用 structured output
-        llm_kwargs = {"extra_body": {"enable_thinking": False}} if provider == "dashscope" else None
-        super().__init__(provider, llm_kwargs=llm_kwargs)
+        super().__init__(provider)
         self.use_structured_output = use_structured_output
 
     def _build_prompt(self, text: str) -> str:
@@ -218,7 +216,7 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 _vision_extractor: VisionExtractor | None = None
 
 
-def get_vision_extractor(provider: str = "dashscope") -> VisionExtractor:
+def get_vision_extractor(provider: str = "deepseek") -> VisionExtractor:
     """获取 Vision Extractor 单例"""
     global _vision_extractor
     if _vision_extractor is None:

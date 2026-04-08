@@ -1,10 +1,14 @@
 """长期记忆模块
 
 使用 LangGraph PostgresStore 实现用户画像、偏好设置、学习进度和会话摘要的持久化存储。
+
+注意：PostgresStore.from_conn_string() 返回上下文管理器，
+需要在每次操作时使用 with 语句进入上下文。
 """
 
 from typing import Optional
 from datetime import datetime
+from contextlib import contextmanager
 
 from pydantic import BaseModel, Field
 from langgraph.store.postgres import PostgresStore
@@ -78,7 +82,7 @@ class SessionSummary(BaseModel):
 class LongTermMemoryManager:
     """长期记忆管理器
 
-    使用 LangChain PostgresStore 存储用户相关数据。
+    使用 LangGraph PostgresStore 存储用户相关数据。
 
     存储结构:
         ("users", user_id, "profile") → UserProfile
@@ -89,18 +93,20 @@ class LongTermMemoryManager:
 
     def __init__(self) -> None:
         """初始化长期记忆管理器"""
-        self._store: Optional[PostgresStore] = None
+        self._postgres_url: Optional[str] = None
         self._initialized = False
         self._init_error: Optional[str] = None
 
     def initialize(self) -> None:
-        """初始化 PostgresStore"""
+        """初始化 PostgresStore（创建表结构）"""
         try:
             settings = get_settings()
-            # 使用与 Checkpointer 相同的 PostgreSQL 配置
-            # PostgresStore 需要在上下文管理器中使用或手动管理连接
-            self._store = PostgresStore.from_conn_string(settings.postgres_url)
-            self._store.setup()  # 初始化表结构
+            self._postgres_url = settings.postgres_url
+
+            # 创建表结构
+            with PostgresStore.from_conn_string(self._postgres_url) as store:
+                store.setup()
+
             self._initialized = True
             logger.info("LongTermMemory initialized with PostgresStore")
         except Exception as e:
@@ -109,14 +115,17 @@ class LongTermMemoryManager:
             self._initialized = False
 
     @property
-    def store(self) -> Optional[PostgresStore]:
-        """获取存储实例"""
-        return self._store
-
-    @property
     def initialized(self) -> bool:
         """是否已初始化"""
         return self._initialized
+
+    @contextmanager
+    def _get_store(self):
+        """获取 PostgresStore 上下文管理器"""
+        if not self._initialized or not self._postgres_url:
+            raise RuntimeError("LongTermMemory not initialized")
+        with PostgresStore.from_conn_string(self._postgres_url) as store:
+            yield store
 
     def _get_namespace(self, user_id: str, category: str) -> tuple:
         """生成命名空间元组"""
@@ -126,31 +135,33 @@ class LongTermMemoryManager:
 
     def save_profile(self, user_id: str, profile: UserProfile) -> None:
         """保存用户画像"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             logger.warning("Store not initialized, skipping save_profile")
             return
         try:
-            self._store.put(
-                self._get_namespace(user_id, "profile"),
-                "user_profile",
-                profile.model_dump(),
-            )
+            with self._get_store() as store:
+                store.put(
+                    self._get_namespace(user_id, "profile"),
+                    "user_profile",
+                    profile.model_dump(),
+                )
             logger.info(f"Saved user profile for {user_id}")
         except Exception as e:
             logger.error(f"Failed to save user profile: {e}")
 
     def get_profile(self, user_id: str) -> Optional[UserProfile]:
         """获取用户画像"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return None
         try:
-            result = self._store.get(
-                self._get_namespace(user_id, "profile"),
-                "user_profile",
-            )
-            if result and result.value:
-                return UserProfile.model_validate(result.value)
-            return None
+            with self._get_store() as store:
+                result = store.get(
+                    self._get_namespace(user_id, "profile"),
+                    "user_profile",
+                )
+                if result and result.value:
+                    return UserProfile.model_validate(result.value)
+                return None
         except Exception as e:
             logger.error(f"Failed to get user profile: {e}")
             return None
@@ -159,30 +170,32 @@ class LongTermMemoryManager:
 
     def save_preferences(self, user_id: str, preferences: UserPreferences) -> None:
         """保存用户偏好设置"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return
         try:
-            self._store.put(
-                self._get_namespace(user_id, "preferences"),
-                "user_preferences",
-                preferences.model_dump(),
-            )
+            with self._get_store() as store:
+                store.put(
+                    self._get_namespace(user_id, "preferences"),
+                    "user_preferences",
+                    preferences.model_dump(),
+                )
             logger.info(f"Saved user preferences for {user_id}")
         except Exception as e:
             logger.error(f"Failed to save user preferences: {e}")
 
     def get_preferences(self, user_id: str) -> Optional[UserPreferences]:
         """获取用户偏好设置"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return None
         try:
-            result = self._store.get(
-                self._get_namespace(user_id, "preferences"),
-                "user_preferences",
-            )
-            if result and result.value:
-                return UserPreferences.model_validate(result.value)
-            return None
+            with self._get_store() as store:
+                result = store.get(
+                    self._get_namespace(user_id, "preferences"),
+                    "user_preferences",
+                )
+                if result and result.value:
+                    return UserPreferences.model_validate(result.value)
+                return None
         except Exception as e:
             logger.error(f"Failed to get user preferences: {e}")
             return None
@@ -191,30 +204,32 @@ class LongTermMemoryManager:
 
     def save_progress(self, user_id: str, progress: LearningProgress) -> None:
         """保存学习进度"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return
         try:
-            self._store.put(
-                self._get_namespace(user_id, "progress"),
-                "learning_progress",
-                progress.model_dump(),
-            )
+            with self._get_store() as store:
+                store.put(
+                    self._get_namespace(user_id, "progress"),
+                    "learning_progress",
+                    progress.model_dump(),
+                )
             logger.info(f"Saved learning progress for {user_id}")
         except Exception as e:
             logger.error(f"Failed to save learning progress: {e}")
 
     def get_progress(self, user_id: str) -> Optional[LearningProgress]:
         """获取学习进度"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return None
         try:
-            result = self._store.get(
-                self._get_namespace(user_id, "progress"),
-                "learning_progress",
-            )
-            if result and result.value:
-                return LearningProgress.model_validate(result.value)
-            return None
+            with self._get_store() as store:
+                result = store.get(
+                    self._get_namespace(user_id, "progress"),
+                    "learning_progress",
+                )
+                if result and result.value:
+                    return LearningProgress.model_validate(result.value)
+                return None
         except Exception as e:
             logger.error(f"Failed to get learning progress: {e}")
             return None
@@ -223,50 +238,51 @@ class LongTermMemoryManager:
 
     def save_session_summary(self, user_id: str, summary: SessionSummary) -> None:
         """保存会话摘要"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return
         try:
-            self._store.put(
-                self._get_namespace(user_id, "summaries"),
-                summary.session_id,
-                summary.model_dump(),
-            )
+            with self._get_store() as store:
+                store.put(
+                    self._get_namespace(user_id, "summaries"),
+                    summary.session_id,
+                    summary.model_dump(),
+                )
             logger.info(f"Saved session summary for {user_id}/{summary.session_id}")
         except Exception as e:
             logger.error(f"Failed to save session summary: {e}")
 
     def get_session_summary(self, user_id: str, session_id: str) -> Optional[SessionSummary]:
         """获取会话摘要"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return None
         try:
-            result = self._store.get(
-                self._get_namespace(user_id, "summaries"),
-                session_id,
-            )
-            if result and result.value:
-                return SessionSummary.model_validate(result.value)
-            return None
+            with self._get_store() as store:
+                result = store.get(
+                    self._get_namespace(user_id, "summaries"),
+                    session_id,
+                )
+                if result and result.value:
+                    return SessionSummary.model_validate(result.value)
+                return None
         except Exception as e:
             logger.error(f"Failed to get session summary: {e}")
             return None
 
     def list_session_summaries(self, user_id: str) -> list[SessionSummary]:
         """列出用户的所有会话摘要"""
-        if not self._store or not self._initialized:
+        if not self._initialized:
             return []
         try:
-            # 使用 search 方法列出指定 namespace 下的所有项目
-            # namespace_prefix 是 ("users", user_id, "summaries")
-            results = self._store.search(
-                ("users", user_id, "summaries"),
-                limit=100,  # 限制返回数量
-            )
-            summaries = []
-            for r in results:
-                if r.value:
-                    summaries.append(SessionSummary.model_validate(r.value))
-            return summaries
+            with self._get_store() as store:
+                results = store.search(
+                    ("users", user_id, "summaries"),
+                    limit=100,
+                )
+                summaries = []
+                for r in results:
+                    if r.value:
+                        summaries.append(SessionSummary.model_validate(r.value))
+                return summaries
         except Exception as e:
             logger.error(f"Failed to list session summaries: {e}")
             return []

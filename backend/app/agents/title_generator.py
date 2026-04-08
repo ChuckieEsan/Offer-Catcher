@@ -18,8 +18,8 @@ class TitleGeneratorAgent(BaseAgent[str]):
 
     _prompt_filename = "title_generator.md"
 
-    def __init__(self, provider: str = "dashscope") -> None:
-        super().__init__(provider, llm_kwargs={"extra_body": {"enable_thinking": False}})
+    def __init__(self, provider: str = "deepseek") -> None:
+        super().__init__(provider)
 
     def generate_title(self, messages: List[Message]) -> str:
         """生成会话标题
@@ -73,7 +73,7 @@ class TitleGeneratorAgent(BaseAgent[str]):
 _title_generator_agent: Optional[TitleGeneratorAgent] = None
 
 
-def get_title_generator_agent(provider: str = "dashscope") -> TitleGeneratorAgent:
+def get_title_generator_agent(provider: str = "deepseek") -> TitleGeneratorAgent:
     """获取 Title Generator Agent 单例
 
     Args:

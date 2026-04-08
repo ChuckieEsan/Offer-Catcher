@@ -37,7 +37,7 @@ class ChatAgent:
     - 无需手动维护会话状态
     """
 
-    def __init__(self, provider: str = "dashscope") -> None:
+    def __init__(self, provider: str = "deepseek") -> None:
         self.provider = provider
 
     async def achat_streaming(
@@ -148,7 +148,7 @@ class ChatAgent:
 _chat_agent: Optional[ChatAgent] = None
 
 
-def get_chat_agent(provider: str = "dashscope") -> ChatAgent:
+def get_chat_agent(provider: str = "deepseek") -> ChatAgent:
     """获取 Chat Agent 单例"""
     global _chat_agent
     if _chat_agent is None:

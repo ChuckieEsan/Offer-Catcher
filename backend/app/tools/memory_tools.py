@@ -4,10 +4,11 @@
 使用 ToolRuntime 注入 user_id，支持多用户场景。
 """
 
-from typing import Optional
+from typing import Optional, Annotated, Any
 
 from langchain.tools import ToolRuntime, tool
-from pydantic import Field
+from langchain_core.tools import InjectedToolArg
+from pydantic import BaseModel, Field, field_validator
 
 from app.memory.long_term import (
     get_long_term_memory,
@@ -18,13 +19,73 @@ from app.memory.long_term import (
 from app.tools.context import UserContext
 
 
-@tool
+def _parse_list_field(value: Any) -> list[str]:
+    """解析列表字段，支持 JSON 字符串格式
+
+    某些 LLM（如通义千问）会将列表参数序列化为 JSON 字符串，
+    此函数自动处理这种情况。
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        import json
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+            return [value]
+        except json.JSONDecodeError:
+            return [value]
+    return [str(value)]
+
+
+class SaveUserProfileInput(BaseModel):
+    """save_user_profile 工具的输入参数"""
+    preferred_companies: Optional[list[str]] = Field(default=None, description="目标公司列表")
+    target_position: Optional[str] = Field(default=None, description="目标岗位")
+    tech_stack: Optional[list[str]] = Field(default=None, description="技术栈列表")
+    experience_years: Optional[int] = Field(default=None, description="工作年限")
+
+    @field_validator('preferred_companies', 'tech_stack', mode='before')
+    @classmethod
+    def parse_list_fields(cls, v: Any) -> Optional[list[str]]:
+        """自动解析 JSON 字符串格式的列表"""
+        if v is None:
+            return None
+        return _parse_list_field(v)
+
+
+class SaveUserPreferencesInput(BaseModel):
+    """save_user_preferences 工具的输入参数"""
+    language: Optional[str] = Field(default=None, description="语言偏好：zh/en")
+    difficulty: Optional[str] = Field(default=None, description="难度偏好：easy/medium/hard")
+    practice_batch_size: Optional[int] = Field(default=None, description="单次练习题目数量")
+    show_answer_immediately: Optional[bool] = Field(default=None, description="是否立即显示答案")
+
+
+class UpdateLearningProgressInput(BaseModel):
+    """update_learning_progress 工具的输入参数"""
+    mastered_entities: Optional[list[str]] = Field(default=None, description="新掌握的知识点")
+    completed_question_ids: Optional[list[str]] = Field(default=None, description="已完成的题目 ID")
+
+    @field_validator('mastered_entities', 'completed_question_ids', mode='before')
+    @classmethod
+    def parse_list_fields(cls, v: Any) -> Optional[list[str]]:
+        """自动解析 JSON 字符串格式的列表"""
+        if v is None:
+            return None
+        return _parse_list_field(v)
+
+
+@tool(args_schema=SaveUserPreferencesInput)
 def save_user_preferences(
-    language: Optional[str] = Field(default=None, description="语言偏好：zh/en"),
-    difficulty: Optional[str] = Field(default=None, description="难度偏好：easy/medium/hard"),
-    practice_batch_size: Optional[int] = Field(default=None, description="单次练习题目数量"),
-    show_answer_immediately: Optional[bool] = Field(default=None, description="是否立即显示答案"),
-    runtime: ToolRuntime[UserContext] = None,
+    language: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    practice_batch_size: Optional[int] = None,
+    show_answer_immediately: Optional[bool] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """保存用户偏好设置。当用户明确说'记住我喜欢...'或'设置难度为...'时使用。
 
@@ -42,10 +103,8 @@ def save_user_preferences(
     try:
         memory = get_long_term_memory()
 
-        # 先读取现有偏好
         existing = memory.get_preferences(user_id)
 
-        # 更新字段
         prefs = UserPreferences(
             language=language or (existing.language if existing else "zh"),
             difficulty=difficulty or (existing.difficulty if existing else "medium"),
@@ -68,13 +127,13 @@ def save_user_preferences(
         return f"保存偏好失败：{e}"
 
 
-@tool
+@tool(args_schema=SaveUserProfileInput)
 def save_user_profile(
-    preferred_companies: Optional[list[str]] = Field(default=None, description="目标公司列表"),
-    target_position: Optional[str] = Field(default=None, description="目标岗位"),
-    tech_stack: Optional[list[str]] = Field(default=None, description="技术栈列表"),
-    experience_years: Optional[int] = Field(default=None, description="工作年限"),
-    runtime: ToolRuntime[UserContext] = None,
+    preferred_companies: Optional[list[str]] = None,
+    target_position: Optional[str] = None,
+    tech_stack: Optional[list[str]] = None,
+    experience_years: Optional[int] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """保存用户画像。当用户提到'我想去 XX 公司'或'我是 XX 开发'时使用。
 
@@ -117,11 +176,11 @@ def save_user_profile(
         return f"保存画像失败：{e}"
 
 
-@tool
+@tool(args_schema=UpdateLearningProgressInput)
 def update_learning_progress(
-    mastered_entities: Optional[list[str]] = Field(default=None, description="新掌握的知识点"),
-    completed_question_ids: Optional[list[str]] = Field(default=None, description="已完成的题目 ID"),
-    runtime: ToolRuntime[UserContext] = None,
+    mastered_entities: Optional[list[str]] = None,
+    completed_question_ids: Optional[list[str]] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """更新学习进度。当用户完成练习或标记知识点为'已掌握'时使用。
 
@@ -139,12 +198,10 @@ def update_learning_progress(
 
         existing = memory.get_progress(user_id)
 
-        # 合并已掌握的知识点（去重）
         existing_entities = existing.mastered_entities if existing else []
         new_entities = mastered_entities or []
         all_entities = list(set(existing_entities + new_entities))
 
-        # 累加答题数量
         existing_count = existing.total_questions_answered if existing else 0
         new_count = len(completed_question_ids or [])
 
@@ -168,7 +225,7 @@ def update_learning_progress(
 
 @tool
 def get_user_preferences(
-    runtime: ToolRuntime[UserContext] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """获取用户偏好设置。当用户询问'我的设置是什么'时使用。
 
@@ -199,7 +256,7 @@ def get_user_preferences(
 
 @tool
 def get_user_profile(
-    runtime: ToolRuntime[UserContext] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """获取用户画像。当用户询问'我的目标是什么'或'我记录了什么公司'时使用。
 
@@ -234,7 +291,7 @@ def get_user_profile(
 
 @tool
 def get_learning_progress(
-    runtime: ToolRuntime[UserContext] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """获取学习进度。当用户询问'我的学习进度如何'时使用。
 
@@ -264,7 +321,7 @@ def get_learning_progress(
 
 @tool
 def clear_user_memory(
-    runtime: ToolRuntime[UserContext] = None,
+    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
     """清除用户记忆数据。当用户明确要求'清除我的所有数据'时使用。
 
@@ -278,13 +335,8 @@ def clear_user_memory(
     try:
         memory = get_long_term_memory()
 
-        # 清空画像
         memory.save_profile(user_id, UserProfile(user_id=user_id))
-
-        # 清空偏好
         memory.save_preferences(user_id, UserPreferences())
-
-        # 清空进度
         memory.save_progress(user_id, LearningProgress())
 
         return "已清除所有用户记忆数据"

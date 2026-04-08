@@ -76,7 +76,7 @@ def warmup() -> None:
     # 6. LLM 实例
     try:
         from app.llm import get_llm
-        get_llm("dashscope", "chat")
+        get_llm("deepseek", "chat")
         logger.info("[Warmup] LLM instance created")
     except Exception as e:
         logger.warning(f"[Warmup] LLM init failed: {e}")
