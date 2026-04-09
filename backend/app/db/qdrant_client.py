@@ -619,6 +619,86 @@ class QdrantManager:
             logger.error(f"Failed to scroll all questions: {e}")
             raise
 
+    def scroll_with_filter(
+        self,
+        filter_conditions: Optional[SearchFilter] = None,
+        limit: int = 10000,
+    ) -> list[QdrantQuestionPayload]:
+        """带过滤条件的遍历（服务端过滤）
+
+        使用 Qdrant scroll API 的 filter 参数进行服务端过滤，
+        避免将全部数据加载到内存。
+
+        Args:
+            filter_conditions: 过滤条件
+            limit: 最大返回数量（防止内存溢出）
+
+        Returns:
+            符合条件的题目 payload 列表
+        """
+        collection_name = self.collection_name
+        all_questions = []
+        offset = None
+        batch_size = 1000  # 每次请求的批量大小
+
+        try:
+            # 构建服务端过滤条件
+            query_filter = self._build_search_filter(filter_conditions)
+
+            while len(all_questions) < limit:
+                results, offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=min(batch_size, limit - len(all_questions)),
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                    scroll_filter=query_filter,  # 服务端过滤
+                )
+
+                for point in results:
+                    if point.payload:
+                        try:
+                            question = QdrantQuestionPayload(**point.payload)
+                            all_questions.append(question)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse question {point.id}: {e}")
+
+                if offset is None:
+                    break
+
+            logger.info(f"Scrolled with filter, total: {len(all_questions)}")
+            return all_questions
+
+        except Exception as e:
+            logger.error(f"Failed to scroll with filter: {e}")
+            raise
+
+    def count_with_filter(self, filter_conditions: Optional[SearchFilter] = None) -> int:
+        """统计符合条件的题目数量（服务端计数）
+
+        Args:
+            filter_conditions: 过滤条件
+
+        Returns:
+            符合条件的题目数量
+        """
+        collection_name = self.collection_name
+
+        try:
+            query_filter = self._build_search_filter(filter_conditions)
+
+            result = self.client.count(
+                collection_name=collection_name,
+                count_filter=query_filter,
+                exact=True,
+            )
+
+            return result.count
+
+        except Exception as e:
+            logger.error(f"Failed to count with filter: {e}")
+            raise
+
     def batch_update_cluster_ids(
         self,
         cluster_ids_map: dict[str, list[str]],

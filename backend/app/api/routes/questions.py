@@ -10,7 +10,7 @@ import asyncio
 
 from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
-from app.models.schemas import QdrantQuestionPayload, SearchResult, QuestionItem
+from app.models.schemas import QdrantQuestionPayload, SearchResult, QuestionItem, SearchFilter
 from app.models.enums import QuestionType, MasteryLevel
 from app.utils.logger import logger
 
@@ -76,34 +76,48 @@ async def list_questions(
     """获取题目列表
 
     支持按公司、岗位、类型、熟练度、聚类过滤，以及关键词搜索。
+    使用 Qdrant 服务端过滤，避免内存溢出。
     """
     logger.info(f"List questions: company={company}, cluster_id={cluster_id}, keyword={keyword}, page={page}")
 
     qdrant = get_qdrant_manager()
-    all_questions = qdrant.scroll_all(limit=10000)
 
-    # 应用过滤
-    filtered = all_questions
-    if company:
-        filtered = [q for q in filtered if q.company == company]
-    if position:
-        filtered = [q for q in filtered if q.position == position]
-    if question_type:
-        filtered = [q for q in filtered if q.question_type == question_type]
-    if mastery_level is not None:
-        filtered = [q for q in filtered if q.mastery_level == mastery_level]
-    if cluster_id:
-        filtered = [q for q in filtered if cluster_id in (q.cluster_ids or [])]
+    # 构建服务端过滤条件
+    filter_conditions = SearchFilter(
+        company=company,
+        position=position,
+        question_type=question_type,
+        mastery_level=mastery_level,
+        cluster_ids=[cluster_id] if cluster_id else None,
+    )
+
+    # 如果有关键词搜索，需要获取更多数据再内存过滤
     if keyword:
+        # 获取所有符合条件的数据（服务端过滤后）
+        all_filtered = qdrant.scroll_with_filter(filter_conditions, limit=10000)
+
+        # 关键词内存过滤
         keyword_lower = keyword.lower()
-        filtered = [q for q in filtered if keyword_lower in q.question_text.lower()]
+        filtered = [q for q in all_filtered if keyword_lower in q.question_text.lower()]
 
-    total = len(filtered)
+        total = len(filtered)
 
-    # 分页
-    start = (page - 1) * page_size
-    end = start + page_size
-    items = filtered[start:end]
+        # 分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        items = filtered[start:end]
+    else:
+        # 无关键词，使用服务端计数
+        total = qdrant.count_with_filter(filter_conditions)
+
+        # 计算分页范围
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        # 服务端过滤 + 分页：获取略多于当前页的数据
+        # Qdrant scroll 不支持 offset，需要从开始遍历到 end
+        items = qdrant.scroll_with_filter(filter_conditions, limit=end)
+        items = items[start:end]
 
     return QuestionListResponse(
         items=items,
