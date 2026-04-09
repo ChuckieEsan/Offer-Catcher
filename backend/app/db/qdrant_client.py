@@ -13,6 +13,7 @@ from app.models.schemas import QdrantQuestionPayload, SearchFilter, SearchResult
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
 from app.tools.embedding_tool import get_embedding_tool
+from app.utils.cache import singleton
 
 
 class QdrantManager:
@@ -731,13 +732,7 @@ class QdrantManager:
             raise
 
 
-# 全局单例
-_qdrant_manager: Optional[QdrantManager] = None
-
-
+@singleton
 def get_qdrant_manager() -> QdrantManager:
     """获取 Qdrant 管理器单例"""
-    global _qdrant_manager
-    if _qdrant_manager is None:
-        _qdrant_manager = QdrantManager()
-    return _qdrant_manager
+    return QdrantManager()

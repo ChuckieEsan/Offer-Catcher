@@ -1,6 +1,6 @@
 """Base Agent 模块
 
-提供 Agent 的基类，包含 LLM 初始化、Structured Output、单例模式、重试机制等通用能力。
+提供 Agent 的基类，包含 LLM 初始化、Structured Output、重试机制等通用能力。
 """
 
 from typing import Any, Generic, Optional, TypeVar
@@ -23,7 +23,6 @@ class BaseAgent(Generic[T]):
     - LLM 初始化（支持多 Provider）
     - Structured Output 支持
     - Prompt 模板加载（支持 jinja2 格式，避免 JSON 转义）
-    - 单例模式
     - 重试机制（默认启用）
     """
 
@@ -119,28 +118,4 @@ class BaseAgent(Generic[T]):
         return self.structured_llm.invoke(prompt)
 
 
-# 全局单例存储（必须在 create_singleton 函数之前定义）
-_singleton_instances: dict[str, BaseAgent] = {}
-
-
-# 单例模式的辅助函数
-def create_singleton(cls: type[BaseAgent], provider: str = "deepseek") -> BaseAgent:
-    """创建或获取 Agent 单例
-
-    Args:
-        cls: Agent 类
-        provider: LLM Provider
-
-    Returns:
-        Agent 实例
-    """
-    global _singleton_instances
-
-    class_name = cls.__name__
-    if class_name not in _singleton_instances:
-        _singleton_instances[class_name] = cls(provider=provider)
-
-    return _singleton_instances[class_name]
-
-
-__all__ = ["BaseAgent", "create_singleton"]
+__all__ = ["BaseAgent"]

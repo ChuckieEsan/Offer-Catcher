@@ -12,6 +12,7 @@ from app.models.enums import MasteryLevel
 from app.models.schemas import ScoreResult
 from app.utils.logger import logger
 from app.utils.agent import parse_json_response
+from app.utils.cache import singleton
 
 
 def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel:
@@ -218,20 +219,14 @@ class ScorerAgent(BaseAgent[ScoreResult]):
             raise
 
 
-# 全局单例
-_scorer_agent: Optional[ScorerAgent] = None
-
-
+@singleton
 def get_scorer_agent(provider: str = "deepseek") -> ScorerAgent:
     """获取 Scorer Agent 单例
 
     Args:
-        provider: LLM Provider 名称
+        provider: LLM Provider 名称（首次调用后忽略）
 
     Returns:
         ScorerAgent 实例
     """
-    global _scorer_agent
-    if _scorer_agent is None:
-        _scorer_agent = ScorerAgent(provider=provider)
-    return _scorer_agent
+    return ScorerAgent(provider=provider)

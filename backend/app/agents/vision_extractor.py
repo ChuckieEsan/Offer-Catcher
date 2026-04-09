@@ -17,6 +17,7 @@ from app.agents.base import BaseAgent
 from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 # 用于 with_structured_output 的 Pydantic 模型
@@ -201,13 +202,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             return self._extract_with_parsing(source)
 
 
-# 全局单例
-_vision_extractor: VisionExtractor | None = None
-
-
+@singleton
 def get_vision_extractor(provider: str = "deepseek") -> VisionExtractor:
-    """获取 Vision Extractor 单例"""
-    global _vision_extractor
-    if _vision_extractor is None:
-        _vision_extractor = VisionExtractor(provider=provider)
-    return _vision_extractor
+    """获取 Vision Extractor 单例
+
+    Note: provider 参数在首次调用后会被忽略。
+    """
+    return VisionExtractor(provider=provider)

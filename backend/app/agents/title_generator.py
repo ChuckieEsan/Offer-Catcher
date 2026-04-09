@@ -8,6 +8,7 @@ from typing import List, Optional
 from app.agents.base import BaseAgent
 from app.db.postgres_client import Message
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class TitleGeneratorAgent(BaseAgent[str]):
@@ -69,23 +70,17 @@ class TitleGeneratorAgent(BaseAgent[str]):
         return "\n".join(lines)
 
 
-# 全局单例
-_title_generator_agent: Optional[TitleGeneratorAgent] = None
-
-
+@singleton
 def get_title_generator_agent(provider: str = "deepseek") -> TitleGeneratorAgent:
     """获取 Title Generator Agent 单例
 
     Args:
-        provider: LLM Provider 名称
+        provider: LLM Provider 名称（首次调用后忽略）
 
     Returns:
         TitleGeneratorAgent 实例
     """
-    global _title_generator_agent
-    if _title_generator_agent is None:
-        _title_generator_agent = TitleGeneratorAgent(provider=provider)
-    return _title_generator_agent
+    return TitleGeneratorAgent(provider=provider)
 
 
 __all__ = ["TitleGeneratorAgent", "get_title_generator_agent"]

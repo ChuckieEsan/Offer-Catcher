@@ -11,6 +11,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class EmbeddingTool:
@@ -93,20 +94,15 @@ class EmbeddingTool:
             logger.error(f"Failed to embed texts: {e}")
             raise
 
-# 全局单例
-_embedding_tool: Optional[EmbeddingTool] = None
 
-
+@singleton
 def get_embedding_tool() -> EmbeddingTool:
     """获取 Embedding 工具单例
 
     Returns:
         EmbeddingTool 实例
     """
-    global _embedding_tool
-    if _embedding_tool is None:
-        _embedding_tool = EmbeddingTool()
-    return _embedding_tool
+    return EmbeddingTool()
 
 
 __all__ = [

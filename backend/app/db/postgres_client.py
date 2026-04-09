@@ -19,6 +19,7 @@ from app.models.schemas import (
     QuestionItem,
 )
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class Conversation:
@@ -668,17 +669,12 @@ class PostgresClient:
             self._conn = None
 
 
-# 全局单例
-_postgres_client: Optional[PostgresClient] = None
-
-
+@singleton
 def get_postgres_client() -> PostgresClient:
     """获取 PostgreSQL 客户端单例"""
-    global _postgres_client
-    if _postgres_client is None:
-        _postgres_client = PostgresClient()
-        _postgres_client.init_tables()
-    return _postgres_client
+    client = PostgresClient()
+    client.init_tables()
+    return client
 
 
 __all__ = [

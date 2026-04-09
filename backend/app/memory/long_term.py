@@ -15,6 +15,7 @@ from langgraph.store.postgres import PostgresStore
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class UserProfile(BaseModel):
@@ -293,21 +294,12 @@ class LongTermMemoryManager:
 _memory_manager: Optional[LongTermMemoryManager] = None
 
 
-def create_long_term_memory() -> LongTermMemoryManager:
-    """创建并初始化长期记忆管理器"""
-    global _memory_manager
-    _memory_manager = LongTermMemoryManager()
-    _memory_manager.initialize()
-    return _memory_manager
-
-
+@singleton
 def get_long_term_memory() -> LongTermMemoryManager:
     """获取长期记忆管理器单例"""
-    global _memory_manager
-    if _memory_manager is None:
-        _memory_manager = LongTermMemoryManager()
-        _memory_manager.initialize()
-    return _memory_manager
+    manager = LongTermMemoryManager()
+    manager.initialize()
+    return manager
 
 
 def get_user_context_prompt(user_id: str) -> str:
@@ -354,7 +346,6 @@ __all__ = [
     "LearningProgress",
     "SessionSummary",
     "LongTermMemoryManager",
-    "create_long_term_memory",
     "get_long_term_memory",
     "get_user_context_prompt",
 ]

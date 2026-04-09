@@ -24,6 +24,7 @@ from app.tools.search_question_tool import search_questions
 from app.tools.embedding_tool import get_embedding_tool
 from app.utils.logger import logger
 from app.agents.prompts import build_prompt
+from app.utils.cache import singleton
 
 
 # 公司类型与面试风格映射
@@ -472,16 +473,10 @@ class InterviewManager:
         return report
 
 
-# 全局单例
-_interview_manager: Optional[InterviewManager] = None
-
-
+@singleton
 def get_interview_manager() -> InterviewManager:
     """获取面试管理器单例"""
-    global _interview_manager
-    if _interview_manager is None:
-        _interview_manager = InterviewManager()
-    return _interview_manager
+    return InterviewManager()
 
 
 __all__ = [

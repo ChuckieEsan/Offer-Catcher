@@ -20,6 +20,7 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from app.agents.graph import run_workflow
 from app.agents.graph.workflow import astream_workflow
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class ChatAgent:
@@ -144,16 +145,13 @@ class ChatAgent:
                 yield item
 
 
-# 全局单例
-_chat_agent: Optional[ChatAgent] = None
-
-
+@singleton
 def get_chat_agent(provider: str = "deepseek") -> ChatAgent:
-    """获取 Chat Agent 单例"""
-    global _chat_agent
-    if _chat_agent is None:
-        _chat_agent = ChatAgent(provider=provider)
-    return _chat_agent
+    """获取 Chat Agent 单例
+
+    Note: provider 参数在首次调用后会被忽略。
+    """
+    return ChatAgent(provider=provider)
 
 
 __all__ = ["ChatAgent", "get_chat_agent"]

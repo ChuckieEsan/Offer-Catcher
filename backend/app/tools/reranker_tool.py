@@ -10,6 +10,7 @@ from sentence_transformers import CrossEncoder
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class RerankerTool:
@@ -109,20 +110,14 @@ class RerankerTool:
             raise
 
 
-# 全局单例
-_reranker_tool: Optional[RerankerTool] = None
-
-
+@singleton
 def get_reranker_tool() -> RerankerTool:
     """获取 Reranker 工具单例
 
     Returns:
         RerankerTool 实例
     """
-    global _reranker_tool
-    if _reranker_tool is None:
-        _reranker_tool = RerankerTool()
-    return _reranker_tool
+    return RerankerTool()
 
 
 __all__ = ["RerankerTool", "get_reranker_tool"]

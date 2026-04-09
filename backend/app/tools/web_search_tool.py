@@ -11,6 +11,7 @@ from langchain_core.tools import BaseTool  # noqa: F401
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class WebSearchResult(BaseModel):
@@ -167,23 +168,21 @@ class WebSearchTool:
         return formatted
 
 
-# 全局单例
-_web_search_tool: Optional[WebSearchTool] = None
-
-
+@singleton
 def get_web_search_tool(max_results: int = 5) -> WebSearchTool:
     """获取 Web 搜索工具单例
 
     Args:
-        max_results: 最大返回结果数
+        max_results: 最大返回结果数（首次调用时生效，后续调用忽略）
 
     Returns:
         WebSearchTool 实例
+
+    Note:
+        此函数使用 @singleton 装饰器，后续调用会忽略 max_results 参数。
+        如需重新配置，先调用 get_web_search_tool.clear_cache()。
     """
-    global _web_search_tool
-    if _web_search_tool is None:
-        _web_search_tool = WebSearchTool(max_results=max_results)
-    return _web_search_tool
+    return WebSearchTool(max_results=max_results)
 
 
 # 导出公共 API

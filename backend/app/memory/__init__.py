@@ -9,7 +9,6 @@ from app.memory.long_term import (
     LearningProgress,
     SessionSummary,
     LongTermMemoryManager,
-    create_long_term_memory,
     get_long_term_memory,
     get_user_context_prompt,
 )
@@ -20,7 +19,6 @@ __all__ = [
     "LearningProgress",
     "SessionSummary",
     "LongTermMemoryManager",
-    "create_long_term_memory",
     "get_long_term_memory",
     "get_user_context_prompt",
 ]

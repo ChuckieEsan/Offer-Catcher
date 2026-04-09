@@ -7,6 +7,7 @@ import redis
 
 from app.config.settings import get_settings
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class RedisClient:
@@ -150,16 +151,10 @@ class RedisClient:
             self._client.close()
 
 
-# 全局单例
-_redis_client: Optional[RedisClient] = None
-
-
+@singleton
 def get_redis_client() -> RedisClient:
     """获取 Redis 客户端单例"""
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = RedisClient()
-    return _redis_client
+    return RedisClient()
 
 
 __all__ = ["RedisClient", "get_redis_client"]

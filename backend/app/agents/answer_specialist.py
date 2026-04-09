@@ -14,6 +14,7 @@ from app.agents.base import BaseAgent
 from app.models.schemas import QuestionItem
 from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
 from app.utils.logger import logger
+from app.utils.cache import singleton
 
 
 class AnswerSpecialistAgent(BaseAgent):
@@ -83,13 +84,10 @@ class AnswerSpecialistAgent(BaseAgent):
             raise
 
 
-# 全局单例
-_answer_specialist: Optional[AnswerSpecialistAgent] = None
-
-
+@singleton
 def get_answer_specialist(provider: str = "deepseek") -> AnswerSpecialistAgent:
-    """获取 Answer Specialist 单例"""
-    global _answer_specialist
-    if _answer_specialist is None:
-        _answer_specialist = AnswerSpecialistAgent(provider=provider)
-    return _answer_specialist
+    """获取 Answer Specialist 单例
+
+    Note: provider 参数在首次调用后会被忽略。
+    """
+    return AnswerSpecialistAgent(provider=provider)
