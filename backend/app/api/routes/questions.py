@@ -12,6 +12,7 @@ from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
 from app.models.schemas import QdrantQuestionPayload, SearchResult, QuestionItem, SearchFilter
 from app.models.enums import QuestionType, MasteryLevel
+from app.services.cache_service import get_cache_service, CacheKeys
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/questions", tags=["questions"])
@@ -35,6 +36,22 @@ def payload_to_question_item(payload: QdrantQuestionPayload) -> QuestionItem:
         metadata=payload.metadata,
         cluster_ids=payload.cluster_ids,
     )
+
+
+def dict_to_payload(data: dict) -> QdrantQuestionPayload:
+    """将 dict 转换为 QdrantQuestionPayload
+
+    用于缓存反序列化
+    """
+    return QdrantQuestionPayload(**data)
+
+
+def dicts_to_payloads(data_list: List[dict]) -> List[QdrantQuestionPayload]:
+    """将 dict 列表转换为 QdrantQuestionPayload 列表
+
+    用于缓存反序列化
+    """
+    return [QdrantQuestionPayload(**d) for d in data_list]
 
 
 # ========== Request/Response Models ==========
@@ -76,11 +93,22 @@ async def list_questions(
     """获取题目列表
 
     支持按公司、岗位、类型、熟练度、聚类过滤，以及关键词搜索。
-    使用 Qdrant 服务端过滤，避免内存溢出。
+    使用 Qdrant 服务端过滤，并通过 Redis 缓存优化查询性能。
     """
     logger.info(f"List questions: company={company}, cluster_id={cluster_id}, keyword={keyword}, page={page}")
 
     qdrant = get_qdrant_manager()
+    cache = get_cache_service()
+
+    # 构建过滤参数（用于缓存哈希）
+    filter_params = {
+        "company": company,
+        "position": position,
+        "question_type": question_type,
+        "mastery_level": mastery_level,
+        "cluster_id": cluster_id,
+        "keyword": keyword,
+    }
 
     # 构建服务端过滤条件
     filter_conditions = SearchFilter(
@@ -91,33 +119,32 @@ async def list_questions(
         cluster_ids=[cluster_id] if cluster_id else None,
     )
 
-    # 如果有关键词搜索，需要获取更多数据再内存过滤
-    if keyword:
-        # 获取所有符合条件的数据（服务端过滤后）
-        all_filtered = qdrant.scroll_with_filter(filter_conditions, limit=10000)
+    # 定义数据获取函数（包含关键词过滤）
+    def fetch_all_questions():
+        if keyword:
+            # 获取所有符合条件的数据（服务端过滤后）
+            all_filtered = qdrant.scroll_with_filter(filter_conditions, limit=10000)
+            # 关键词内存过滤
+            keyword_lower = keyword.lower()
+            return [q for q in all_filtered if keyword_lower in q.question_text.lower()]
+        else:
+            # 无关键词，获取足够多的数据用于分页
+            return qdrant.scroll_with_filter(filter_conditions, limit=10000)
 
-        # 关键词内存过滤
-        keyword_lower = keyword.lower()
-        filtered = [q for q in all_filtered if keyword_lower in q.question_text.lower()]
+    # 通过缓存获取全部过滤后的数据（返回 dict 列表）
+    cached_data = cache.get_questions_list(filter_params, fetch_all_questions)
 
-        total = len(filtered)
-
-        # 分页
-        start = (page - 1) * page_size
-        end = start + page_size
-        items = filtered[start:end]
+    # 将 dict 转换为 Pydantic 模型
+    if cached_data and isinstance(cached_data[0], dict):
+        all_items = dicts_to_payloads(cached_data)
     else:
-        # 无关键词，使用服务端计数
-        total = qdrant.count_with_filter(filter_conditions)
+        all_items = cached_data  # 已经是 Pydantic 模型（首次查询）
 
-        # 计算分页范围
-        start = (page - 1) * page_size
-        end = start + page_size
-
-        # 服务端过滤 + 分页：获取略多于当前页的数据
-        # Qdrant scroll 不支持 offset，需要从开始遍历到 end
-        items = qdrant.scroll_with_filter(filter_conditions, limit=end)
-        items = items[start:end]
+    # 计算总数和分页
+    total = len(all_items)
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = all_items[start:end]
 
     return QuestionListResponse(
         items=items,
@@ -129,12 +156,26 @@ async def list_questions(
 
 @router.get("/{question_id}", response_model=QdrantQuestionPayload)
 async def get_question(question_id: str):
-    """获取单个题目"""
-    qdrant = get_qdrant_manager()
-    question = qdrant.get_question(question_id)
+    """获取单个题目
 
-    if not question:
+    使用缓存防穿透：不存在时缓存空值标记，避免重复穿透到数据库。
+    """
+    qdrant = get_qdrant_manager()
+    cache = get_cache_service()
+
+    def fetch_question():
+        return qdrant.get_question(question_id)
+
+    cached_data = cache.get_question_item(question_id, fetch_question)
+
+    if not cached_data:
         raise HTTPException(status_code=404, detail="题目不存在")
+
+    # 将 dict 转换为 Pydantic 模型（如果从缓存读取）
+    if isinstance(cached_data, dict):
+        question = dict_to_payload(cached_data)
+    else:
+        question = cached_data  # 已经是 Pydantic 模型
 
     return question
 
@@ -144,15 +185,20 @@ async def update_question(question_id: str, request: QuestionUpdateRequest):
     """更新题目
 
     如果更新了题目文本，会重新计算 embedding。
+    使用延迟双删保证缓存一致性。
     """
     logger.info(f"Update question: {question_id}")
 
     qdrant = get_qdrant_manager()
+    cache = get_cache_service()
 
     # 检查题目是否存在
     existing = qdrant.get_question(question_id)
     if not existing:
         raise HTTPException(status_code=404, detail="题目不存在")
+
+    # 延迟双删：第一次删除缓存
+    cache.invalidate_question(question_id)
 
     # 如果更新了题目文本，需要重新计算 embedding
     if request.question_text and request.question_text != existing.question_text:
@@ -174,16 +220,27 @@ async def update_question(question_id: str, request: QuestionUpdateRequest):
             core_entities=request.core_entities,
         )
 
+    # 延迟双删：后台任务在 1 秒后再次删除
+    asyncio.create_task(cache.invalidate_question_delayed(question_id))
+
     return qdrant.get_question(question_id)
 
 
 @router.delete("/{question_id}")
 async def delete_question(question_id: str):
-    """删除题目"""
+    """删除题目
+
+    删除后立即失效缓存。
+    """
     logger.info(f"Delete question: {question_id}")
 
     qdrant = get_qdrant_manager()
+    cache = get_cache_service()
+
     qdrant.delete_question(question_id)
+
+    # 失效缓存
+    cache.invalidate_question(question_id)
 
     return {"success": True}
 
@@ -207,6 +264,7 @@ async def regenerate_answer(question_id: str, preview: bool = Query(True, descri
     logger.info(f"Regenerate answer: {question_id}, preview={preview}")
 
     qdrant = get_qdrant_manager()
+    cache = get_cache_service()
     question_payload = qdrant.get_question(question_id)
 
     if not question_payload:
@@ -224,5 +282,7 @@ async def regenerate_answer(question_id: str, preview: bool = Query(True, descri
     if not preview:
         qdrant.update_question(question_id, question_answer=answer)
         logger.info(f"Answer saved for question: {question_id}")
+        # 失效单个题目缓存
+        cache.invalidate_question(question_id)
 
     return RegenerateResponse(question_answer=answer)

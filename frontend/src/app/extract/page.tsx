@@ -339,21 +339,37 @@ export default function ExtractPage() {
       dataIndex: "company",
       key: "company",
       ellipsis: true,
-      render: (text: string) => text || "-",
+      render: (text: string, record: ExtractTaskListItem) => {
+        if (text) return text;
+        if (record.status === "pending") return <Text type="secondary">等待解析...</Text>;
+        if (record.status === "processing") return <Text type="secondary">正在解析...</Text>;
+        return "-";
+      },
     },
     {
       title: "岗位",
       dataIndex: "position",
       key: "position",
       ellipsis: true,
-      render: (text: string) => text || "-",
+      render: (text: string, record: ExtractTaskListItem) => {
+        if (text) return text;
+        if (record.status === "pending") return <Text type="secondary">等待解析...</Text>;
+        if (record.status === "processing") return <Text type="secondary">正在解析...</Text>;
+        return "-";
+      },
     },
     {
       title: "题目数",
       dataIndex: "question_count",
       key: "question_count",
       width: 80,
-      render: (count: number) => (count > 0 ? count : "-"),
+      render: (count: number, record: ExtractTaskListItem) => {
+        if (count > 0) return count;
+        if (record.status === "pending" || record.status === "processing") {
+          return <Text type="secondary">-</Text>;
+        }
+        return "-";
+      },
     },
     {
       title: "时间",
