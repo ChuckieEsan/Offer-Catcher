@@ -21,6 +21,7 @@ import {
 } from "@ant-design/icons";
 import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
+import VoiceInput from "@/components/VoiceInput";
 import {
   getConversations,
   createConversation,
@@ -497,11 +498,11 @@ export default function ChatPage() {
 
               {/* 输入区域 */}
               <div style={{ padding: 16, borderTop: "1px solid #f0f0f0" }}>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <TextArea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="输入消息... (Shift+Enter 换行，Enter 发送)"
+                    placeholder="输入消息... (支持语音输入，Shift+Enter 换行，Enter 发送)"
                     autoSize={{ minRows: 1, maxRows: 4 }}
                     onPressEnter={(e) => {
                       if (!e.shiftKey) {
@@ -511,15 +512,23 @@ export default function ChatPage() {
                     }}
                     disabled={streaming}
                   />
-                  <Button
-                    type="primary"
-                    icon={<SendOutlined />}
-                    onClick={handleSend}
-                    loading={streaming}
-                    disabled={!input.trim()}
-                  >
-                    发送
-                  </Button>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <VoiceInput
+                      onTranscriptChange={(text) => setInput(text)}
+                      currentText={input}
+                      disabled={streaming}
+                      language="zh_cn"
+                    />
+                    <Button
+                      type="primary"
+                      icon={<SendOutlined />}
+                      onClick={handleSend}
+                      loading={streaming}
+                      disabled={!input.trim()}
+                    >
+                      发送
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>

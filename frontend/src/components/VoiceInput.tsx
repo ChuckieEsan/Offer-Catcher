@@ -6,14 +6,20 @@ import { AudioOutlined, AudioMutedOutlined, ReloadOutlined } from "@ant-design/i
 
 interface VoiceInputProps {
   onTranscriptChange: (text: string) => void;
+  /** 当前输入框的内容，用于追加模式 */
+  currentText?: string;
   disabled?: boolean;
   language?: string;
+  /** 是否追加模式，默认 true。追加模式下语音识别结果会追加到现有内容后 */
+  appendMode?: boolean;
 }
 
 export default function VoiceInput({
   onTranscriptChange,
+  currentText = "",
   disabled = false,
   language = "zh_cn",
+  appendMode = true,
 }: VoiceInputProps) {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -24,6 +30,16 @@ export default function VoiceInput({
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+
+  // 保存当前输入框内容（用于追加模式）
+  const currentTextRef = useRef(currentText);
+  // 保存开始录音时的文本
+  const previousTextRef = useRef("");
+
+  // 同步 currentText
+  useEffect(() => {
+    currentTextRef.current = currentText;
+  }, [currentText]);
 
   // 检查浏览器支持
   useEffect(() => {
@@ -62,14 +78,16 @@ export default function VoiceInput({
         // 如果是最终结果且文本为空，保持之前的文本
         if (data.is_final) {
           if (text) {
+            const finalText = appendMode ? previousTextRef.current + text : text;
             setTranscript(text);
-            onTranscriptChange(text);
+            onTranscriptChange(finalText);
           }
           console.log("Recognition ended");
         } else if (text) {
           // 中间结果
+          const displayText = appendMode ? previousTextRef.current + text : text;
           setTranscript(text);
-          onTranscriptChange(text);
+          onTranscriptChange(displayText);
         }
       } else if (data.type === "error") {
         message.error(data.message);
@@ -152,7 +170,9 @@ export default function VoiceInput({
 
       setListening(true);
       setTranscript("");
-      console.log("Recording started");
+      // 保存开始录音时的文本，用于追加
+      previousTextRef.current = appendMode ? currentTextRef.current : "";
+      console.log("Recording started, previous text:", previousTextRef.current);
 
     } catch (error) {
       console.error("Failed to start recording:", error);

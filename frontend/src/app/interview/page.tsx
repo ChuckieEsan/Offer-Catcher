@@ -799,6 +799,7 @@ export default function InterviewPage() {
               <Space wrap>
                 <VoiceInput
                   onTranscriptChange={(text) => setInput(text)}
+                  currentText={input}
                   disabled={loading || streaming || showNextButton}
                   language="zh-CN"
                 />
