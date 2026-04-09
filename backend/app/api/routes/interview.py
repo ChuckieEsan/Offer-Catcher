@@ -4,6 +4,7 @@
 """
 
 from typing import Optional
+from datetime import datetime
 from fastapi import APIRouter, Header, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -250,8 +251,7 @@ async def end_interview(
 
     if session:
         session.status = "completed"
-        session.ended_at = type('_', (), {'now': lambda: type('_', (), {})()})()
-        session.ended_at.now = lambda: __import__('datetime').datetime.now()
+        session.ended_at = datetime.now()
 
     return {
         "message": "面试已结束",

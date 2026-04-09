@@ -146,6 +146,8 @@ class InterviewReport(BaseModel):
         average_score: 平均分
         duration_minutes: 面试时长（分钟）
 
+        overall_evaluation: LLM 生成的综合评价
+
         strengths: 用户优势
         weaknesses: 薄弱点
         knowledge_gaps: 知识盲区
@@ -164,6 +166,9 @@ class InterviewReport(BaseModel):
     correct_count: int
     average_score: float
     duration_minutes: float
+
+    # 综合评价
+    overall_evaluation: str = Field(default="", description="LLM 生成的综合评价")
 
     # 分析
     strengths: List[str] = Field(default_factory=list)

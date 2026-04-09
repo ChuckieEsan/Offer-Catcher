@@ -8,7 +8,6 @@
 
 - **后端**: `backend/app/` - FastAPI + LangGraph + LangChain (Python)
 - **前端**: `frontend/src/` - Next.js 16 + React 19 + Ant Design (TypeScript)
-- **兼容前端**: `gateways/` - Streamlit (保留兼容)
 
 ---
 
@@ -25,8 +24,8 @@
 ### 2. Prompt 外置原则
 
 - 严禁将长篇 Prompt 字符串硬编码在 Python 文件中
-- 所有的系统提示词必须作为单独的 `.md` 文件存放在 `backend/app/prompts/` 目录下
-- 在代码中按需读取，使用 `backend/app/prompts/__init__.py` 中的加载函数
+- 所有的系统提示词必须作为单独的 `.md` 文件存放在 `backend/app/agents/prompts/` 目录下
+- 在代码中按需读取，使用 `load_prompt_template` 方法
 
 ### 3. 日志优先
 
@@ -41,7 +40,7 @@
 
 ### 5. Agent 消息规范
 
-- Agent 的消息必须是 Langchain 的消息类型：`AIMessage`, `HumanMessage`, `BaseMessage`
+- Agent 的消息必须是 Langchain 的消息类型：`AIMessage`, `HumanMessage`, `SystemMessage`, `BaseMessage`
 - 不允许自定义字典结构作为消息
 
 ### 6. LangChain/LangGraph 最佳实践
@@ -53,7 +52,6 @@
 
 - 如果发生重构，不要进行向后兼容，直接重构
 - 禁止在业务代码中使用 Emoji 字符
-- 在开发 Streamlit 前端时，可以适当使用 Emoji
 
 ### 8. 测试规范
 
@@ -64,7 +62,11 @@
 
 ## 核心领域模型
 
-严格遵循定义在 `backend/app/models/schemas.py` 和 `backend/app/models/enums.py` 中的契约：
+### 数据模型文件位置
+
+- `backend/app/models/schemas.py` - 面经题目相关模型
+- `backend/app/models/enums.py` - 枚举定义
+- `backend/app/models/interview_session.py` - 模拟面试相关模型
 
 ### 枚举类
 
@@ -75,6 +77,8 @@
 
 - **ExtractedInterview**: 包含 `company`, `position` 和 `questions` 列表
 - **QuestionItem**: 必须包含 `question_id` (MD5哈希)、`question_text`、`question_type`、`company`, `position`
+- **InterviewSession**: 模拟面试会话
+- **InterviewReport**: 面试报告
 
 ---
 
@@ -107,48 +111,114 @@ Qdrant 写入时必须携带 Payload（包含 `company`, `position`, `mastery_le
 - Chat Agent 使用 LangGraph Checkpointer + PostgreSQL 实现状态持久化
 - 无需手动维护会话状态，通过 `conversation_id` (thread_id) 自动恢复
 
+### 7. 流式输出
+
+- 后端使用 `StreamingResponse` + SSE 实现流式输出
+- 前端使用 `fetch` + `ReadableStream` 接收流式数据
+- 注意：前端回调函数中避免依赖 React state，应使用局部变量
+
 ---
 
 ## 项目目录结构
 
 ```text
 Offer-Catcher/
-├── backend/                    # 后端服务 (Python)
+├── backend/                        # 后端服务 (Python)
 │   ├── app/
-│   │   ├── agents/             # 智能体层
-│   │   ├── api/                # FastAPI 路由
-│   │   ├── tools/              # Agent 工具
-│   │   ├── pipelines/          # 业务流水线（入库流程和检索流程）
-│   │   ├── db/                 # 数据库层
-│   │   ├── mq/                 # 消息队列层
-│   │   ├── models/             # 数据模型
+│   │   ├── agents/                 # 智能体层
+│   │   │   ├── graph/              # LangGraph 工作流
+│   │   │   │   ├── state.py        # AgentState 定义
+│   │   │   │   ├── nodes.py        # 节点实现
+│   │   │   │   ├── edges.py        # 条件边
+│   │   │   │   └── workflow.py     # 工作流组装
+│   │   │   ├── prompts/            # Prompt 模板 (.md 文件)
+│   │   │   ├── skills/             # 技能模块
+│   │   │   ├── chat_agent.py       # AI 对话 Agent
+│   │   │   ├── interview_agent.py  # 模拟面试 Agent
+│   │   │   ├── vision_extractor.py # 面经提取 Agent
+│   │   │   ├── answer_specialist.py# 答案生成 Agent
+│   │   │   └── scorer.py           # 评分 Agent
+│   │   │
+│   │   ├── api/                    # FastAPI 路由
+│   │   │   └── routes/
+│   │   │       ├── chat.py         # 对话 API
+│   │   │       └── interview.py    # 面试 API
+│   │   │
+│   │   ├── tools/                  # Agent 工具
+│   │   │   ├── embedding_tool.py   # 向量嵌入
+│   │   │   ├── search_question_tool.py
+│   │   │   ├── web_search_tool.py
+│   │   │   ├── memory_tools.py
+│   │   │   └── ...
+│   │   │
+│   │   ├── pipelines/              # 业务流水线
+│   │   │   ├── ingestion.py        # 入库流程
+│   │   │   └── retrieval.py        # 检索流程
+│   │   │
+│   │   ├── db/                     # 数据库层
+│   │   │   ├── qdrant_client.py    # 向量数据库
+│   │   │   ├── postgres_client.py  # PostgreSQL
+│   │   │   ├── graph_client.py     # 图数据库
+│   │   │   ├── redis_client.py     # Redis 缓存
+│   │   │   └── checkpointer.py     # LangGraph Checkpointer
+│   │   │
+│   │   ├── mq/                     # 消息队列层
+│   │   │   ├── producer.py
+│   │   │   ├── consumer.py
+│   │   │   └── message_helper.py
+│   │   │
+│   │   ├── memory/                 # 长期记忆
+│   │   │
+│   │   ├── models/                 # 数据模型
 │   │   │   ├── schemas.py
-│   │   │   └── enums.py
-│   │   ├── prompts/            # Prompt 模板 (外置 .md 文件)
-│   │   ├── llm/                # LLM 工厂
-│   │   ├── config/             # 配置
-│   │   ├── services/           # 业务服务
-│   │   ├── skills/             # Skills 加载器
-│   │   └── utils/              # 工具
-│   ├── workers/                # 后台进程
+│   │   │   ├── enums.py
+│   │   │   └── interview_session.py
+│   │   │
+│   │   ├── llm/                    # LLM 工厂
+│   │   │
+│   │   ├── config/                 # 配置
+│   │   │
+│   │   ├── services/               # 业务服务
+│   │   │   ├── cache_service.py
+│   │   │   └── xfyun_asr.py        # 讯飞语音识别
+│   │   │
+│   │   └── utils/                  # 工具
+│   │       ├── logger.py
+│   │       ├── cache.py
+│   │       └── ...
 │   │
-│   ├── tests/                  # 测试用例
+│   ├── workers/                    # 后台进程
+│   │   ├── answer_worker.py        # 答案生成
+│   │   ├── clustering_worker.py    # 聚类
+│   │   ├── extract_worker.py       # 面经提取
+│   │   └── reembed_worker.py       # 向量重建
 │   │
-│   ├── main.py                 # FastAPI 入口
+│   ├── tests/                      # 测试用例
+│   │
+│   ├── main.py                     # FastAPI 入口
 │   └── pyproject.toml
 │
-├── frontend/                   # 前端 (Next.js)
+├── frontend/                       # 前端 (Next.js)
 │   ├── src/
-│   │   ├── app/                # App Router
-│   │   ├── components/         # React 组件
-│   │   ├── lib/                # API 客户端
-│   │   └── types/              # TypeScript 类型
+│   │   ├── app/                    # App Router 页面
+│   │   │   ├── chat/               # AI 对话
+│   │   │   ├── interview/          # 模拟面试
+│   │   │   ├── practice/           # 刷题练习
+│   │   │   ├── questions/          # 题库管理
+│   │   │   ├── extract/            # 面经导入
+│   │   │   └── dashboard/          # 数据看板
+│   │   │
+│   │   ├── components/             # React 组件
+│   │   │   ├── MainLayout.tsx
+│   │   │   └── VoiceInput.tsx
+│   │   │
+│   │   ├── lib/                    # API 客户端
+│   │   │   └── api.ts
+│   │   │
+│   │   └── types/                  # TypeScript 类型
+│   │       └── index.ts
+│   │
 │   └── package.json
-│
-├── gateways/                   # Streamlit (兼容)
-│   ├── cli_chat.py
-│   └── pages/
-│   └── components/
 │
 └── docker-compose.yml
 ```
@@ -197,31 +267,32 @@ npm run dev
 npm run build
 ```
 
-### Streamlit (兼容模式)
-
-```bash
-PYTHONPATH=backend uv run streamlit run gateways/cli_chat.py
-```
-
 ---
 
 ## API 设计规范
 
 ### 流式响应
 
-Chat API 使用 Server-Sent Events (SSE) 实现流式输出：
+使用 Server-Sent Events (SSE) 实现流式输出：
 
 ```python
 # backend/app/api/routes/chat.py
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
+    async def generate():
+        async for chunk in agent.achat_streaming(...):
+            yield f"data: {json.dumps(chunk)}\n\n"
+        yield "data: [DONE]\n\n"
+
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
     )
 ```
-
-前端使用 `EventSource` 或 `fetch` 接收流式数据。
 
 ### 请求/响应模型
 
@@ -244,17 +315,31 @@ class ChatRequest(BaseModel):
 - `src/lib/` - API 客户端和工具函数
 - `src/types/` - TypeScript 类型定义
 
-### API 调用
-
-使用 `axios` 或 `fetch` 调用后端 API：
+### 流式数据处理
 
 ```typescript
-// SSE 流式请求
-const response = await fetch('/api/v1/chat/stream', {
-  method: 'POST',
-  body: JSON.stringify({ message, conversation_id }),
-});
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  buffer += decoder.decode(value, { stream: true });
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || "";
+
+  for (const line of lines) {
+    if (line.startsWith("data: ")) {
+      const data = JSON.parse(line.slice(6));
+      // 处理数据
+    }
+  }
+}
 ```
+
+**注意**: 在 fetch 回调中更新状态时，使用局部变量而非 React state，避免闭包问题。
 
 ### UI 组件
 
@@ -268,7 +353,4 @@ const response = await fetch('/api/v1/chat/stream', {
 2. 前端代码统一放在 `frontend/src/` 目录
 3. 测试代码放在 `backend/tests/` 目录
 4. Worker 进程放在 `backend/workers/` 目录
-5. 共享模型文件在根目录 `models/`，通过软链接到 `backend/models`
-
-# currentDate
-Today's date is 2026-04-08.
+5. Prompt 模板放在 `backend/app/agents/prompts/` 目录
