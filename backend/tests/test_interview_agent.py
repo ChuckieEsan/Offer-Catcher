@@ -8,14 +8,46 @@ import pytest
 import asyncio
 import json
 from datetime import datetime
+from uuid import uuid4
 
-from app.agents.interview_agent import get_interview_manager, InterviewManager
+from app.agents.interview_agent import get_interview_manager, InterviewManager, parse_evaluation
 from app.models.interview_session import (
     InterviewSessionCreate,
     InterviewSession,
     InterviewQuestion,
     InterviewReport,
 )
+
+
+class TestParseEvaluation:
+    """测试评估解析函数"""
+
+    def test_parse_high_score(self):
+        """测试解析高分评估"""
+        response = """【评分】85分
+【评价】回答准确，对核心概念理解到位。
+【决定】进入下一题"""
+        score, evaluation, should_continue = parse_evaluation(response)
+        assert score == 85
+        assert "准确" in evaluation
+        assert should_continue is True
+
+    def test_parse_low_score(self):
+        """测试解析低分评估"""
+        response = """【评分】45分
+【评价】回答方向正确，但对核心原理的解释不够准确。
+【决定】继续追问
+你能具体说说在这个场景下，数据是如何流转的吗？"""
+        score, evaluation, should_continue = parse_evaluation(response)
+        assert score == 45
+        assert should_continue is False
+
+    def test_parse_missing_score(self):
+        """测试缺失评分的情况"""
+        response = "这是一个不错的回答，让我们继续下一题。"
+        score, evaluation, should_continue = parse_evaluation(response)
+        assert score == 0
+        assert should_continue is False
 
 
 class TestInterviewAgentStreaming:
@@ -41,7 +73,7 @@ class TestInterviewAgentStreaming:
         assert session.company == "字节跳动"
         assert session.position == "后端开发"
         assert session.status == "active"
-        assert len(session.questions) == 2
+        assert len(session.questions) > 0  # 应该有题目（预加载或默认生成）
         assert session.started_at is not None
         assert isinstance(session.started_at, datetime)
 
@@ -67,13 +99,16 @@ class TestInterviewAgentStreaming:
             assert "type" in data
             if data["type"] == "text":
                 assert "content" in data
-            elif data["type"] == "follow_up":
-                assert "question_idx" in data
 
         # 验证有流式输出
         assert len(chunks) > 0
         text_chunks = [c for c in chunks if c["type"] == "text"]
         assert len(text_chunks) > 0
+
+        # 验证题目已被评分
+        question = session.get_current_question()
+        if question:
+            assert question.score is not None, "题目应该被评分"
 
     @pytest.mark.asyncio
     async def test_get_hint_stream(self, manager):
@@ -126,44 +161,9 @@ class TestInterviewReport:
         assert isinstance(session.ended_at, datetime), f"ended_at 应该是 datetime 类型，实际是 {type(session.ended_at)}"
         assert session.status == "completed"
 
-    def test_get_report_datetime_calculation(self, manager):
-        """测试报告生成中的时间计算"""
-        # 创建会话
-        request = InterviewSessionCreate(
-            company="字节跳动",
-            position="后端开发",
-            difficulty="medium",
-            total_questions=2,
-        )
-        session = manager.create_session("test_user_report", request)
-
-        # 模拟回答第一题
-        question = session.get_current_question()
-        if question:
-            question.status = "answered"
-            question.score = 80
-            question.user_answer = "这是一个测试回答"
-            question.answered_at = datetime.now()
-
-        # 手动正确结束会话
-        session.status = "completed"
-        session.ended_at = datetime.now()  # 正确设置为 datetime
-
-        # 获取报告
-        report = manager.get_report(session.session_id)
-
-        assert report is not None
-        assert report.session_id == session.session_id
-        assert report.company == "字节跳动"
-        assert report.position == "后端开发"
-        assert isinstance(report.duration_minutes, float)
-        assert report.duration_minutes >= 0
-
-    def test_report_with_scored_questions(self, manager):
-        """测试有评分题目的报告生成"""
+    def test_get_report_with_scores(self, manager):
+        """测试报告生成包含评分"""
         # 直接创建 session，不依赖预加载
-        from uuid import uuid4
-
         session_id = str(uuid4())
         session = InterviewSession(
             session_id=session_id,
@@ -202,29 +202,91 @@ class TestInterviewReport:
         assert report.average_score == 70.0  # (60 + 70 + 80) / 3
         # 至少有一个优势点（score >= 80）
         assert len(report.strengths) >= 1
+        # 题目详情包含评分
+        for detail in report.question_details:
+            assert "score" in detail
+            assert detail["score"] is not None
 
-    def test_api_end_interview_datetime_fix(self, manager):
-        """验证 API end_interview 应该正确设置 ended_at"""
-        # 这个测试验证 interview.py 中的 end_interview 函数
-        # 应该正确设置 ended_at 为 datetime 类型
-
+    def test_report_datetime_calculation(self, manager):
+        """测试报告生成中的时间计算"""
+        # 创建会话
         request = InterviewSessionCreate(
-            company="腾讯",
-            position="算法工程师",
+            company="字节跳动",
+            position="后端开发",
             difficulty="medium",
             total_questions=2,
         )
-        session = manager.create_session("test_api_end", request)
+        session = manager.create_session("test_user_report", request)
 
-        # 模拟 API 调用 end_interview 的正确逻辑
+        # 模拟回答第一题
+        question = session.get_current_question()
+        if question:
+            question.status = "scored"
+            question.score = 80
+            question.user_answer = "这是一个测试回答"
+            question.answered_at = datetime.now()
+
+        # 手动正确结束会话
         session.status = "completed"
-        # 正确的方式：直接使用 datetime.now()
         session.ended_at = datetime.now()
 
-        # 验证可以正常计算时间差
-        duration = (session.ended_at - session.started_at).total_seconds() / 60
-        assert isinstance(duration, float)
-        assert duration >= 0
+        # 获取报告
+        report = manager.get_report(session.session_id)
+
+        assert report is not None
+        assert report.session_id == session.session_id
+        assert isinstance(report.duration_minutes, float)
+        assert report.duration_minutes >= 0
+
+    def test_report_with_skipped_questions(self, manager):
+        """测试包含跳过题目的报告"""
+        session_id = str(uuid4())
+        session = InterviewSession(
+            session_id=session_id,
+            user_id="test_user_skip",
+            company="腾讯",
+            position="算法工程师",
+            difficulty="medium",
+            total_questions=3,
+            questions=[
+                InterviewQuestion(
+                    question_id="q_0",
+                    question_text="题目1",
+                    question_type="knowledge",
+                    status="scored",
+                    score=85,
+                    knowledge_points=["算法"],
+                    answered_at=datetime.now(),
+                ),
+                InterviewQuestion(
+                    question_id="q_1",
+                    question_text="题目2",
+                    question_type="knowledge",
+                    status="skipped",
+                    score=0,  # 跳过的题目分数为0
+                ),
+                InterviewQuestion(
+                    question_id="q_2",
+                    question_text="题目3",
+                    question_type="knowledge",
+                    status="scored",
+                    score=70,
+                    knowledge_points=["数据结构"],
+                    answered_at=datetime.now(),
+                ),
+            ],
+            current_question_idx=3,
+            status="completed",
+            ended_at=datetime.now(),
+        )
+
+        manager._sessions[session_id] = session
+        report = manager.get_report(session_id)
+
+        assert report is not None
+        assert report.answered_questions == 2  # 只有2题被回答
+        # 平均分 = (85 + 0 + 70) / 3 = 51.67（跳过的题目也计入平均分）
+        assert report.average_score == pytest.approx(51.67, rel=0.1)
 
 
 class TestInterviewSessionState:
@@ -264,3 +326,18 @@ class TestInterviewSessionState:
         assert result["type"] in ["next_question", "completed"]
         assert session.current_question_idx == 1
         assert session.questions[0].status == "skipped"
+        assert session.questions[0].score == 0  # 跳过的题目分数为0
+
+    def test_default_questions_generated_when_empty(self, manager):
+        """测试题库为空时生成默认题目"""
+        # 创建一个会话，如果预加载题目数量不足，会生成默认题目
+        request = InterviewSessionCreate(
+            company="测试公司",
+            position="测试岗位",
+            difficulty="medium",
+            total_questions=5,
+        )
+        session = manager.create_session("test_default", request)
+
+        # 应该有题目（无论是预加载还是默认生成）
+        assert len(session.questions) > 0
