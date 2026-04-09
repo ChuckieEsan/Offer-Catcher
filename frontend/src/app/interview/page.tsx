@@ -135,7 +135,6 @@ export default function InterviewPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   // 下一题按钮状态
   const [showNextButton, setShowNextButton] = useState(false);
@@ -221,11 +220,56 @@ export default function InterviewPage() {
     const aiMsgId = `ai_${Date.now()}`;
     setMessages((prev) => [...prev, { id: aiMsgId, role: "assistant", content: "", isStreaming: true }]);
     setStreaming(true);
-    setStreamingMessageId(aiMsgId);
     setShowNextButton(false);
     setNextQuestionText(null);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+    // 在函数内部定义回调，使用局部变量 aiMsgId，避免 state 依赖问题
+    const processChunk = (chunk: { type: string; content?: string; next_question?: string; [key: string]: any }) => {
+      if (chunk.type === "text" && chunk.content) {
+        // 使用局部变量 aiMsgId，确保正确更新
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? { ...msg, content: msg.content + chunk.content }
+              : msg
+          )
+        );
+      } else if (chunk.type === "next_question_ready") {
+        setShowNextButton(true);
+        setNextQuestionText(chunk.next_question || null);
+        if (chunk.question_idx !== undefined) {
+          setSession((prev) =>
+            prev ? { ...prev, current_question_idx: chunk.question_idx } : null
+          );
+        }
+      } else if (chunk.type === "follow_up") {
+        if (chunk.question_idx !== undefined) {
+          setSession((prev) =>
+            prev ? { ...prev, current_question_idx: chunk.question_idx } : null
+          );
+        }
+      } else if (chunk.type === "completed") {
+        setShowNextButton(false);
+        setNextQuestionText(null);
+        fetchReport(session!.session_id);
+      } else if (chunk.type === "error") {
+        message.error(chunk.message || "发生错误");
+      }
+    };
+
+    const processDone = () => {
+      setStreaming(false);
+      // 将消息的 isStreaming 设置为 false
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? { ...msg, isStreaming: false }
+            : msg
+        )
+      );
+    };
 
     try {
       const response = await fetch(`${apiUrl}/interview/sessions/${session.session_id}/answer`, {
@@ -254,7 +298,7 @@ export default function InterviewPage() {
 
         if (done) {
           if (buffer.trim()) {
-            processSSELine(buffer, handleChunk, handleDone);
+            processSSELine(buffer, processChunk, processDone);
           }
           break;
         }
@@ -265,65 +309,20 @@ export default function InterviewPage() {
 
         for (const line of lines) {
           if (line.trim()) {
-            processSSELine(line, handleChunk, handleDone);
+            processSSELine(line, processChunk, processDone);
           }
         }
       }
 
-      handleDone();
+      processDone();
 
     } catch (error) {
       message.error("提交回答失败");
       setStreaming(false);
-      setStreamingMessageId(null);
       // 移除占位消息
       setMessages((prev) => prev.filter((msg) => msg.id !== aiMsgId));
     }
   }, [input, session, streaming]);
-
-  // 处理流式数据块
-  const handleChunk = useCallback((chunk: { type: string; content?: string; next_question?: string; [key: string]: any }) => {
-    if (chunk.type === "text" && chunk.content) {
-      // 更新 AI 消息内容
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === streamingMessageId
-            ? { ...msg, content: msg.content + chunk.content }
-            : msg
-        )
-      );
-    } else if (chunk.type === "next_question_ready") {
-      // 显示下一题按钮
-      setShowNextButton(true);
-      setNextQuestionText(chunk.next_question || null);
-      // 更新题目索引
-      if (chunk.question_idx !== undefined) {
-        setSession((prev) =>
-          prev ? { ...prev, current_question_idx: chunk.question_idx } : null
-        );
-      }
-    } else if (chunk.type === "follow_up") {
-      // 继续追问，更新题目索引
-      if (chunk.question_idx !== undefined) {
-        setSession((prev) =>
-          prev ? { ...prev, current_question_idx: chunk.question_idx } : null
-        );
-      }
-    } else if (chunk.type === "completed") {
-      // 面试结束
-      setShowNextButton(false);
-      setNextQuestionText(null);
-      fetchReport(session!.session_id);
-    } else if (chunk.type === "error") {
-      message.error(chunk.message || "发生错误");
-    }
-  }, [streamingMessageId, session]);
-
-  // 流式结束
-  const handleDone = useCallback(() => {
-    setStreaming(false);
-    setStreamingMessageId(null);
-  }, []);
 
   // 点击下一题按钮
   const handleNextQuestion = async () => {
@@ -361,9 +360,21 @@ export default function InterviewPage() {
       { id: aiMsgId, role: "assistant", content: "", isStreaming: true },
     ]);
     setStreaming(true);
-    setStreamingMessageId(aiMsgId);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+    // 在函数内部定义回调，使用局部变量 aiMsgId
+    const processChunk = (chunk: { type: string; content?: string }) => {
+      if (chunk.type === "text" && chunk.content) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? { ...msg, content: msg.content + chunk.content }
+              : msg
+          )
+        );
+      }
+    };
 
     try {
       const response = await fetch(`${apiUrl}/interview/sessions/${session.session_id}/hint`, {
@@ -396,28 +407,24 @@ export default function InterviewPage() {
 
         for (const line of lines) {
           if (line.trim()) {
-            processSSELine(line, (chunk) => {
-              if (chunk.type === "text" && chunk.content) {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMsgId
-                      ? { ...msg, content: msg.content + chunk.content }
-                      : msg
-                  )
-                );
-              }
-            }, () => {});
+            processSSELine(line, processChunk, () => {});
           }
         }
       }
 
       setStreaming(false);
-      setStreamingMessageId(null);
+      // 将消息的 isStreaming 设置为 false
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMsgId
+            ? { ...msg, isStreaming: false }
+            : msg
+        )
+      );
 
     } catch (error) {
       message.error("获取提示失败");
       setStreaming(false);
-      setStreamingMessageId(null);
       setMessages((prev) => prev.filter((msg) => msg.id !== aiMsgId));
     }
   }, [session, streaming]);

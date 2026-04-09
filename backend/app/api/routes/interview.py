@@ -141,7 +141,7 @@ async def submit_answer(
 
     async def generate():
         try:
-            for chunk in await manager.process_answer_stream(session_id, request.answer):
+            async for chunk in manager.process_answer_stream(session_id, request.answer):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")
@@ -181,7 +181,7 @@ async def request_hint(
 
     async def generate():
         try:
-            for chunk in await manager.get_hint_stream(session_id):
+            async for chunk in manager.get_hint_stream(session_id):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")

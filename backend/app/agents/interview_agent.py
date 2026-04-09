@@ -8,7 +8,7 @@ from typing import Optional, List, AsyncIterator
 from datetime import datetime
 import uuid
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.llm import get_llm
@@ -205,14 +205,15 @@ class InterviewManager:
 
         # 流式生成回复
         response_chunks = []
+        # 使用 BaseMessage 格式以确保 astream 正确工作
         messages = [
-            ("system", system_prompt),
-            ("human", user_prompt),
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
         ]
 
         try:
-            # 使用同步 LLM 的 stream 方法（它在内部是同步迭代器）
-            for chunk in self._llm.stream(messages):
+            # 使用异步的 astream 方法
+            async for chunk in self._llm.astream(messages):
                 content = chunk.content
                 if content:
                     response_chunks.append(content)
@@ -283,13 +284,13 @@ class InterviewManager:
 请给出一个引导性的提示，帮助候选人思考，但不要直接给出答案。
 提示要简洁、有启发性。"""
 
-        messages = [
-            ("system", system_prompt),
-            ("human", user_prompt),
-        ]
-
         hint_chunks = []
-        for chunk in self._llm.stream(messages):
+        # 使用 BaseMessage 格式以确保 astream 正确工作
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        async for chunk in self._llm.astream(messages):
             content = chunk.content
             if content:
                 hint_chunks.append(content)
@@ -352,12 +353,13 @@ class InterviewManager:
 请给出一个引导性的提示，帮助候选人思考，但不要直接给出答案。
 提示要简洁、有启发性。"""
 
+        # 使用 BaseMessage 格式
         messages = [
-            ("system", system_prompt),
-            ("human", user_prompt),
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
         ]
 
-        result = self._llm.invoke(messages)
+        result = await self._llm.ainvoke(messages)
         hint = result.content
 
         current_question.hints_given.append(hint)
