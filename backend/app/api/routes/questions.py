@@ -68,14 +68,16 @@ async def list_questions(
     position: Optional[str] = Query(None, description="岗位过滤"),
     question_type: Optional[str] = Query(None, description="题目类型过滤"),
     mastery_level: Optional[int] = Query(None, description="熟练度过滤"),
+    cluster_id: Optional[str] = Query(None, description="聚类过滤"),
+    keyword: Optional[str] = Query(None, description="关键词搜索"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量")
 ):
     """获取题目列表
 
-    支持按公司、岗位、类型、熟练度过滤。
+    支持按公司、岗位、类型、熟练度、聚类过滤，以及关键词搜索。
     """
-    logger.info(f"List questions: company={company}, page={page}")
+    logger.info(f"List questions: company={company}, cluster_id={cluster_id}, keyword={keyword}, page={page}")
 
     qdrant = get_qdrant_manager()
     all_questions = qdrant.scroll_all(limit=10000)
@@ -90,6 +92,11 @@ async def list_questions(
         filtered = [q for q in filtered if q.question_type == question_type]
     if mastery_level is not None:
         filtered = [q for q in filtered if q.mastery_level == mastery_level]
+    if cluster_id:
+        filtered = [q for q in filtered if cluster_id in (q.cluster_ids or [])]
+    if keyword:
+        keyword_lower = keyword.lower()
+        filtered = [q for q in filtered if keyword_lower in q.question_text.lower()]
 
     total = len(filtered)
 

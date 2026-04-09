@@ -126,3 +126,8 @@ export interface EntityStats {
   entity: string;
   count: number;
 }
+
+export interface ClusterStats {
+  cluster_id: string;
+  count: number;
+}

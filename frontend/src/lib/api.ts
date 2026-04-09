@@ -18,6 +18,7 @@ import type {
   OverviewStats,
   CompanyStats,
   EntityStats,
+  ClusterStats,
 } from "@/types";
 
 // 默认使用相对路径（通过 Next.js rewrites 代理）
@@ -254,6 +255,8 @@ export async function getQuestions(params: {
   company?: string;
   question_type?: string;
   mastery_level?: number;
+  cluster_id?: string;
+  keyword?: string;
   page?: number;
   page_size?: number;
 }): Promise<QuestionListResponse> {
@@ -343,5 +346,10 @@ export async function getEntityStats(
   const res = await api.get("/stats/entities", {
     params: { company, limit },
   });
+  return res.data;
+}
+
+export async function getClusterStats(): Promise<ClusterStats[]> {
+  const res = await api.get("/stats/clusters");
   return res.data;
 }

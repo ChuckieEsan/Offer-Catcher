@@ -16,6 +16,9 @@ import {
   Space,
   Descriptions,
   Spin,
+  Row,
+  Col,
+  Statistic,
 } from "antd";
 import {
   DeleteOutlined,
@@ -26,11 +29,22 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { getQuestions, getCompanyStats, updateQuestion, deleteQuestion, regenerateAnswer } from "@/lib/api";
-import type { Question, CompanyStats } from "@/types";
+import { getQuestions, getCompanyStats, getClusterStats, updateQuestion, deleteQuestion, regenerateAnswer } from "@/lib/api";
+import type { Question, CompanyStats, ClusterStats } from "@/types";
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
+
+/**
+ * 格式化 cluster_id 为可读名称
+ * cluster_qlora_memory_optimization -> qlora / memory / optimization
+ */
+function formatClusterName(clusterId: string): string {
+  if (!clusterId || clusterId === "未分类") return "未分类";
+  return clusterId
+    .replace(/^cluster_/, "")
+    .replace(/_/g, " / ");
+}
 
 export default function QuestionsPage() {
   const { message } = App.useApp();
@@ -43,10 +57,15 @@ export default function QuestionsPage() {
   // 公司列表
   const [companies, setCompanies] = useState<CompanyStats[]>([]);
 
+  // 聚类列表
+  const [clusters, setClusters] = useState<ClusterStats[]>([]);
+
   // 过滤器
   const [filterCompany, setFilterCompany] = useState<string | undefined>();
   const [filterType, setFilterType] = useState<string | undefined>();
   const [filterMastery, setFilterMastery] = useState<number | undefined>();
+  const [filterCluster, setFilterCluster] = useState<string | undefined>();
+  const [searchKeyword, setSearchKeyword] = useState<string | undefined>();
 
   // 查看 Drawer
   const [viewDrawer, setViewDrawer] = useState<{
@@ -76,11 +95,12 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     loadCompanies();
+    loadClusters();
   }, []);
 
   useEffect(() => {
     loadQuestions();
-  }, [page, pageSize, filterCompany, filterType, filterMastery]);
+  }, [page, pageSize, filterCompany, filterType, filterMastery, filterCluster, searchKeyword]);
 
   const loadCompanies = async () => {
     try {
@@ -91,6 +111,15 @@ export default function QuestionsPage() {
     }
   };
 
+  const loadClusters = async () => {
+    try {
+      const res = await getClusterStats();
+      setClusters(res);
+    } catch (error) {
+      console.error("加载聚类列表失败");
+    }
+  };
+
   const loadQuestions = async () => {
     setLoading(true);
     try {
@@ -98,6 +127,8 @@ export default function QuestionsPage() {
         company: filterCompany,
         question_type: filterType,
         mastery_level: filterMastery,
+        cluster_id: filterCluster,
+        keyword: searchKeyword,
         page,
         page_size: pageSize,
       });
@@ -299,8 +330,47 @@ export default function QuestionsPage() {
     <MainLayout>
       <Title level={3}>题目管理</Title>
 
+      {/* 统计卡片 */}
+      <Card style={{ marginBottom: 16 }}>
+        <Row gutter={24}>
+          <Col span={6}>
+            <Statistic title="聚类总数" value={clusters.length} />
+          </Col>
+          <Col span={6}>
+            <Statistic title="当前筛选结果" value={total} suffix="道题目" />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="已分类题目"
+              value={questions.filter(q => q.cluster_ids && q.cluster_ids.length > 0).length}
+              suffix={`/ ${questions.length}`}
+            />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="有答案题目"
+              value={questions.filter(q => q.question_answer).length}
+              suffix={`/ ${questions.length}`}
+            />
+          </Col>
+        </Row>
+      </Card>
+
+      {/* 过滤器 */}
       <Card style={{ marginBottom: 16 }}>
         <Space wrap size="middle">
+          <Select
+            placeholder="聚类过滤"
+            allowClear
+            showSearch
+            style={{ width: 220 }}
+            value={filterCluster}
+            onChange={setFilterCluster}
+            options={clusters.map((c) => ({
+              value: c.cluster_id,
+              label: `${formatClusterName(c.cluster_id)} (${c.count})`
+            }))}
+          />
           <Select
             placeholder="公司过滤"
             allowClear
@@ -335,9 +405,13 @@ export default function QuestionsPage() {
               { value: 2, label: "已掌握" },
             ]}
           />
-          <span style={{ color: "#666" }}>
-            共 {total} 道题目
-          </span>
+          <Input.Search
+            placeholder="搜索题目关键词"
+            allowClear
+            style={{ width: 240 }}
+            defaultValue={searchKeyword}
+            onSearch={(value) => setSearchKeyword(value || undefined)}
+          />
         </Space>
       </Card>
 
