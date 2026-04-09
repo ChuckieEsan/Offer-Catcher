@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat, extract, score, questions, search, stats, conversations
+from app.api.routes import chat, extract, score, questions, search, stats, conversations, interview, speech
 from app.utils.logger import logger
 from app.utils.warmup import warmup
 
@@ -73,6 +73,8 @@ app.include_router(score.router, prefix="/api/v1")
 app.include_router(questions.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(stats.router, prefix="/api/v1")
+app.include_router(interview.router, prefix="/api/v1")
+app.include_router(speech.router, prefix="/api/v1")
 
 
 @app.get("/health")

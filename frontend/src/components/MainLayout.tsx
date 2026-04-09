@@ -9,6 +9,7 @@ import {
   EditOutlined,
   UnorderedListOutlined,
   DashboardOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -20,6 +21,11 @@ const menuItems: MenuProps["items"] = [
     key: "/",
     icon: <DashboardOutlined />,
     label: "首页",
+  },
+  {
+    key: "/interview",
+    icon: <TeamOutlined />,
+    label: "模拟面试",
   },
   {
     key: "/chat",

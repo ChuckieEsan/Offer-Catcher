@@ -53,6 +53,20 @@ class Settings(BaseSettings):
         default="",
     )
 
+    # 讯飞语音识别配置
+    xfyun_app_id: str = Field(
+        description="讯飞 AppID",
+        default="",
+    )
+    xfyun_api_key: str = Field(
+        description="讯飞 API Key",
+        default="",
+    )
+    xfyun_api_secret: str = Field(
+        description="讯飞 API Secret",
+        default="",
+    )
+
     # Embedding 模型配置
     embedding_model_path: str = Field(
         description="Embedding 模型路径（BGE-M3）",

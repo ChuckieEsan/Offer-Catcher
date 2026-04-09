@@ -1,6 +1,6 @@
 # Offer-Catcher: 面经智能体系统
 
-**版本**: v2.0 (前后端分离架构)
+**版本**: v2.1 (异步架构 + 性能优化)
 **核心定位**: 基于 Multi-Agent 架构与混合 RAG 的面经收集、结构化图谱分析与智能对练系统。
 
 ---
@@ -17,8 +17,11 @@
 ### 核心价值与解决方案
 
 - **多模态与分类熔断提取**: 支持图文混排输入，利用 Vision LLM 进行结构化提取，并对题目进行智能分类（knowledge/project/behavioral/scenario/algorithm），过滤无效生成。
+- **异步面经解析**: 提交后立即返回任务 ID，Worker 后台解析，用户可随时查看进度和结果，支持编辑后入库。
+- **两阶段检索架构**: 向量召回 + Rerank 精排，提升检索准确率。
 - **消息队列与 Multi-Agent 异步答疑**: 引入 RabbitMQ 削峰填谷，由主 Agent 调度带联网搜索能力的子 Agent 异步生成最新标准答案。
 - **混合存储架构**: Qdrant 向量库（支撑细粒度混合检索） + Neo4j 图数据库（支撑宏观考频统计与知识点关联分析）。
+- **Redis 缓存层**: TTL + 主动失效 + 延迟双删，保证分钟级数据一致性。
 - **前后端分离**: FastAPI 后端 + Next.js 前端，支持独立部署和扩展。
 
 ---
@@ -28,59 +31,101 @@
 系统采用 **"前后端分离、读写分离、主从智能体解耦、消息驱动"** 的架构。
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                      前端层 (Next.js)                            │
-│  - React 19 + Ant Design + Tailwind CSS                         │
-│  - SSE 流式对话渲染                                              │
-│  - 多页面: 聊天、录入、练习、管理、仪表盘                          │
-└─────────────────────────────────────────────────────────────────┘
-                              │ HTTP/SSE
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     API 层 (FastAPI)                             │
-│  /api/v1/chat/stream     - 流式对话                              │
-│  /api/v1/extract         - 面经提取                              │
-│  /api/v1/score           - 答题评分                              │
-│  /api/v1/questions       - 题目管理                              │
-│  /api/v1/search          - 向量搜索                              │
-│  /api/v1/stats           - 数据统计                              │
-│  /api/v1/conversations   - 会话管理                              │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Agent 层 (LangGraph)                          │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │  Chat Agent     │  │ Vision Extractor│  │  Scorer Agent   │  │
-│  │  (ReAct 流式)   │  │  (多模态提取)   │  │  (打分状态机)   │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-│                              │                                   │
-│              ┌───────────────┼───────────────┐                  │
-│              ▼               ▼               ▼                  │
-│         Search Web      Search Qdrant   Query Neo4j             │
-│              (Tavily)     (Hybrid RAG)    (考频统计)             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     存储层 (Hybrid Storage)                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │   Qdrant    │  │    Neo4j    │  │  PostgreSQL │              │
-│  │  向量检索   │  │  图数据库   │  │  会话状态   │              │
-│  └─────────────┘  └─────────────┘  └─────────────┘              │
-│  ┌─────────────┐  ┌─────────────┐                               │
-│  │   Redis     │  │  RabbitMQ   │                               │
-│  │  短期记忆   │  │  异步队列   │                               │
-│  └─────────────┘  └─────────────┘                               │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Worker 层 (后台进程)                          │
-│  - Answer Worker: 异步答案生成                                   │
-│  - Clustering Worker: 题目聚类定时任务                           │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              前端层 (Next.js 16)                             │
+│  - React 19 + Ant Design + Tailwind CSS                                     │
+│  - SSE 流式对话渲染                                                          │
+│  - 多页面: 聊天、录入、练习、管理、仪表盘                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │ HTTP/SSE
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             API 层 (FastAPI)                                 │
+│  /api/v1/chat/stream       - 流式对话                                        │
+│  /api/v1/extract/submit    - 异步面经提取                                    │
+│  /api/v1/extract/tasks     - 任务列表/详情/编辑                               │
+│  /api/v1/questions         - 题目管理（服务端过滤）                           │
+│  /api/v1/stats/clusters    - 聚类统计                                        │
+│  /api/v1/search            - 向量搜索                                        │
+│  /api/v1/conversations     - 会话管理                                        │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        CacheService (Redis)                            │ │
+│  │  - TTL 5分钟兜底                                                       │ │
+│  │  - 主动失效 + 延迟双删                                                 │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+          ┌───────────────────────────┼───────────────────────────┐
+          ▼                           ▼                           ▼
+┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
+│    PostgreSQL     │      │     RabbitMQ      │      │      Redis        │
+│  - 会话持久化      │      │   - 任务队列      │      │   - 缓存层        │
+│  - 面经解析任务    │      │   - 削峰填谷      │      │   - 5分钟 TTL     │
+│  - 图片 (gzip)    │      │                   │      │                   │
+└───────────────────┘      └───────────────────┘      └───────────────────┘
+          │                           │
+          ▼                           ▼
+┌───────────────────┐      ┌───────────────────────────────────────────────┐
+│      Qdrant       │      │                   Workers                      │
+│  - 向量存储        │      │  ┌──────────────────────────────────────────┐ │
+│  - 混合检索        │      │  │ Extract Worker (面经异步解析)            │ │
+│  - Payload 过滤    │      │  │ Answer Worker (答案生成)                 │ │
+│  - 服务端过滤      │      │  │ Clustering Worker (聚类)                 │ │
+└───────────────────┘      │  └──────────────────────────────────────────┘ │
+                           └───────────────────────────────────────────────┘
 ```
+
+---
+
+## 核心特性
+
+### 1. 异步面经解析
+
+```
+用户提交 → 返回 task_id → Worker 后台解析 → 用户查看/编辑 → 确认入库
+```
+
+- **即时响应**: 提交后立即返回，不阻塞前端
+- **任务管理**: 查看任务列表、状态筛选、自动刷新
+- **结果编辑**: 修改公司/岗位、编辑题目、删除题目
+- **图片压缩**: Base64 gzip 压缩存储
+
+### 2. 两阶段检索
+
+```
+Stage 1: 向量召回
+  - 统一 Embedding: "公司：xxx | 岗位：xxx | 题目：xxx"
+  - 召回 k*3 条候选
+
+Stage 2: Rerank 精排
+  - CrossEncoder (bge-reranker-base)
+  - 返回 top-k 结果
+```
+
+### 3. 服务端过滤
+
+```python
+# Qdrant 服务端过滤，避免内存溢出
+questions = qdrant.scroll_with_filter(
+    company="字节跳动",
+    cluster_ids=["cluster_rag"],
+)
+count = qdrant.count_with_filter(...)
+```
+
+### 4. Redis 缓存一致性
+
+- **TTL 兜底**: 5 分钟自动过期
+- **主动失效**: 写操作后删除缓存
+- **延迟双删**: 解决并发读写问题
+- **跨进程一致**: API 和 Worker 共用 CacheService
+
+### 5. 题目聚类
+
+- KMeans 聚类 + 自动 K 选择
+- 按聚类筛选题目
+- 聚类统计卡片
 
 ---
 
@@ -91,136 +136,69 @@ Offer-Catcher/
 ├── backend/                    # 后端服务 (Python FastAPI)
 │   ├── app/
 │   │   ├── agents/             # 智能体层
-│   │   │   ├── base.py         # Agent 基类
 │   │   │   ├── chat_agent.py   # 聊天 Agent (流式输出)
 │   │   │   ├── router.py       # 意图路由 Agent
 │   │   │   ├── vision_extractor.py # 视觉提取 Agent
 │   │   │   ├── scorer.py       # 答题评分 Agent
 │   │   │   ├── answer_specialist.py # 异步答案生成 Agent
 │   │   │   └── graph/          # LangGraph 工作流
-│   │   │       ├── state.py    # 状态定义
-│   │   │       ├── nodes.py    # 节点实现
-│   │   │       ├── edges.py    # 路由逻辑
-│   │   │       └── workflow.py # 工作流组装
 │   │   │
-│   │   ├── api/                # FastAPI 路由
-│   │   │   └── routes/
-│   │   │       ├── chat.py     # 流式对话 API
-│   │   │       ├── extract.py  # 面经提取 API
-│   │   │       ├── score.py    # 答题评分 API
-│   │   │       ├── questions.py # 题目管理 API
-│   │   │       ├── search.py   # 搜索 API
-│   │   │       ├── stats.py    # 统计 API
-│   │   │       └── conversations.py # 会话管理 API
+│   │   ├── api/routes/         # FastAPI 路由
+│   │   │   ├── chat.py         # 流式对话 API
+│   │   │   ├── extract.py      # 面经提取 API (同步+异步)
+│   │   │   ├── questions.py    # 题目管理 API
+│   │   │   ├── stats.py        # 统计 API
+│   │   │   └── conversations.py
 │   │   │
 │   │   ├── tools/              # 工具箱
-│   │   │   ├── embedding_tool.py # 向量嵌入 (BGE-M3)
-│   │   │   ├── web_search_tool.py # 联网搜索 (Tavily)
-│   │   │   ├── search_question_tool.py # 题目搜索
-│   │   │   ├── vision_extractor_tool.py # 图片提取
-│   │   │   └── query_graph_tool.py # 图数据库查询
-│   │   │
-│   │   ├── pipelines/          # 业务流水线
-│   │   │   ├── ingestion.py    # 入库流水线
-│   │   │   └── retrieval.py    # 检索流水线
+│   │   │   ├── embedding_tool.py   # BGE-M3
+│   │   │   ├── reranker_tool.py    # BGE-Reranker
+│   │   │   ├── web_search_tool.py  # Tavily
+│   │   │   └── search_question_tool.py
 │   │   │
 │   │   ├── db/                 # 数据库层
-│   │   │   ├── qdrant_client.py # Qdrant 向量数据库
-│   │   │   ├── graph_client.py  # Neo4j 图数据库
-│   │   │   ├── redis_client.py  # Redis 短期记忆
-│   │   │   ├── postgres_client.py # PostgreSQL 历史对话
-│   │   │   └── checkpointer.py  # LangGraph Checkpointer
-│   │   │
-│   │   ├── mq/                 # 消息队列层
-│   │   │   ├── producer.py     # RabbitMQ 生产者
-│   │   │   ├── consumer.py     # 异步消费者 (熔断)
-│   │   │   ├── thread_pool_consumer.py # 线程池消费者
-│   │   │   └── message_helper.py # 消息处理辅助
-│   │   │
-│   │   ├── models/             # 数据模型
-│   │   │   ├── schemas.py      # Pydantic 模型
-│   │   │   └── enums.py        # 枚举类
-│   │   │
-│   │   ├── prompts/            # Prompt 模板 (外置)
-│   │   │   ├── vision_extractor.md
-│   │   │   ├── answer_specialist.md
-│   │   │   ├── router.md
-│   │   │   ├── scorer.md
-│   │   │   ├── react_agent.md  # ReAct Agent
-│   │   │   └ chat_agent.md     # Chat Agent
-│   │   │
-│   │   ├── llm/                # LLM 工厂
-│   │   │   └── __init__.py     # create_llm, get_llm
-│   │   │
-│   │   ├── config/             # 配置
-│   │   │   └── settings.py     # Pydantic Settings
+│   │   │   ├── qdrant_client.py    # Qdrant (服务端过滤)
+│   │   │   ├── postgres_client.py  # PostgreSQL (任务表)
+│   │   │   ├── redis_client.py     # Redis 缓存
+│   │   │   └── graph_client.py     # Neo4j
 │   │   │
 │   │   ├── services/           # 业务服务
-│   │   │   └ clustering_service.py # 题目聚类
+│   │   │   ├── clustering_service.py
+│   │   │   └── cache_service.py    # Redis 缓存服务
 │   │   │
-│   │   ├── skills/             # Skills 加载器
+│   │   ├── models/             # 数据模型
+│   │   │   ├── schemas.py      # ExtractTask, QuestionItem, etc.
+│   │   │   └── enums.py
 │   │   │
-│   │   └── utils/              # 工具
-│   │       ├── hasher.py       # MD5 哈希
-│   │       ├── logger.py       # 日志
-│   │       ├── retry.py        # 重试装饰器
-│   │       ├── circuit_breaker.py # 熔断器
-│   │       ├── cache.py        # 缓存装饰器
-│   │       ├── telemetry.py    # OpenTelemetry
-│   │       ├── ocr.py          # OCR 工具
-│   │       └── image.py        # 图片处理
+│   │   └── prompts/            # Prompt 模板 (外置 .md)
 │   │
 │   ├── workers/                # 后台进程
+│   │   ├── extract_worker.py   # 面经异步解析
 │   │   ├── answer_worker.py    # 异步答案生成
-│   │   └ clustering_worker.py  # 聚类定时任务
+│   │   └── clustering_worker.py
 │   │
-│   ├── tests/                  # 测试用例
-│   │   ├── test_qdrant_client.py
-│   │   ├── test_graph_client.py
-│   │   ├── test_vision_extractor.py
-│   │   ├── test_scorer.py
-│   │   ├── test_router.py
-│   │   ├── test_tools.py
-│   │   ├── test_answer_worker.py
-│   │   ├── test_e2e.py
-│   │   └ test_schemas.py
-│   │   └ test_postgres_client.py
-│   │   └ test_rabbitmq.py
-│   │   └ test_chat_agent_tools.py
-│   │
-│   ├── main.py                 # FastAPI 入口
-│   ├── pyproject.toml          # 项目配置
-│   └── .env                    # 环境变量
+│   └── tests/
 │
-├── frontend/                   # 前端服务 (Next.js)
-│   ├── src/
-│   │   ├── app/                # Next.js App Router
-│   │   ├── components/         # React 组件
-│   │   ├── lib/                # API 客户端
-│   │   └ types/                # TypeScript 类型
-│   │
-│   ├── package.json            # 依赖配置
-│   └ next.config.ts            # Next.js 配置
-│   └ tailwind.config           # Tailwind 配置
-│   └ tsconfig.json             # TypeScript 配置
+├── frontend/                   # 前端服务 (Next.js 16)
+│   └── src/
+│       ├── app/
+│       │   ├── extract/        # 面经录入 (异步任务)
+│       │   ├── questions/      # 题目管理 (聚类筛选)
+│       │   ├── chat/           # AI 对话
+│       │   ├── practice/       # 练习答题
+│       │   └── dashboard/      # 仪表盘
+│       ├── lib/api.ts          # API 客户端
+│       └── types/              # TypeScript 类型
 │
-├── gateways/                   # Streamlit 前端 (兼容)
-│   ├── cli_chat.py             # Streamlit 主入口
-│   └── pages/                  # 多页面
-│       ├── 0_chat.py           # AI 聊天
-│       ├── 1_interview_input.py # 录入面经
-│       ├── 2_practice.py       # 练习答题
-│       ├── 3_question_management.py # 题目管理
-│       ├── 4_dashboard.py      # 仪表盘
-│       └── 5_cluster_view.py   # 考点聚类
-│   └── components/
-│       └── question_card.py    # 题目卡片组件
+├── docs/                       # 文档
+│   ├── architecture.md         # 系统架构
+│   ├── api.md                  # API 文档
+│   ├── async_extract_design.md # 异步解析设计
+│   └── redis_cache_design.md   # 缓存设计
 │
-├── models/                     # 共享模型文件
-│
-├── docker-compose.yml          # Docker 服务配置
+├── docker-compose.yml
 ├── CLAUDE.md                   # AI 编码指导
-└── README.md                   # 项目文档
+└── README.md
 ```
 
 ---
@@ -229,30 +207,29 @@ Offer-Catcher/
 
 ### 后端
 
-- **Python 3.10+** - 核心语言
-- **FastAPI + Uvicorn** - Web API 框架
-- **LangChain** - Agent 开发框架
-- **LangGraph** - 工作流编排框架
-- **Qdrant** - 向量数据库
-- **Neo4j** - 图数据库
-- **Redis** - 短期记忆存储
-- **PostgreSQL** - 历史对话存储 + LangGraph Checkpointer
-- **RabbitMQ** - 消息队列
-- **DashScope/DeepSeek** - 大模型 API
-- **Tavily** - Web 搜索 API
-- **OpenTelemetry + Jaeger** - 可观测性
+| 类别 | 技术 |
+|------|------|
+| Web 框架 | FastAPI + Uvicorn |
+| Agent 框架 | LangChain + LangGraph |
+| 向量数据库 | Qdrant |
+| 关系数据库 | PostgreSQL |
+| 图数据库 | Neo4j |
+| 消息队列 | RabbitMQ |
+| 缓存 | Redis |
+| Embedding | BGE-M3 |
+| Reranker | BGE-Reranker-Base |
+| LLM | DeepSeek / DashScope |
+| Web 搜索 | Tavily |
 
 ### 前端
 
-- **Next.js 16** - React 框架
-- **React 19** - UI 库
-- **Ant Design** - UI 组件库
-- **Tailwind CSS** - 样式框架
-- **TypeScript** - 类型安全
-
-### 兼容前端 (Streamlit)
-
-- **Streamlit** - 快速原型开发
+| 类别 | 技术 |
+|------|------|
+| 框架 | Next.js 16 |
+| UI 库 | React 19 |
+| 组件库 | Ant Design |
+| 样式 | Tailwind CSS |
+| 类型 | TypeScript |
 
 ---
 
@@ -262,45 +239,35 @@ Offer-Catcher/
 
 - Python 3.10+
 - Node.js 18+
-- Docker (用于运行 Qdrant、RabbitMQ、Neo4j、Redis、PostgreSQL)
-- uv (Python 包管理工具)
+- Docker
+- uv (Python 包管理)
 
 ### 1. 启动依赖服务
 
 ```bash
-# 启动所有依赖服务
 docker-compose up -d
 
-# 验证服务启动
+# 验证服务
 # Qdrant: http://localhost:6333
 # RabbitMQ: http://localhost:15672 (guest/guest)
 # Neo4j: http://localhost:7474 (neo4j/neo4j)
 # Redis: localhost:6379
 # PostgreSQL: localhost:5432 (root/root)
-# Jaeger: http://localhost:16686
 ```
 
 ### 2. 配置环境变量
 
 ```bash
-# 复制并编辑 backend/.env 文件
 cp backend/.env.example backend/.env
-# 编辑 backend/.env 填入你的 API Keys
+# 编辑 .env 填入 API Keys
 ```
 
-### 3. 启动后端 API
+### 3. 启动后端
 
 ```bash
 cd backend
-
-# 安装依赖
 uv sync
-
-# 启动 FastAPI 服务
 uv run python -m app.main
-
-# 或使用 uvicorn
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 访问 http://localhost:8000/docs 查看 API 文档。
@@ -309,53 +276,63 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 cd frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
 访问 http://localhost:3000。
 
-### 5. 启动后台 Worker
+### 5. 启动 Workers
 
 ```bash
 cd backend
 
-# 启动 RabbitMQ Consumer (异步答案生成)
+# 面经异步解析 Worker
+PYTHONPATH=. uv run python workers/extract_worker.py
+
+# 答案生成 Worker
 PYTHONPATH=. uv run python workers/answer_worker.py
 
-# 启动聚类定时任务 (每天凌晨 2 点)
-PYTHONPATH=. uv run python workers/clustering_worker.py
-
-# 立即执行一次聚类
+# 聚类 Worker (定时/手动)
 PYTHONPATH=. uv run python workers/clustering_worker.py --run-now
 ```
-
-### 6. 启动 Streamlit 前端 (可选，兼容模式)
-
-```bash
-PYTHONPATH=backend uv run streamlit run gateways/cli_chat.py --server.port 8501
-```
-
-访问 http://localhost:8501。
 
 ---
 
 ## API 接口
 
+### 面经解析
+
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v1/chat/stream` | POST | 流式对话 (SSE) |
-| `/api/v1/extract` | POST | 提取面经 (文本/图片) |
-| `/api/v1/score` | POST | 答题评分 |
-| `/api/v1/questions` | GET/PUT/DELETE | 题目管理 |
-| `/api/v1/search` | POST | 向量搜索 |
-| `/api/v1/stats` | GET | 数据统计 |
-| `/api/v1/conversations` | GET/POST/DELETE | 会话管理 |
-| `/health` | GET | 健康检查 |
+| `/extract/submit` | POST | 提交解析任务 |
+| `/extract/tasks` | GET | 获取任务列表 |
+| `/extract/tasks/{id}` | GET | 获取任务详情 |
+| `/extract/tasks/{id}` | PUT | 编辑解析结果 |
+| `/extract/tasks/{id}/confirm` | POST | 确认入库 |
+
+### 题目管理
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/questions` | GET | 题目列表（支持服务端过滤） |
+| `/questions/{id}` | GET/PUT/DELETE | 单个题目操作 |
+| `/questions/{id}/regenerate` | POST | 重新生成答案 |
+
+### 统计
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/stats/overview` | GET | 总览统计 |
+| `/stats/companies` | GET | 公司统计 |
+| `/stats/clusters` | GET | 聚类统计 |
+
+### 对话
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/chat/stream` | POST | 流式对话 (SSE) |
+| `/conversations` | GET/POST/DELETE | 会话管理 |
 
 ---
 
@@ -365,19 +342,21 @@ PYTHONPATH=backend uv run streamlit run gateways/cli_chat.py --server.port 8501
 
 | 类型 | 描述 | 异步生成答案 |
 |------|------|-------------|
-| `knowledge` | 客观基础题（八股文） | Yes |
+| `knowledge` | 客观基础题 | Yes |
 | `project` | 项目深挖题 | No |
 | `behavioral` | 行为/软技能题 | No |
 | `scenario` | 场景题 | Yes |
 | `algorithm` | 算法题 | Yes |
 
-### 掌握程度
+### 解析任务状态
 
-| 等级 | 说明 |
+| 状态 | 说明 |
 |------|------|
-| `LEVEL_0` | 未掌握/未复习 |
-| `LEVEL_1` | 比较熟悉 |
-| `LEVEL_2` | 已掌握 |
+| `pending` | 待处理 |
+| `processing` | 处理中 |
+| `completed` | 已完成 |
+| `failed` | 失败 |
+| `confirmed` | 已入库 |
 
 ---
 
@@ -385,87 +364,48 @@ PYTHONPATH=backend uv run streamlit run gateways/cli_chat.py --server.port 8501
 
 ### 1. 为什么引入 RabbitMQ？
 
-> 面经往往是批量的（如一次解析 50 题）。若直接并发调用大模型生成答案，极易触发 API Rate Limit。引入 RabbitMQ 实现了 **流量削峰填谷** 与 **失败重试（DLQ）机制**。
+> 面经往往是批量的。引入 RabbitMQ 实现了 **流量削峰填谷** 与 **失败重试机制**。
 
-### 2. 如何解决 Agent 答题的"幻觉"？
+### 2. 异步面经解析的设计？
 
-> 采用 **基于 LLM 意图的前置分类熔断机制**。对于 knowledge/scenario/algorithm 类型，调度带联网工具的子 Agent 生成最新答案；对于 project/behavioral 类型，直接触发熔断不予生成。
+> 用户提交后立即返回 task_id，Worker 后台处理。用户可查看进度、编辑结果后再入库。图片使用 gzip 压缩存储。
 
-### 3. Qdrant 向量库的数据粒度设计？
+### 3. 两阶段检索架构？
 
-> 抛弃粗暴的 Document-level 切分，采用 **Question-level Chunking + 上下文拼接** 策略，结合 Qdrant Payload 标量索引实现 Pre-filtering + 向量比对的混合检索。
+> Stage 1 向量召回（统一 Embedding），Stage 2 Rerank 精排。解决了检索端与入库端 Embedding 不一致的问题。
 
-### 4. 图数据库的价值？
+### 4. Redis 缓存一致性？
 
-> 通过 Neo4j 实现 **考频统计**（各公司热门考点）、**知识点关联分析**（常一起考察的知识点）、**跨公司通用考点**识别。
+> TTL 兜底 + 主动失效 + 延迟双删。API 和 Worker 共用 CacheService，保证跨进程一致性。
 
-### 5. 为什么前后端分离？
+### 5. Qdrant 服务端过滤？
 
-- **独立部署**: 后端可部署在云服务器，前端可部署在 Vercel/CDN
-- **技术栈解耦**: 前端使用现代 React 生态，后端专注 Python AI 逻辑
-- **扩展性**: 支持多前端接入（Web、小程序、CLI）
-- **流式渲染**: SSE 更适合 React 的组件化渲染
+> 避免加载全部数据到内存。使用 scroll_with_filter 和 count_with_filter 实现高效分页。
 
 ---
 
-## 开发指南
+## 文档
 
-### 运行测试
-
-```bash
-cd backend
-
-# 运行所有测试
-uv run pytest tests/ -v
-
-# 运行特定测试
-uv run pytest tests/test_qdrant_client.py -v
-
-# 测试使用独立的测试 collection，不影响生产数据
-```
-
-### 可观测性
-
-启用 OpenTelemetry：
-
-```bash
-# 在 .env 中配置
-TELEMETRY_ENABLED=true
-OTLP_ENDPOINT=http://localhost:4317
-```
-
-访问 Jaeger UI: http://localhost:16686
-
-### 收集的指标
-
-| 指标 | 说明 |
-|------|------|
-| `tool.calls.total` | 工具调用次数 |
-| `tool.calls.duration` | 工具调用时长 |
-| `llm.tokens.input/output` | Token 消耗 |
-| `vector.query.duration` | 向量检索时长 |
+- [系统架构文档](docs/architecture.md)
+- [API 接口文档](docs/api.md)
+- [异步解析设计](docs/async_extract_design.md)
+- [Redis 缓存设计](docs/redis_cache_design.md)
 
 ---
 
 ## 开发路线
 
-### 已完成
+### v2.1 已完成
 
-- Vision Extractor 多模态提取
-- Qdrant 向量库 + 混合检索
-- RabbitMQ 异步队列 + 熔断机制
-- Web Search Agent 联网生成答案
-- Neo4j 图数据库考频分析
-- Scorer Agent 打分状态机
-- LangGraph ReAct 工作流
-- FastAPI 后端 API
-- Next.js 前端
-- OpenTelemetry 可观测性
+- 异步面经解析系统
+- 两阶段检索 + Rerank
+- Redis 缓存层
+- 题目聚类功能
+- 服务端过滤优化
 
 ### 未来规划
 
-- 微信/Telegram Webhook 接入
-- Redis 语义缓存优化
+- 微信/Telegram 接入
 - 用户认证与数据隔离
 - 多语言支持
 

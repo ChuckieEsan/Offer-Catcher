@@ -10,6 +10,13 @@ from app.models.schemas import (
     SearchFilter,
     SearchResult,
 )
+from app.models.interview_session import (
+    InterviewQuestion,
+    InterviewSession,
+    InterviewSessionCreate,
+    AnswerSubmit,
+    InterviewReport,
+)
 
 __all__ = [
     "IntentType",
@@ -22,4 +29,10 @@ __all__ = [
     "SearchResult",
     "MQTaskMessage",
     "Cluster",
+    # 面试会话相关
+    "InterviewQuestion",
+    "InterviewSession",
+    "InterviewSessionCreate",
+    "AnswerSubmit",
+    "InterviewReport",
 ]
