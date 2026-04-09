@@ -15,7 +15,7 @@ from app.utils.logger import logger
 from app.utils.telemetry import traced_async
 from app.llm import get_llm
 from app.utils.cache import singleton
-from app.utils.agent import load_prompt_template
+from app.agents.prompts import load_prompt_template
 from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph

@@ -3,16 +3,14 @@
 提供 Agent 的基类，包含 LLM 初始化、Structured Output、单例模式、重试机制等通用能力。
 """
 
-from pathlib import Path
 from typing import Any, Generic, Optional, TypeVar
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.llm import create_llm
 from app.utils.logger import logger
-from app.utils.agent import load_prompt_template
 from app.utils.retry import retry
+from app.agents.prompts import build_prompt
 
 # 泛型：Agent 返回的结果类型
 T = TypeVar("T")
@@ -42,10 +40,6 @@ class BaseAgent(Generic[T]):
         """
         self.provider = provider
         self._llm_kwargs: dict = llm_kwargs or {}
-        # 加载 prompt 模板（优先使用 ChatPromptTemplate）
-        self._prompt_template: Optional[ChatPromptTemplate] = None
-        if self._prompt_filename:
-            self._prompt_template = load_prompt_template(self._prompt_filename)
         # 直接创建 LLM 实例（不再延迟加载）
         self._llm = create_llm(self.provider, "chat", **self._llm_kwargs)
         self._structured_llm: Optional[ChatOpenAI] = None
@@ -81,7 +75,7 @@ class BaseAgent(Generic[T]):
     def _build_prompt(self, **kwargs: Any) -> str:
         """构建 Prompt
 
-        使用 jinja2 格式模板，避免 JSON 大括号转义问题。
+        使用统一的 build_prompt 函数，所有 Agent 复用同一逻辑。
 
         Args:
             **kwargs: 格式化参数
@@ -89,21 +83,10 @@ class BaseAgent(Generic[T]):
         Returns:
             格式化后的 Prompt
         """
-        if self._prompt_template is None:
+        if not self._prompt_filename:
             return ""
 
-        # 过滤掉 None 值
-        filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-
-        # 使用 ChatPromptTemplate.format() 方法
-        formatted = self._prompt_template.format(**filtered_kwargs)
-
-        # ChatPromptTemplate.format() 返回的是完整的消息字符串
-        # 格式为 "System: ...\nHuman: ..."
-        # 我们只需要 system 消息的内容
-        if formatted.startswith("System: "):
-            return formatted[8:]  # 移除 "System: " 前缀
-        return formatted
+        return build_prompt(self._prompt_filename, **kwargs)
 
     @retry(max_retries=3, delay=1.0, backoff=2.0)
     def invoke_llm(self, prompt: str) -> str:

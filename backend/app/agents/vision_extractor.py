@@ -64,17 +64,6 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         super().__init__(provider)
         self.use_structured_output = use_structured_output
 
-    def _build_prompt(self, text: str) -> str:
-        """构建完整的 Prompt
-
-        Args:
-            text: 输入文本内容
-
-        Returns:
-            完整的 prompt 字符串
-        """
-        return f"{self._prompt_template}\n\n以下是需要分析的内容：\n{text}"
-
     def _parse_json_response(self, response: str) -> ExtractedInterviewSchema:
         """手动解析 JSON 响应"""
         try:
@@ -143,13 +132,13 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 
     def _extract_with_structured_output(self, text: str) -> ExtractedInterview:
         """使用 structured output 提取"""
-        prompt = self._build_prompt(text)
+        prompt = self._build_prompt(text=text)
         result = self.structured_llm.invoke(prompt)
         return self._convert_to_extracted_interview(result)
 
     def _extract_with_parsing(self, text: str) -> ExtractedInterview:
         """使用手动解析提取"""
-        prompt = self._build_prompt(text)
+        prompt = self._build_prompt(text=text)
         response = self.llm.invoke(prompt)
         schema = self._parse_json_response(response.content)
         return self._convert_to_extracted_interview(schema)

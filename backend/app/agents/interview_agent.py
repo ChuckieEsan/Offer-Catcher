@@ -23,7 +23,7 @@ from app.models.interview_session import (
 from app.tools.search_question_tool import search_questions
 from app.tools.embedding_tool import get_embedding_tool
 from app.utils.logger import logger
-from app.agents.prompts import render_prompt
+from app.agents.prompts import build_prompt
 
 
 # 公司类型与面试风格映射
@@ -90,8 +90,8 @@ class InterviewManager:
     def _get_system_prompt(self, session: InterviewSession) -> str:
         """获取面试官系统提示词"""
         style = COMPANY_STYLES.get(session.company, "专业、友好、有深度")
-        return render_prompt(
-            "interviewer_system",
+        return build_prompt(
+            "interviewer_system.md",
             company=session.company,
             position=session.position,
             style=style,
@@ -241,8 +241,8 @@ class InterviewManager:
 
         # 构建评估 Prompt
         system_prompt = self._get_system_prompt(session)
-        user_prompt = render_prompt(
-            "interview_evaluate",
+        user_prompt = build_prompt(
+            "interview_evaluate.md",
             question_text=current_question.question_text,
             question_type=current_question.question_type,
             knowledge_points=", ".join(current_question.knowledge_points) or "无",
@@ -328,8 +328,8 @@ class InterviewManager:
             return
 
         system_prompt = self._get_system_prompt(session)
-        user_prompt = render_prompt(
-            "interview_hint",
+        user_prompt = build_prompt(
+            "interview_hint.md",
             question_text=current_question.question_text,
         )
 

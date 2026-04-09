@@ -41,22 +41,6 @@ class AnswerSpecialistAgent(BaseAgent):
         """获取 Web Search 工具"""
         return self._web_search
 
-    def _build_prompt(
-        self,
-        question: QuestionItem,
-        context: str,
-    ) -> str:
-        """构建 Prompt"""
-        if self._prompt_template is None:
-            raise ValueError("Prompt template not loaded")
-        return self._prompt_template.format(
-            company=question.company,
-            position=question.position,
-            question=question.question_text,
-            core_entities=", ".join(question.core_entities) if question.core_entities else "无",
-            context=context,
-        )
-
     def generate_answer(self, question: QuestionItem) -> str:
         """生成答案
 
@@ -80,8 +64,14 @@ class AnswerSpecialistAgent(BaseAgent):
             logger.warning(f"Web search failed: {e}, using empty context")
             context = "搜索失败，基于知识生成答案。"
 
-        # 2. 构建 Prompt
-        prompt = self._build_prompt(question, context)
+        # 2. 构建 Prompt（使用继承的 _build_prompt）
+        prompt = self._build_prompt(
+            company=question.company,
+            position=question.position,
+            question=question.question_text,
+            core_entities=", ".join(question.core_entities) if question.core_entities else "无",
+            context=context,
+        )
 
         # 3. 调用 LLM 生成答案
         try:
