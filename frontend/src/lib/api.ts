@@ -209,27 +209,74 @@ function processSSELine(
 
 // ========== Extract API ==========
 
+/**
+ * 从文本提取面经
+ *
+ * OCR + LLM 结构化提取耗时较长（可能超过 60 秒）
+ * 直接调用后端，绕过 Next.js rewrites 代理
+ */
 export async function extractText(text: string): Promise<ExtractResponse> {
-  const res = await api.post("/extract/text", { text });
-  return res.data;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+  try {
+    const res = await fetch(`${apiUrl}/extract/text`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
+/**
+ * 从图片提取面经（OCR + LLM 结构化）
+ *
+ * OCR 识别 + LLM 结构化提取耗时较长（可能超过 60 秒）
+ * 直接调用后端，绕过 Next.js rewrites 代理
+ */
 export async function extractImage(
   files: FileList,
   useOcr: boolean = false
 ): Promise<ExtractResponse> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
   const formData = new FormData();
   Array.from(files).forEach((file) => {
     formData.append("images", file);
   });
   formData.append("use_ocr", String(useOcr));
 
-  const res = await api.post("/extract/image", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return res.data;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+  try {
+    const res = await fetch(`${apiUrl}/extract/image`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function confirmIngest(
