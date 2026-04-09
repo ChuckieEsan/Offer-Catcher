@@ -10,7 +10,11 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent.parent / ".env")
+# 项目根目录和模型目录
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+MODEL_DIR = PROJECT_ROOT / "models"
+
+load_dotenv(PROJECT_ROOT / ".env")
 
 
 class Settings(BaseSettings):
@@ -47,6 +51,16 @@ class Settings(BaseSettings):
     tavily_api_key: str = Field(
         description="Tavily Web Search API Key",
         default="",
+    )
+
+    # Embedding 模型配置
+    embedding_model_path: str = Field(
+        description="Embedding 模型路径（BGE-M3）",
+        default=str(MODEL_DIR / "bge-m3"),
+    )
+    reranker_model_path: str = Field(
+        description="Reranker 模型路径（BGE-Reranker）",
+        default=str(MODEL_DIR / "bge-reranker-base"),
     )
 
     # Qdrant 配置

@@ -1,11 +1,10 @@
 """文本向量化工具模块
 
-使用 LangChain 的 SentenceTransformerEmbeddings 进行文本向量化。
+使用 LangChain 的 HuggingFaceEmbeddings 进行文本向量化。
 复用 LangChain 已有组件，避免重复造轮子。
 """
 
 import os
-from pathlib import Path
 from typing import Optional
 
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -13,15 +12,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from app.config.settings import get_settings
 from app.utils.logger import logger
 
-# 模型路径
-MODEL_DIR = Path(__file__).parent.parent.parent / "models"
-BGE_M3_MODEL_PATH = str(MODEL_DIR / "bge-m3")
-
 
 class EmbeddingTool:
     """文本向量化工具
 
-    封装 LangChain 的 SentenceTransformerEmbeddings，提供统一的 embedding 接口。
+    封装 LangChain 的 HuggingFaceEmbeddings，提供统一的 embedding 接口。
     支持单条和批量文本向量化，以及上下文拼接后的向量化。
 
     遵循的设计原则：
@@ -36,9 +31,10 @@ class EmbeddingTool:
         """初始化 Embedding 工具
 
         Args:
-            model_path: 模型路径，默认使用 models/bge-m3
+            model_path: 模型路径，默认使用配置中的路径（models/bge-m3）
         """
-        self.model_path = model_path or BGE_M3_MODEL_PATH
+        settings = get_settings()
+        self.model_path = model_path or settings.embedding_model_path
 
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model not found at: {self.model_path}")
@@ -49,7 +45,6 @@ class EmbeddingTool:
             model_kwargs={"device": "cuda"},
         )
 
-        settings = get_settings()
         logger.info(
             f"Embedding tool initialized with model: {self.model_path}, "
             f"dimension: {settings.qdrant_vector_size}"
@@ -114,9 +109,7 @@ def get_embedding_tool() -> EmbeddingTool:
     return _embedding_tool
 
 
-# 导出 LangChain 组件
 __all__ = [
     "EmbeddingTool",
     "get_embedding_tool",
-    "SentenceTransformerEmbeddings",
 ]

@@ -17,10 +17,10 @@ def warmup() -> None:
     初始化以下组件（按依赖顺序）：
     1. Settings & OpenTelemetry
     2. 数据库连接：PostgreSQL, Redis, Qdrant
-    3. Embedding Tool（模型加载）
+    3. Embedding Tool & Reranker Tool（模型加载）
     4. LLM 实例
     5. Agents：Router, Scorer, Vision Extractor, Title Generator, Answer Specialist
-    6. Workflow & Chat Agent
+    6. Chat Agent
     7. Pipelines：Ingestion, Retrieval
     8. Web Search Tool
     """
@@ -71,6 +71,14 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Embedding tool init failed: {e}")
 
+    # 5.1. Reranker Tool（模型加载，耗时操作）
+    try:
+        from app.tools.reranker_tool import get_reranker_tool
+        get_reranker_tool()
+        logger.info("[Warmup] Reranker tool initialized (model loaded)")
+    except Exception as e:
+        logger.warning(f"[Warmup] Reranker tool init failed: {e}")
+
     # ========== Tier 2: LLM & Agents ==========
 
     # 6. LLM 实例
@@ -97,7 +105,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Vision Extractor init failed: {e}")
 
-    # 10. Title Generator Agent
+    # 9. Title Generator Agent
     try:
         from app.agents.title_generator import get_title_generator_agent
         get_title_generator_agent()
@@ -105,7 +113,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Title Generator Agent init failed: {e}")
 
-    # 11. Answer Specialist
+    # 10. Answer Specialist
     try:
         from app.agents.answer_specialist import get_answer_specialist
         get_answer_specialist()
@@ -113,25 +121,9 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Answer Specialist init failed: {e}")
 
-    # ========== Tier 3: Workflow & Pipelines ==========
+    # ========== Tier 3: Pipelines & Tools ==========
 
-    # 12. ReAct Agent
-    try:
-        from app.agents.graph.nodes import _get_react_agent
-        _get_react_agent()
-        logger.info("[Warmup] ReAct Agent initialized")
-    except Exception as e:
-        logger.warning(f"[Warmup] ReAct Agent init failed: {e}")
-
-    # 13. Workflow
-    try:
-        from app.agents.graph.workflow import get_workflow
-        get_workflow()
-        logger.info("[Warmup] Workflow initialized")
-    except Exception as e:
-        logger.warning(f"[Warmup] Workflow init failed: {e}")
-
-    # 14. Chat Agent
+    # 11. Chat Agent
     try:
         from app.agents.chat_agent import get_chat_agent
         get_chat_agent()
@@ -139,7 +131,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Chat Agent init failed: {e}")
 
-    # 15. Ingestion Pipeline
+    # 12. Ingestion Pipeline
     try:
         from app.pipelines.ingestion import get_ingestion_pipeline
         get_ingestion_pipeline()
@@ -147,7 +139,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Ingestion Pipeline init failed: {e}")
 
-    # 16. Retrieval Pipeline
+    # 13. Retrieval Pipeline
     try:
         from app.pipelines.retrieval import get_retrieval_pipeline
         get_retrieval_pipeline()
@@ -155,7 +147,7 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Retrieval Pipeline init failed: {e}")
 
-    # 17. Web Search Tool
+    # 14. Web Search Tool
     try:
         from app.tools.web_search_tool import get_web_search_tool
         get_web_search_tool()
