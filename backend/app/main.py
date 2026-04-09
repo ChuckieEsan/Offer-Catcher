@@ -19,24 +19,8 @@ async def lifespan(app: FastAPI):
     # 启动时初始化
     logger.info("Starting Offer-Catcher API...")
 
-    # 预热核心组件
+    # 预热核心组件（包含所有初始化逻辑）
     warmup()
-
-    # 连接图数据库
-    from app.db.graph_client import get_graph_client
-    graph_client = get_graph_client()
-    graph_client.connect()
-
-    # 初始化长期记忆存储
-    from app.memory import get_long_term_memory
-    try:
-        memory = get_long_term_memory()
-        if memory.initialized:
-            logger.info("Long-term memory initialized")
-        else:
-            logger.warning("Long-term memory not fully initialized (using fallback)")
-    except Exception as e:
-        logger.warning(f"Long-term memory init failed: {e}")
 
     logger.info("Offer-Catcher API started")
 
@@ -44,6 +28,11 @@ async def lifespan(app: FastAPI):
 
     # 关闭时清理
     logger.info("Shutting down Offer-Catcher API...")
+
+    # 关闭图数据库连接
+    from app.db.graph_client import get_graph_client
+    graph_client = get_graph_client()
+    graph_client.close()
 
 
 app = FastAPI(
@@ -58,7 +47,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # Next.js 开发服务器
-        "http://localhost:8501",  # Streamlit（兼容）
     ],
     allow_credentials=True,
     allow_methods=["*"],

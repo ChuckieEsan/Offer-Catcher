@@ -155,6 +155,25 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Web Search Tool init failed: {e}")
 
+    # 15. Graph Client (Neo4j) - 懒加载连接，仅创建单例
+    try:
+        from app.db.graph_client import get_graph_client
+        get_graph_client()  # 创建单例，实际连接在首次使用时建立
+        logger.info("[Warmup] Neo4j Graph Client singleton created")
+    except Exception as e:
+        logger.warning(f"[Warmup] Neo4j Graph Client init failed: {e}")
+
+    # 16. Long-term Memory
+    try:
+        from app.memory import get_long_term_memory
+        memory = get_long_term_memory()
+        if memory.initialized:
+            logger.info("[Warmup] Long-term memory initialized")
+        else:
+            logger.warning("[Warmup] Long-term memory not fully initialized (using fallback)")
+    except Exception as e:
+        logger.warning(f"[Warmup] Long-term memory init failed: {e}")
+
     logger.info("Warmup completed!")
 
 

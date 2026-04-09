@@ -3,9 +3,9 @@
 使用 KMeans 算法进行题目聚类，支持自动选择最优簇数。
 """
 
-from typing import Optional
 from collections import Counter
 from datetime import datetime
+from typing import Optional
 
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
@@ -15,6 +15,7 @@ from app.db.qdrant_client import get_qdrant_manager
 from app.db.graph_client import get_graph_client
 from app.tools.embedding_tool import get_embedding_tool
 from app.models.schemas import QdrantQuestionPayload, Cluster
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -283,16 +284,15 @@ class ClusteringService:
         )
 
 
-# 全局单例
-_clustering_service: Optional[ClusteringService] = None
-
-
+@singleton
 def get_clustering_service(
     min_cluster_size: int = 5,
     max_clusters: int = 30,
     auto_k: bool = True,
 ) -> ClusteringService:
     """获取聚类服务单例
+
+    Note: 参数在首次调用后会被忽略。
 
     Args:
         min_cluster_size: 最小簇大小
@@ -302,11 +302,8 @@ def get_clustering_service(
     Returns:
         ClusteringService 实例
     """
-    global _clustering_service
-    if _clustering_service is None:
-        _clustering_service = ClusteringService(
-            min_cluster_size=min_cluster_size,
-            max_clusters=max_clusters,
-            auto_k=auto_k,
-        )
-    return _clustering_service
+    return ClusteringService(
+        min_cluster_size=min_cluster_size,
+        max_clusters=max_clusters,
+        auto_k=auto_k,
+    )

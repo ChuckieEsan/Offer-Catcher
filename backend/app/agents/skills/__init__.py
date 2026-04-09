@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -126,16 +127,10 @@ class SkillLoader:
         return "\n".join(lines)
 
 
-# 全局加载器
-_loader: Optional[SkillLoader] = None
-
-
+@singleton
 def get_skill_loader() -> SkillLoader:
     """获取全局 Skill 加载器"""
-    global _loader
-    if _loader is None:
-        _loader = SkillLoader()
-    return _loader
+    return SkillLoader()
 
 
 def get_skills_prompt() -> str:

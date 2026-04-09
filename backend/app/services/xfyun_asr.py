@@ -16,6 +16,7 @@ import websockets
 from pydantic import BaseModel
 
 from app.config.settings import get_settings
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -277,16 +278,10 @@ class XfyunASRClient:
         return full_text
 
 
-# 全局单例
-_xfyun_client: Optional[XfyunASRClient] = None
-
-
+@singleton
 def get_xfyun_client() -> XfyunASRClient:
     """获取讯飞语音客户端单例"""
-    global _xfyun_client
-    if _xfyun_client is None:
-        _xfyun_client = XfyunASRClient()
-    return _xfyun_client
+    return XfyunASRClient()
 
 
 __all__ = [

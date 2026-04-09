@@ -9,6 +9,7 @@ from aio_pika.abc import AbstractRobustChannel, AbstractIncomingMessage
 from aio_pika import Message, DeliveryMode
 
 from app.config.settings import get_settings
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -98,17 +99,11 @@ class MQMessageHelper:
             return False
 
 
-# 全局单例
-_mq_message_helper: MQMessageHelper = None
-
-
+@singleton
 def get_mq_message_helper() -> MQMessageHelper:
     """获取 MQ 消息处理辅助类单例
 
     Returns:
         MQMessageHelper 实例
     """
-    global _mq_message_helper
-    if _mq_message_helper is None:
-        _mq_message_helper = MQMessageHelper()
-    return _mq_message_helper
+    return MQMessageHelper()

@@ -15,6 +15,7 @@ import time
 from typing import Any, Callable, List, Optional
 
 from app.db.redis_client import get_redis_client
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -410,16 +411,10 @@ class CacheService:
         self.invalidate_question(question_id)
 
 
-# 全局单例
-_cache_service: Optional[CacheService] = None
-
-
+@singleton
 def get_cache_service() -> CacheService:
     """获取缓存服务单例"""
-    global _cache_service
-    if _cache_service is None:
-        _cache_service = CacheService()
-    return _cache_service
+    return CacheService()
 
 
 __all__ = ["CacheService", "CacheKeys", "get_cache_service"]

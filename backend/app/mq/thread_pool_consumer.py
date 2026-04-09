@@ -9,7 +9,7 @@ import inspect
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Callable, Optional, List
+from typing import Callable, List
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
@@ -18,6 +18,7 @@ from aiobreaker import CircuitBreaker
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
 from app.mq.message_helper import get_mq_message_helper
+from app.utils.cache import singleton
 from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
@@ -327,17 +328,14 @@ class ThreadPoolRabbitMQConsumer:
         )
 
 
-# 全局消费者实例
-_thread_pool_consumer: Optional[ThreadPoolRabbitMQConsumer] = None
-
-
+@singleton
 async def get_thread_pool_consumer(
     num_threads: int = 4, prefetch_count: int = 1
 ) -> ThreadPoolRabbitMQConsumer:
-    """获取线程池消费者单例"""
-    global _thread_pool_consumer
-    if _thread_pool_consumer is None:
-        _thread_pool_consumer = ThreadPoolRabbitMQConsumer(
-            num_threads=num_threads, prefetch_count=prefetch_count
-        )
-    return _thread_pool_consumer
+    """获取线程池消费者单例
+
+    Note: 参数在首次调用后会被忽略。
+    """
+    return ThreadPoolRabbitMQConsumer(
+        num_threads=num_threads, prefetch_count=prefetch_count
+    )

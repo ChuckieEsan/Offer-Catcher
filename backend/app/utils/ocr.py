@@ -7,19 +7,19 @@
 import base64
 import tempfile
 from pathlib import Path
-from typing import Optional
 from urllib.request import urlopen
 
 import easyocr
 
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
-# 全局 OCR 引擎单例
-_ocr_reader: Optional[easyocr.Reader] = None
 
-
+@singleton
 def get_ocr_reader(langs: list = None) -> easyocr.Reader:
     """获取 EasyOCR 读者单例
+
+    Note: langs 参数在首次调用后会被忽略。
 
     Args:
         langs: 语言列表，默认 ["ch_sim", "en"]
@@ -27,17 +27,15 @@ def get_ocr_reader(langs: list = None) -> easyocr.Reader:
     Returns:
         EasyOCR 读者实例
     """
-    global _ocr_reader
-    if _ocr_reader is None:
-        if langs is None:
-            langs = ["ch_sim", "en"]  # 简体中文 + 英文
-        _ocr_reader = easyocr.Reader(
-            langs,
-            gpu=True,          # 使用 GPU
-            verbose=False,    # 关闭详细输出
-        )
-        logger.info(f"EasyOCR reader initialized with langs: {langs}")
-    return _ocr_reader
+    if langs is None:
+        langs = ["ch_sim", "en"]  # 简体中文 + 英文
+    reader = easyocr.Reader(
+        langs,
+        gpu=True,          # 使用 GPU
+        verbose=False,     # 关闭详细输出
+    )
+    logger.info(f"EasyOCR reader initialized with langs: {langs}")
+    return reader
 
 
 def _normalize_image_source(image_source: str) -> Path:
@@ -201,10 +199,8 @@ def ocr_images(image_sources: list[str]) -> str:
 
 def cleanup_ocr_reader() -> None:
     """清理 OCR 读者（释放内存）"""
-    global _ocr_reader
-    if _ocr_reader is not None:
-        _ocr_reader = None
-        logger.info("EasyOCR reader cleaned up")
+    get_ocr_reader.clear_cache()
+    logger.info("EasyOCR reader cleaned up")
 
 
 __all__ = [

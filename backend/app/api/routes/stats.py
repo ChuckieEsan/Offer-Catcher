@@ -155,9 +155,7 @@ async def get_entity_stats(
     cache_key = f"{CacheKeys.PREFIX}:stats:entities:{company or 'all'}:{limit}"
 
     def fetch_entity_stats():
-        if not graph_client.is_connected:
-            graph_client.connect()
-
+        # graph_client.get_top_entities 会自动处理连接
         top_entities = graph_client.get_top_entities(company=company, limit=limit)
 
         return [

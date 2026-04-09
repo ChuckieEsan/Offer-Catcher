@@ -11,6 +11,7 @@ from aio_pika import Message, DeliveryMode
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -151,9 +152,8 @@ class AsyncRabbitMQProducer:
         """关闭连接
 
         Args:
-            cleanup: 如果为 True，则关闭连接并重置全局单例（仅在程序退出时使用）
+            cleanup: 如果为 True，则关闭连接并重置单例（仅在程序退出时使用）
         """
-        global _producer
         try:
             if self._connection is None:
                 return
@@ -172,23 +172,18 @@ class AsyncRabbitMQProducer:
         finally:
             self._connection = None
             self._channel = None
-            # 仅在明确需要清理时重置全局单例
-            if cleanup and _producer is self:
-                _producer = None
+            # 仅在明确需要清理时重置单例
+            if cleanup:
+                get_producer.clear_cache()
 
 
-# 全局单例
-_producer: Optional[AsyncRabbitMQProducer] = None
-
-
+@singleton
 async def get_producer() -> AsyncRabbitMQProducer:
     """获取异步生产者单例
 
     Returns:
         AsyncRabbitMQProducer 实例
     """
-    global _producer
-    if _producer is None:
-        _producer = AsyncRabbitMQProducer()
-        await _producer.connect()
-    return _producer
+    producer = AsyncRabbitMQProducer()
+    await producer.connect()
+    return producer

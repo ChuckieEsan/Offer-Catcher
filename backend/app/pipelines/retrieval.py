@@ -8,11 +8,12 @@
 直接使用 app/db 模块。
 """
 
-from typing import Optional, List
+from typing import List, Optional
 
 from app.models.schemas import SearchResult, SearchFilter
 from app.db.qdrant_client import get_qdrant_manager
 from app.tools.embedding_tool import get_embedding_tool
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -91,13 +92,7 @@ class RetrievalPipeline:
         return results
 
 
-# 全局单例
-_retrieval_pipeline: Optional[RetrievalPipeline] = None
-
-
+@singleton
 def get_retrieval_pipeline() -> RetrievalPipeline:
     """获取检索流水线单例"""
-    global _retrieval_pipeline
-    if _retrieval_pipeline is None:
-        _retrieval_pipeline = RetrievalPipeline()
-    return _retrieval_pipeline
+    return RetrievalPipeline()

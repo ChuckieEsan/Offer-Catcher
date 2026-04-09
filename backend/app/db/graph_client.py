@@ -3,11 +3,13 @@
 提供 Neo4j 图数据库的连接、实体创建、关系管理和考频统计功能。
 """
 
-from typing import Optional
+from contextlib import contextmanager
+from typing import Optional, Generator, Any
 
 from neo4j import GraphDatabase
 
 from app.config.settings import get_settings
+from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -20,6 +22,13 @@ class Neo4jGraphClient:
     - 考点实体节点创建
     - 考频关系创建与更新
     - 热门考点查询
+
+    连接策略：懒加载，首次使用时自动连接。
+
+    使用方式：
+        client = get_graph_client()
+        with client.session() as session:
+            session.run(query, params)
     """
 
     def __init__(self) -> None:
@@ -32,6 +41,16 @@ class Neo4jGraphClient:
         """检查是否已连接"""
         return self._driver is not None and not self._driver._closed
 
+    def _ensure_connected(self) -> bool:
+        """确保已连接，未连接时自动尝试连接
+
+        Returns:
+            是否已连接
+        """
+        if self.is_connected:
+            return True
+        return self.connect()
+
     def connect(self) -> bool:
         """建立与 Neo4j 的连接
 
@@ -39,7 +58,6 @@ class Neo4jGraphClient:
             是否连接成功
         """
         if self.is_connected:
-            logger.info("Neo4j client already connected")
             return True
 
         try:
@@ -63,6 +81,51 @@ class Neo4jGraphClient:
             self._driver = None
             logger.info("Neo4j connection closed")
 
+    @contextmanager
+    def session(self) -> Generator[Any, None, None]:
+        """获取 Neo4j session 的上下文管理器
+
+        自动处理连接检查和 session 管理。
+
+        Yields:
+            Neo4j Session 实例，如果连接失败则返回 None
+
+        Example:
+            with graph_client.session() as session:
+                if session:
+                    session.run(query, params)
+        """
+        if not self._ensure_connected():
+            yield None
+            return
+
+        try:
+            with self._driver.session(database=self.settings.neo4j_database) as session:
+                yield session
+        except Exception as e:
+            logger.error(f"Neo4j session error: {e}")
+            yield None
+
+    def _run_query(self, query: str, **params) -> Optional[list]:
+        """执行查询并返回结果（内部辅助方法）
+
+        Args:
+            query: Cypher 查询语句
+            **params: 查询参数
+
+        Returns:
+            查询结果列表，失败返回 None
+        """
+        with self.session() as session:
+            if session is None:
+                return None
+            try:
+                result = session.run(query, **params)
+                return [record.data() for record in result]
+            except Exception as e:
+                logger.error(f"Query failed: {e}")
+                return None
+
     def create_company_node(self, company: str) -> bool:
         """创建公司节点
 
@@ -72,23 +135,20 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
-            logger.warning("Neo4j not connected")
-            return False
-
         query = """
         MERGE (c:Company {name: $company})
         RETURN c
         """
-
-        try:
-            with self._driver.session(database=self.settings.neo4j_database) as session:
+        with self.session() as session:
+            if session is None:
+                return False
+            try:
                 session.run(query, company=company)
-            logger.debug(f"Created/merged company node: {company}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to create company node: {e}")
-            return False
+                logger.debug(f"Created/merged company node: {company}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to create company node: {e}")
+                return False
 
     def create_entity_node(self, entity: str) -> bool:
         """创建考点实体节点
@@ -99,23 +159,20 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
-            logger.warning("Neo4j not connected")
-            return False
-
         query = """
         MERGE (e:Entity {name: $entity})
         RETURN e
         """
-
-        try:
-            with self._driver.session(database=self.settings.neo4j_database) as session:
+        with self.session() as session:
+            if session is None:
+                return False
+            try:
                 session.run(query, entity=entity)
-            logger.debug(f"Created/merged entity node: {entity}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to create entity node: {e}")
-            return False
+                logger.debug(f"Created/merged entity node: {entity}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to create entity node: {e}")
+                return False
 
     def create_exam_frequency_relationship(
         self,
@@ -133,10 +190,6 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
-            logger.warning("Neo4j not connected")
-            return False
-
         # 先确保节点存在
         self.create_company_node(company)
         self.create_entity_node(entity)
@@ -148,20 +201,16 @@ class Neo4jGraphClient:
         SET r.count = coalesce(r.count, 0) + $count
         RETURN r
         """
-
-        try:
-            with self._driver.session(database=self.settings.neo4j_database) as session:
-                session.run(
-                    query,
-                    company=company,
-                    entity=entity,
-                    count=question_count,
-                )
-            logger.debug(f"Updated 考频 relationship: {company} -> {entity}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to create 考频 relationship: {e}")
-            return False
+        with self.session() as session:
+            if session is None:
+                return False
+            try:
+                session.run(query, company=company, entity=entity, count=question_count)
+                logger.debug(f"Updated 考频 relationship: {company} -> {entity}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to create 考频 relationship: {e}")
+                return False
 
     def get_top_entities(
         self,
@@ -177,10 +226,6 @@ class Neo4jGraphClient:
         Returns:
             考点列表，每个元素包含 entity, count
         """
-        if not self.is_connected:
-            logger.warning("Neo4j not connected")
-            return []
-
         if company:
             query = """
             MATCH (c:Company {name: $company})-[r:考频]->(e:Entity)
@@ -198,13 +243,15 @@ class Neo4jGraphClient:
             """
             params = {"limit": limit}
 
-        try:
-            with self._driver.session(database=self.settings.neo4j_database) as session:
+        with self.session() as session:
+            if session is None:
+                return []
+            try:
                 result = session.run(query, **params)
                 return [{"entity": record["entity"], "count": record["count"]} for record in result]
-        except Exception as e:
-            logger.error(f"Failed to get top entities: {e}")
-            return []
+            except Exception as e:
+                logger.error(f"Failed to get top entities: {e}")
+                return []
 
     def get_company_stats(self, company: str) -> dict:
         """获取公司统计信息
@@ -215,10 +262,6 @@ class Neo4jGraphClient:
         Returns:
             统计信息字典
         """
-        if not self.is_connected:
-            logger.warning("Neo4j not connected")
-            return {}
-
         query = """
         MATCH (c:Company {name: $company})
         OPTIONAL MATCH (c)-[r:考频]->(e:Entity)
@@ -272,7 +315,7 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return False
 
@@ -307,7 +350,7 @@ class Neo4jGraphClient:
         Returns:
             相关知识点列表，每个元素包含 entity, related_entity, co_occurrence_count
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -348,7 +391,7 @@ class Neo4jGraphClient:
         Returns:
             共现知识点列表
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -390,7 +433,7 @@ class Neo4jGraphClient:
         Returns:
             知识点分布列表
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -420,7 +463,7 @@ class Neo4jGraphClient:
         Returns:
             跨公司知识点列表
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -466,7 +509,7 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return False
 
@@ -506,7 +549,7 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return False
 
@@ -540,7 +583,7 @@ class Neo4jGraphClient:
         Returns:
             是否成功
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return False
 
@@ -576,7 +619,7 @@ class Neo4jGraphClient:
         Returns:
             考点簇信息字典
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return None
 
@@ -619,7 +662,7 @@ class Neo4jGraphClient:
         Returns:
             考点簇列表
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -659,7 +702,7 @@ class Neo4jGraphClient:
         Returns:
             题目 ID 列表
         """
-        if not self.is_connected:
+        if not self._ensure_connected():
             logger.warning("Neo4j not connected")
             return []
 
@@ -680,17 +723,11 @@ class Neo4jGraphClient:
         return []
 
 
-# 全局单例
-_graph_client: Optional[Neo4jGraphClient] = None
-
-
+@singleton
 def get_graph_client() -> Neo4jGraphClient:
     """获取图数据库客户端单例
 
     Returns:
         Neo4jGraphClient 实例
     """
-    global _graph_client
-    if _graph_client is None:
-        _graph_client = Neo4jGraphClient()
-    return _graph_client
+    return Neo4jGraphClient()

@@ -16,6 +16,7 @@ from app.models.schemas import ExtractedInterview, QuestionType, MQTaskMessage, 
 from app.tools.embedding_tool import get_embedding_tool
 from app.db.qdrant_client import get_qdrant_manager
 from app.mq.producer import get_producer
+from app.utils.cache import singleton
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
 from app.models.schemas import QuestionItem
@@ -264,13 +265,7 @@ class IngestionPipeline:
         return await self.process(interview)
 
 
-# 全局单例
-_ingestion_pipeline: Optional[IngestionPipeline] = None
-
-
+@singleton
 def get_ingestion_pipeline() -> IngestionPipeline:
     """获取入库流水线单例"""
-    global _ingestion_pipeline
-    if _ingestion_pipeline is None:
-        _ingestion_pipeline = IngestionPipeline()
-    return _ingestion_pipeline
+    return IngestionPipeline()
