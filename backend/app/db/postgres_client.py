@@ -1,5 +1,7 @@
 """PostgreSQL 客户端 - 历史对话存储"""
 
+import gzip
+import json
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -8,6 +10,14 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from app.config.settings import get_settings
+from app.models.schemas import (
+    ExtractTask,
+    ExtractTaskCreate,
+    ExtractTaskListItem,
+    ExtractTaskStatus,
+    ExtractedInterview,
+    QuestionItem,
+)
 from app.utils.logger import logger
 
 
@@ -126,6 +136,36 @@ class PostgresClient:
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_messages_user_id
                 ON messages(user_id)
+            """)
+
+            # 创建面经解析任务表
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS extract_tasks (
+                    task_id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL,
+                    source_type VARCHAR(20) NOT NULL,
+                    source_content TEXT,
+                    source_images_gz BYTEA,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    error_message TEXT,
+                    result JSONB,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            """)
+
+            # 创建任务表索引
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_extract_tasks_user_id
+                ON extract_tasks(user_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_extract_tasks_user_status
+                ON extract_tasks(user_id, status)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_extract_tasks_user_updated
+                ON extract_tasks(user_id, updated_at DESC)
             """)
 
             self.conn.commit()
@@ -328,6 +368,299 @@ class PostgresClient:
             for row in rows
         ]
 
+    # ========== 面经解析任务操作 ==========
+
+    def create_extract_task(
+        self,
+        user_id: str,
+        create_req: ExtractTaskCreate,
+    ) -> ExtractTask:
+        """创建面经解析任务"""
+        task_id = str(uuid.uuid4())
+        now = datetime.now()
+
+        # 处理图片压缩
+        source_images_gz = None
+        if create_req.source_images:
+            images_json = json.dumps(create_req.source_images)
+            source_images_gz = gzip.compress(images_json.encode())
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO extract_tasks
+                (task_id, user_id, source_type, source_content, source_images_gz, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    task_id,
+                    user_id,
+                    create_req.source_type,
+                    create_req.source_content,
+                    source_images_gz,
+                    ExtractTaskStatus.PENDING,
+                    now,
+                    now,
+                ),
+            )
+            self.conn.commit()
+
+        return ExtractTask(
+            task_id=task_id,
+            user_id=user_id,
+            source_type=create_req.source_type,
+            source_content=create_req.source_content,
+            source_images_gz=create_req.source_images,  # 返回原始数据
+            status=ExtractTaskStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def get_extract_task(
+        self,
+        task_id: str,
+        user_id: str = None,
+    ) -> Optional[ExtractTask]:
+        """获取单个任务详情"""
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if user_id:
+                cur.execute(
+                    """
+                    SELECT task_id, user_id, source_type, source_content, source_images_gz,
+                           status, error_message, result, created_at, updated_at
+                    FROM extract_tasks
+                    WHERE task_id = %s AND user_id = %s
+                    """,
+                    (task_id, user_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT task_id, user_id, source_type, source_content, source_images_gz,
+                           status, error_message, result, created_at, updated_at
+                    FROM extract_tasks
+                    WHERE task_id = %s
+                    """,
+                    (task_id,),
+                )
+            row = cur.fetchone()
+
+        if not row:
+            return None
+
+        return self._row_to_extract_task(row)
+
+    def get_extract_tasks(
+        self,
+        user_id: str,
+        status: str = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[ExtractTaskListItem]:
+        """获取任务列表"""
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if status:
+                cur.execute(
+                    """
+                    SELECT task_id, status, source_type, result, created_at, updated_at
+                    FROM extract_tasks
+                    WHERE user_id = %s AND status = %s
+                    ORDER BY updated_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (user_id, status, limit, offset),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT task_id, status, source_type, result, created_at, updated_at
+                    FROM extract_tasks
+                    WHERE user_id = %s
+                    ORDER BY updated_at DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (user_id, limit, offset),
+                )
+            rows = cur.fetchall()
+
+        items = []
+        for row in rows:
+            result = row.get("result")
+            if result:
+                company = result.get("company", "")
+                position = result.get("position", "")
+                question_count = len(result.get("questions", []))
+            else:
+                company = ""
+                position = ""
+                question_count = 0
+
+            items.append(
+                ExtractTaskListItem(
+                    task_id=row["task_id"],
+                    status=row["status"],
+                    source_type=row["source_type"],
+                    company=company,
+                    position=position,
+                    question_count=question_count,
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+            )
+
+        return items
+
+    def count_extract_tasks(
+        self,
+        user_id: str,
+        status: str = None,
+    ) -> int:
+        """统计任务数量"""
+        with self.conn.cursor() as cur:
+            if status:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM extract_tasks
+                    WHERE user_id = %s AND status = %s
+                    """,
+                    (user_id, status),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT COUNT(*) FROM extract_tasks
+                    WHERE user_id = %s
+                    """,
+                    (user_id,),
+                )
+            return cur.fetchone()[0]
+
+    def update_extract_task_status(
+        self,
+        task_id: str,
+        status: str,
+        error_message: str = None,
+    ) -> bool:
+        """更新任务状态"""
+        now = datetime.now()
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE extract_tasks
+                SET status = %s, error_message = %s, updated_at = %s
+                WHERE task_id = %s
+                """,
+                (status, error_message, now, task_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def update_extract_task_result(
+        self,
+        task_id: str,
+        result: ExtractedInterview,
+    ) -> bool:
+        """更新任务解析结果"""
+        now = datetime.now()
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE extract_tasks
+                SET result = %s, status = %s, updated_at = %s
+                WHERE task_id = %s
+                """,
+                (json.dumps(result.model_dump()), ExtractTaskStatus.COMPLETED, now, task_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def update_extract_task_edit(
+        self,
+        task_id: str,
+        user_id: str,
+        company: str = None,
+        position: str = None,
+        questions: List[QuestionItem] = None,
+    ) -> Optional[ExtractTask]:
+        """编辑任务解析结果"""
+        # 先获取当前任务
+        task = self.get_extract_task(task_id, user_id)
+        if not task or not task.result:
+            return None
+
+        # 更新字段
+        result = task.result.model_copy()
+        if company is not None:
+            result.company = company
+        if position is not None:
+            result.position = position
+        if questions is not None:
+            result.questions = questions
+
+        now = datetime.now()
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE extract_tasks
+                SET result = %s, updated_at = %s
+                WHERE task_id = %s AND user_id = %s
+                """,
+                (json.dumps(result.model_dump()), now, task_id, user_id),
+            )
+            self.conn.commit()
+
+        return self.get_extract_task(task_id, user_id)
+
+    def delete_extract_task(
+        self,
+        task_id: str,
+        user_id: str,
+    ) -> bool:
+        """删除任务"""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM extract_tasks
+                WHERE task_id = %s AND user_id = %s
+                """,
+                (task_id, user_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def _row_to_extract_task(self, row: dict) -> ExtractTask:
+        """将数据库行转换为 ExtractTask 模型"""
+        # 解析 gzip 压缩的图片
+        source_images_gz = row.get("source_images_gz")
+        source_images = None
+        if source_images_gz:
+            try:
+                decompressed = gzip.decompress(source_images_gz).decode()
+                source_images = json.loads(decompressed)
+            except Exception as e:
+                logger.warning(f"Failed to decompress images: {e}")
+
+        # 解析 result
+        result = None
+        if row.get("result"):
+            try:
+                result = ExtractedInterview(**row["result"])
+            except Exception as e:
+                logger.warning(f"Failed to parse result: {e}")
+
+        return ExtractTask(
+            task_id=row["task_id"],
+            user_id=row["user_id"],
+            source_type=row["source_type"],
+            source_content=row.get("source_content"),
+            source_images_gz=source_images,  # 返回解压后的数据
+            status=row["status"],
+            error_message=row.get("error_message"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            result=result,
+        )
+
     def close(self):
         """关闭连接"""
         if self._conn and not self._conn.closed:
@@ -348,4 +681,14 @@ def get_postgres_client() -> PostgresClient:
     return _postgres_client
 
 
-__all__ = ["PostgresClient", "Conversation", "Message", "get_postgres_client"]
+__all__ = [
+    "PostgresClient",
+    "Conversation",
+    "Message",
+    "get_postgres_client",
+    # ExtractTask
+    "ExtractTask",
+    "ExtractTaskCreate",
+    "ExtractTaskListItem",
+    "ExtractTaskStatus",
+]

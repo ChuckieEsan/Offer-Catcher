@@ -19,6 +19,11 @@ import type {
   CompanyStats,
   EntityStats,
   ClusterStats,
+  ExtractTask,
+  ExtractTaskListResponse,
+  ExtractTaskSubmitRequest,
+  ExtractTaskSubmitResponse,
+  ExtractTaskUpdateRequest,
 } from "@/types";
 
 // 默认使用相对路径（通过 Next.js rewrites 代理）
@@ -399,4 +404,61 @@ export async function getEntityStats(
 export async function getClusterStats(): Promise<ClusterStats[]> {
   const res = await api.get("/stats/clusters");
   return res.data;
+}
+
+// ========== Extract Task API ==========
+
+export async function submitExtractTask(
+  request: ExtractTaskSubmitRequest
+): Promise<ExtractTaskSubmitResponse> {
+  const res = await api.post("/extract/submit", request, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getExtractTasks(params?: {
+  status?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<ExtractTaskListResponse> {
+  const res = await api.get("/extract/tasks", {
+    params,
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getExtractTask(taskId: string): Promise<ExtractTask> {
+  const res = await api.get(`/extract/tasks/${taskId}`, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function updateExtractTask(
+  taskId: string,
+  request: ExtractTaskUpdateRequest
+): Promise<ExtractTask> {
+  const res = await api.put(`/extract/tasks/${taskId}`, request, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function confirmExtractTask(taskId: string): Promise<{
+  processed: number;
+  async_tasks: number;
+  question_ids: string[];
+}> {
+  const res = await api.post(`/extract/tasks/${taskId}/confirm`, {}, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function deleteExtractTask(taskId: string): Promise<void> {
+  await api.delete(`/extract/tasks/${taskId}`, {
+    headers: { "X-User-ID": getUserId() },
+  });
 }

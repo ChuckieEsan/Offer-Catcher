@@ -131,3 +131,57 @@ export interface ClusterStats {
   cluster_id: string;
   count: number;
 }
+
+// ========== Extract Task Types ==========
+
+export interface ExtractTask {
+  task_id: string;
+  user_id: string;
+  source_type: "image" | "text";
+  status: "pending" | "processing" | "completed" | "failed" | "confirmed";
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  result?: ExtractedInterview;
+}
+
+export interface ExtractedInterview {
+  company: string;
+  position: string;
+  questions: Question[];
+}
+
+export interface ExtractTaskListItem {
+  task_id: string;
+  status: string;
+  source_type: string;
+  company: string;
+  position: string;
+  question_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExtractTaskListResponse {
+  items: ExtractTaskListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ExtractTaskSubmitRequest {
+  source_type: "image" | "text";
+  source_content?: string;
+  source_images?: string[];
+}
+
+export interface ExtractTaskSubmitResponse {
+  task_id: string;
+  message: string;
+}
+
+export interface ExtractTaskUpdateRequest {
+  company?: string;
+  position?: string;
+  questions?: Question[];
+}
