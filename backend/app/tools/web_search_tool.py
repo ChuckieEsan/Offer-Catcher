@@ -244,4 +244,8 @@ def search_web(query: str, max_results: int = 3) -> str:
     cache_key = CacheKeys.tool_web_search(query_hash)
 
     # 使用缓存服务（Web 搜索结果缓存 30 分钟）
-    return cache.get_with_lock(cache_key, _do_web_search, ttl=1800, query=query, max_results=max_results)
+    return cache.get_with_lock(
+        cache_key,
+        lambda: _do_web_search(query, max_results),
+        ttl=1800,
+    )

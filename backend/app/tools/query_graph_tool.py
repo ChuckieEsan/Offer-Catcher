@@ -82,7 +82,11 @@ def query_graph(question: str) -> str:
     cache_key = CacheKeys.tool_query_graph(query_hash)
 
     # 使用缓存服务（图数据变化不频繁，缓存 10 分钟）
-    return cache.get_with_lock(cache_key, _do_query_graph, ttl=600, question=question)
+    return cache.get_with_lock(
+        cache_key,
+        lambda: _do_query_graph(question),
+        ttl=600,
+    )
 
 
 __all__ = ["query_graph"]

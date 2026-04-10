@@ -257,8 +257,8 @@ async def generate_conversation_title(
     # 获取消息
     messages = pg.get_messages(user_id, conversation_id)
 
-    if len(messages) < 6:
-        logger.info(f"Messages count {len(messages)} < 6, skip generation")
+    if len(messages) < 4:
+        logger.info(f"Messages count {len(messages)} < 4, skip generation")
         return ConversationResponse(
             id=conv.id,
             title=conv.title,

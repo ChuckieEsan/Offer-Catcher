@@ -26,6 +26,9 @@ models/
 # 备份数据
 backups
 
+# 日志文件
+logs/
+
 # Frontend
 frontend/node_modules/
 frontend/.next/

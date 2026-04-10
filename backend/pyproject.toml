@@ -40,11 +40,13 @@ dependencies = [
     "python-multipart>=0.0.18",
     "prometheus-client>=0.24.1",
     "websockets>=16.0",
+    "sentencepiece>=0.2.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "watchdog>=4.0.0",
 ]
 
 [[tool.uv.index]]

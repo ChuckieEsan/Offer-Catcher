@@ -29,11 +29,6 @@ async def lifespan(app: FastAPI):
     # 关闭时清理
     logger.info("Shutting down Offer-Catcher API...")
 
-    # 关闭图数据库连接
-    from app.db.graph_client import get_graph_client
-    graph_client = get_graph_client()
-    graph_client.close()
-
 
 app = FastAPI(
     title="Offer-Catcher API",
