@@ -3,6 +3,7 @@
 提供消息发布功能，用于将需要异步生成答案的题目发送到队列。
 """
 
+import asyncio
 from typing import Optional
 
 import aio_pika
@@ -11,7 +12,6 @@ from aio_pika import Message, DeliveryMode
 
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
-from app.utils.cache import singleton
 from app.utils.logger import logger
 
 
@@ -174,16 +174,54 @@ class AsyncRabbitMQProducer:
             self._channel = None
             # 仅在明确需要清理时重置单例
             if cleanup:
-                get_producer.clear_cache()
+                _reset_producer()
 
 
-@singleton
+# 全局单例实例和锁
+_producer_instance: Optional[AsyncRabbitMQProducer] = None
+_producer_lock = None  # 延迟初始化，因为需要在 event loop 中创建
+
+
+def _get_lock():
+    """获取异步锁（延迟初始化）"""
+    global _producer_lock
+    if _producer_lock is None:
+        _producer_lock = asyncio.Lock()
+    return _producer_lock
+
+
+def _reset_producer() -> None:
+    """重置生产者单例"""
+    global _producer_instance
+    _producer_instance = None
+
+
 async def get_producer() -> AsyncRabbitMQProducer:
     """获取异步生产者单例
+
+    手动实现异步单例模式，确保：
+    1. 只创建一个 producer 实例
+    2. 连接只建立一次
+    3. 支持并发安全
 
     Returns:
         AsyncRabbitMQProducer 实例
     """
-    producer = AsyncRabbitMQProducer()
-    await producer.connect()
-    return producer
+    global _producer_instance
+
+    # 快速路径：实例已存在且连接有效
+    if _producer_instance is not None:
+        if _producer_instance._connection is not None and not _producer_instance._connection.is_closed:
+            return _producer_instance
+
+    # 慢速路径：需要创建或重连，加锁保护
+    async with _get_lock():
+        # 双重检查
+        if _producer_instance is not None:
+            if _producer_instance._connection is not None and not _producer_instance._connection.is_closed:
+                return _producer_instance
+
+        # 创建新实例并连接
+        _producer_instance = AsyncRabbitMQProducer()
+        await _producer_instance.connect()
+        return _producer_instance
