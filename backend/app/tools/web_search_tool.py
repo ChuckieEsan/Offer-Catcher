@@ -197,24 +197,11 @@ __all__ = [
 
 from langchain_core.tools import tool
 from app.utils.telemetry import traced
+from app.services.cache_service import get_cache_service, CacheKeys
 
 
-@tool
-@traced
-def search_web(query: str, max_results: int = 3) -> str:
-    """联网搜索获取最新信息（仅在用户明确要求或本地题库无结果时使用）
-
-    注意：这是一个联网搜索工具，会访问互联网。
-    默认情况下应优先使用本地题库 search_questions。
-
-    Args:
-        query: 搜索关键词
-        max_results: 最大结果数，默认 3
-
-    Returns:
-        搜索结果，以文本形式返回
-    """
-
+def _do_web_search(query: str, max_results: int) -> str:
+    """执行实际的 Web 搜索（内部函数）"""
     try:
         web_tool = get_web_search_tool(max_results=max_results)
         results = web_tool.search(query)
@@ -232,3 +219,29 @@ def search_web(query: str, max_results: int = 3) -> str:
     except Exception as e:
         logger.error(f"Web search failed: {e}")
         return f"搜索失败: {e}"
+
+
+@tool
+@traced
+def search_web(query: str, max_results: int = 3) -> str:
+    """联网搜索获取最新信息（仅在用户明确要求或本地题库无结果时使用）
+
+    注意：这是一个联网搜索工具，会访问互联网。
+    默认情况下应优先使用本地题库 search_questions。
+    结果会被缓存 30 分钟。
+
+    Args:
+        query: 搜索关键词
+        max_results: 最大结果数，默认 3
+
+    Returns:
+        搜索结果，以文本形式返回
+    """
+    cache = get_cache_service()
+
+    # 构建缓存 key
+    query_hash = CacheKeys.hash_params(query, max_results=max_results)
+    cache_key = CacheKeys.tool_web_search(query_hash)
+
+    # 使用缓存服务（Web 搜索结果缓存 30 分钟）
+    return cache.get_with_lock(cache_key, _do_web_search, ttl=1800, query=query, max_results=max_results)

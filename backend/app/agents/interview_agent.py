@@ -4,9 +4,10 @@
 """
 
 import json
+import random
 import re
-from typing import Optional, List, AsyncIterator, Tuple
 from datetime import datetime
+from typing import Optional, List, AsyncIterator, Tuple
 import uuid
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -139,6 +140,8 @@ class InterviewManager:
     def _preload_questions(self, session: InterviewSession) -> None:
         """预加载面试题目
 
+        从题库中随机选取题目，确保每次面试有不同的题目组合。
+
         Args:
             session: 面试会话
         """
@@ -148,19 +151,23 @@ class InterviewManager:
         context = f"公司：{session.company} | 岗位：{session.position} | 面试题"
         query_vector = embedding_tool.embed_text(context)
 
-        # 搜索题目
-        candidates = self._qdrant.search(query_vector, limit=session.total_questions * 2)
+        # 搜索更多候选题目，从中随机选取
+        # 取 3 倍数量的候选，保证随机性
+        candidate_limit = session.total_questions * 3
+        candidates = self._qdrant.search(query_vector, limit=candidate_limit)
 
-        # 根据难度过滤
-        if session.difficulty == "easy":
-            candidates = [c for c in candidates if "基础" in c.question_text or "概念" in c.question_text][:session.total_questions]
-        elif session.difficulty == "hard":
-            candidates = [c for c in candidates if "高级" in c.question_text or "优化" in c.question_text][:session.total_questions]
-        else:
-            candidates = candidates[:session.total_questions]
+        if not candidates:
+            logger.warning("No candidates found from Qdrant")
+            return
+
+        # 随机打乱候选题目
+        random.shuffle(candidates)
+
+        # 选取指定数量的题目
+        selected = candidates[:session.total_questions]
 
         # 转换为 InterviewQuestion
-        for c in candidates:
+        for c in selected:
             question = InterviewQuestion(
                 question_id=c.question_id,
                 question_text=c.question_text,
@@ -186,6 +193,9 @@ class InterviewManager:
             ("如果系统出现性能问题，你会如何排查和优化？", "scenario"),
             ("请解释一下数据库索引的原理，以及如何优化查询性能。", "knowledge"),
         ]
+
+        # 随机打乱默认题目
+        random.shuffle(default_questions)
 
         for i, (text, q_type) in enumerate(default_questions[:session.total_questions]):
             question = InterviewQuestion(

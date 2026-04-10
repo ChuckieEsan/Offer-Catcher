@@ -14,6 +14,7 @@ from app.tools.embedding_tool import get_embedding_tool
 from app.tools.reranker_tool import get_reranker_tool
 from app.db.qdrant_client import get_qdrant_manager
 from app.models.schemas import SearchResult
+from app.services.cache_service import get_cache_service, CacheKeys
 from app.utils.telemetry import traced, record_vector_query
 from app.utils.logger import logger
 
@@ -39,23 +40,17 @@ def _build_query_context(query: str, company: str = None, position: str = None) 
     return " | ".join(parts)
 
 
-@tool
-@traced
-def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
-    """搜索本地题库中的面试题（默认首选工具）
-
-    从本地向量数据库检索面试题目，无需联网。
-    采用两阶段检索：向量召回 + Rerank 精排。
-    应优先使用此工具进行题目检索。
+def _do_search(query: str, company: str, position: str, k: int) -> list[SearchResult]:
+    """执行实际的搜索逻辑（内部函数）
 
     Args:
         query: 搜索关键词
-        company: 公司名称（可选，用于语义增强，不再精确匹配）
-        position: 岗位名称（可选，用于语义增强，不再精确匹配）
-        k: 返回数量，默认 5
+        company: 公司名称
+        position: 岗位名称
+        k: 返回数量
 
     Returns:
-        搜索结果，以文本形式返回
+        搜索结果列表
     """
     embedding_tool = get_embedding_tool()
     reranker_tool = get_reranker_tool()
@@ -75,20 +70,16 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
     record_vector_query(duration_ms=duration_ms, results_count=len(candidates))
 
     if not candidates:
-        return "未找到相关题目"
+        return []
 
     # Stage 2: Rerank 精排
-    # 用题目文本作为候选文本进行重排
     candidate_texts = [c.question_text for c in candidates]
-
-    # rerank 返回 [(原始索引, 分数)] 列表
     ranked_indices = reranker_tool.rerank(query, candidate_texts, top_k=k)
 
     # 根据重排结果重组 SearchResult
     ranked_results: list[SearchResult] = []
     for idx, rerank_score in ranked_indices:
         result = candidates[idx]
-        # 更新 score 为 rerank 分数（可选：也可以保留原始向量分数）
         ranked_results.append(result)
 
     logger.info(
@@ -96,16 +87,55 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
         f"recall={len(candidates)}, rerank_top={len(ranked_results)}"
     )
 
-    # 格式化输出
-    output = []
-    for i, r in enumerate(ranked_results, 1):
-        output.append(f"题目 {i}: {r.question_text[:100]}...")
-        if r.question_answer:
-            output.append(f"答案: {r.question_answer[:200]}...")
-        output.append(f"公司: {r.company} | 岗位: {r.position}")
-        output.append("---")
+    return ranked_results
 
-    return "\n".join(output)
+
+@tool
+@traced
+def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
+    """搜索本地题库中的面试题（默认首选工具）
+
+    从本地向量数据库检索面试题目，无需联网。
+    采用两阶段检索：向量召回 + Rerank 精排。
+    结果会被缓存 5 分钟，提升响应速度。
+
+    Args:
+        query: 搜索关键词
+        company: 公司名称（可选，用于语义增强）
+        position: 岗位名称（可选，用于语义增强）
+        k: 返回数量，默认 5
+
+    Returns:
+        搜索结果，以文本形式返回
+    """
+    cache = get_cache_service()
+
+    # 构建缓存 key
+    query_hash = CacheKeys.hash_params(query, company=company, position=position, k=k)
+    cache_key = CacheKeys.tool_search_questions(query_hash)
+
+    def fetch():
+        results = _do_search(query, company, position, k)
+        if not results:
+            return []
+
+        # 格式化输出
+        output = []
+        for i, r in enumerate(results, 1):
+            output.append(f"题目 {i}: {r.question_text[:100]}...")
+            if r.question_answer:
+                output.append(f"答案: {r.question_answer[:200]}...")
+            output.append(f"公司: {r.company} | 岗位: {r.position}")
+            output.append("---")
+        return output
+
+    # 使用缓存服务（带分布式锁防击穿）
+    output_lines = cache.get_with_lock(cache_key, fetch, ttl=300)
+
+    if not output_lines:
+        return "未找到相关题目"
+
+    return "\n".join(output_lines)
 
 
 __all__ = ["search_questions"]

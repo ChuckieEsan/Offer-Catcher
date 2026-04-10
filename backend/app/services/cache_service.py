@@ -29,6 +29,8 @@ class CacheKeys:
     NULL_TTL = 60  # 空值缓存 1 分钟
     LOCK_TTL = 10  # 分布式锁 10 秒
 
+    # ========== Stats Keys ==========
+
     @classmethod
     def stats_overview(cls) -> str:
         return f"{cls.PREFIX}:stats:overview"
@@ -40,6 +42,8 @@ class CacheKeys:
     @classmethod
     def stats_companies(cls) -> str:
         return f"{cls.PREFIX}:stats:companies"
+
+    # ========== Questions Keys ==========
 
     @classmethod
     def questions_list(cls, filter_hash: str) -> str:
@@ -65,6 +69,37 @@ class CacheKeys:
     def stats_pattern(cls) -> str:
         return f"{cls.PREFIX}:stats:*"
 
+    # ========== Tool Cache Keys ==========
+
+    @classmethod
+    def tool_search_questions(cls, query_hash: str) -> str:
+        """题目搜索工具缓存 key"""
+        return f"{cls.PREFIX}:tool:search:{query_hash}"
+
+    @classmethod
+    def tool_query_graph(cls, query_hash: str) -> str:
+        """图数据库查询工具缓存 key"""
+        return f"{cls.PREFIX}:tool:graph:{query_hash}"
+
+    @classmethod
+    def tool_web_search(cls, query_hash: str) -> str:
+        """Web 搜索工具缓存 key"""
+        return f"{cls.PREFIX}:tool:web:{query_hash}"
+
+    @classmethod
+    def tool_search_pattern(cls) -> str:
+        return f"{cls.PREFIX}:tool:search:*"
+
+    @classmethod
+    def tool_graph_pattern(cls) -> str:
+        return f"{cls.PREFIX}:tool:graph:*"
+
+    @classmethod
+    def tool_web_pattern(cls) -> str:
+        return f"{cls.PREFIX}:tool:web:*"
+
+    # ========== Utility Methods ==========
+
     @classmethod
     def lock_key(cls, key: str) -> str:
         return f"{cls.PREFIX}:lock:{key}"
@@ -73,6 +108,29 @@ class CacheKeys:
     def get_ttl(cls) -> int:
         """获取随机化 TTL，防止缓存雪崩"""
         return cls.BASE_TTL + random.randint(-cls.RANDOM_RANGE, cls.RANDOM_RANGE)
+
+    @classmethod
+    def hash_params(cls, *args, **kwargs) -> str:
+        """生成参数哈希值
+
+        Args:
+            *args: 位置参数
+            **kwargs: 关键字参数
+
+        Returns:
+            8 字符哈希值
+        """
+        # 过滤 None 值并排序
+        parts = [str(arg) for arg in args if arg is not None]
+        if kwargs:
+            sorted_items = sorted((k, v) for k, v in kwargs.items() if v is not None)
+            parts.extend(f"{k}={v}" for k, v in sorted_items)
+
+        if not parts:
+            return "empty"
+
+        content = ":".join(parts)
+        return hashlib.md5(content.encode()).hexdigest()[:8]
 
 
 class CacheService:
@@ -386,11 +444,27 @@ class CacheService:
             if question_id:
                 self.delete(CacheKeys.questions_item(question_id))
 
+            # 4. 删除工具缓存（题目变化后搜索结果可能变化）
+            self.delete_pattern(CacheKeys.tool_search_pattern())
+
             logger.info(f"Cache invalidated for question: {question_id}")
 
         except Exception as e:
             logger.warning(f"Cache invalidation failed: {e}")
             # TTL 兜底，无需重试
+
+    def invalidate_tools_cache(self):
+        """失效所有工具缓存
+
+        用于数据更新后清除工具层的缓存。
+        """
+        try:
+            self.delete_pattern(CacheKeys.tool_search_pattern())
+            self.delete_pattern(CacheKeys.tool_graph_pattern())
+            # Web 搜索缓存不主动失效，让其自然过期
+            logger.info("Tools cache invalidated")
+        except Exception as e:
+            logger.warning(f"Tools cache invalidation failed: {e}")
 
     async def invalidate_question_delayed(self, question_id: str = None):
         """延迟双删

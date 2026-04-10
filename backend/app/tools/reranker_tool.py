@@ -35,6 +35,7 @@ class RerankerTool:
         self._reranker = CrossEncoder(
             self.model_path,
             max_length=512,
+            device="cuda"
         )
 
         logger.info(f"Reranker tool initialized with model: {self.model_path}")
