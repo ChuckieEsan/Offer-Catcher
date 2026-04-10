@@ -82,9 +82,9 @@ class ExtractTask(BaseModel):
     # 输入
     source_type: str = Field(description="来源类型: image / text")
     source_content: Optional[str] = Field(default=None, description="文本内容（text 类型）")
-    source_images_gz: Optional[str] = Field(
+    source_images_gz: Optional[List[str]] = Field(
         default=None,
-        description="图片 Base64 列表的 gzip 压缩（image 类型）"
+        description="图片 Base64 列表（image 类型）"
     )
 
     # 状态

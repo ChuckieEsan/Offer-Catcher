@@ -7,7 +7,7 @@
 import asyncio
 import json
 import time
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Optional
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
@@ -15,7 +15,6 @@ from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, Abstra
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
 from app.mq.message_helper import get_mq_message_helper
-from app.utils.cache import singleton
 from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
@@ -223,9 +222,23 @@ class AsyncRabbitMQConsumer:
             logger.info("RabbitMQ connection closed gracefully.")
 
 
-@singleton
+# 全局单例实例和锁
+_consumer_instance: Optional[AsyncRabbitMQConsumer] = None
+_consumer_lock = None
+
+
+def _get_lock():
+    """获取异步锁（延迟初始化）"""
+    global _consumer_lock
+    if _consumer_lock is None:
+        _consumer_lock = asyncio.Lock()
+    return _consumer_lock
+
+
 async def get_consumer(prefetch_count: int = 5) -> AsyncRabbitMQConsumer:
     """获取异步消费者单例
+
+    手动实现异步单例模式。
 
     Note: 参数在首次调用后会被忽略。
 
@@ -235,6 +248,15 @@ async def get_consumer(prefetch_count: int = 5) -> AsyncRabbitMQConsumer:
     Returns:
         AsyncRabbitMQConsumer 实例
     """
-    consumer = AsyncRabbitMQConsumer(prefetch_count=prefetch_count)
-    await consumer.connect()
-    return consumer
+    global _consumer_instance
+
+    if _consumer_instance is not None:
+        return _consumer_instance
+
+    async with _get_lock():
+        if _consumer_instance is not None:
+            return _consumer_instance
+
+        _consumer_instance = AsyncRabbitMQConsumer(prefetch_count=prefetch_count)
+        await _consumer_instance.connect()
+        return _consumer_instance

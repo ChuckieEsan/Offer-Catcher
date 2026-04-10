@@ -8,6 +8,7 @@ from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Header
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import tempfile
+import uuid
 import os
 
 from app.agents.vision_extractor import get_vision_extractor
@@ -22,8 +23,6 @@ from app.models.schemas import (
     ExtractTaskStatus,
 )
 from app.db.postgres_client import get_postgres_client
-from app.mq.producer import get_producer
-from app.models.schemas import MQTaskMessage
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/extract", tags=["extract"])
@@ -111,19 +110,9 @@ async def submit_extract_task(
     pg = get_postgres_client()
     task = pg.create_extract_task(user_id, request)
 
-    # 发送消息到 MQ（通知 Worker 处理）
-    try:
-        producer = await get_producer()
-        mq_msg = MQTaskMessage(
-            question_id=task.task_id,  # 复用 MQTaskMessage，用 task_id 作为 question_id
-            question_text=f"extract_task:{task.task_id}",
-            company="",
-            position="",
-        )
-        await producer.publish_task(mq_msg)
-        logger.info(f"Task sent to MQ: {task.task_id}")
-    except Exception as e:
-        logger.warning(f"Failed to send task to MQ: {e}, task will be polled by worker")
+    # Extract Worker 通过轮询 PostgreSQL 获取任务，不需要发送 MQ 消息
+    # 如果需要 MQ 通知，应该使用单独的队列（如 extract_tasks），避免与 answer_tasks 混淆
+    logger.info(f"Extract task created: {task.task_id}, waiting for worker to poll")
 
     return TaskSubmitResponse(
         task_id=task.task_id,
@@ -306,14 +295,36 @@ async def extract_image(
     """
     logger.info(f"Extract from {len(images)} uploaded files")
 
+    # MIME type 到文件后缀的映射
+    mime_to_suffix = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/bmp": ".bmp",
+    }
+
     # 保存上传的图片到临时文件
     temp_paths = []
     for uploaded_file in images:
-        suffix = f".{uploaded_file.filename.split('.')[-1]}" if '.' in uploaded_file.filename else ".jpg"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        # 使用 UUID 生成唯一文件名
+        file_uuid = str(uuid.uuid4())[:8]  # 使用前 8 位即可
+
+        # 优先使用 content_type 确定后缀，更可靠
+        content_type = uploaded_file.content_type or ""
+        suffix = mime_to_suffix.get(content_type, ".jpg")
+
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=suffix,
+            prefix=f"extract_{file_uuid}_"
+        ) as tmp:
             content = await uploaded_file.read()
             tmp.write(content)
             temp_paths.append(tmp.name)
+            logger.debug(f"Saved upload to temp file: {tmp.name} (type: {content_type})")
 
     try:
         extractor = get_vision_extractor()

@@ -129,8 +129,14 @@ def ocr_image(image_source: str) -> str:
         # 标准化图片源为本地文件路径
         image_path = _normalize_image_source(image_source)
 
-        # 记录是否是临时文件（需要清理）
-        if not Path(image_source).exists():
+        # 判断是否需要清理临时文件
+        # Base64 和 URL 会创建临时文件，本地文件路径不需要清理
+        is_temp_file = (
+            image_source.startswith("data:") or
+            image_source.startswith("http://") or
+            image_source.startswith("https://")
+        )
+        if is_temp_file:
             temp_path = image_path
 
         # 检查文件类型，如果是 webp 先转换为 png

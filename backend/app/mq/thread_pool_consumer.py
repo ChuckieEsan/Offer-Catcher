@@ -9,7 +9,7 @@ import inspect
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
@@ -18,7 +18,6 @@ from aiobreaker import CircuitBreaker
 from app.config.settings import get_settings
 from app.models.schemas import MQTaskMessage
 from app.mq.message_helper import get_mq_message_helper
-from app.utils.cache import singleton
 from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
@@ -52,6 +51,9 @@ class ThreadPoolRabbitMQConsumer:
         self._futures: List[Future] = []
         self._running = True
         self._started = False
+
+        # 每个线程的熔断器打开时间（类级别存储）
+        self._circuit_open_times: dict[int, Optional[float]] = {}
 
     async def start(self, callback: Callable[[MQTaskMessage], bool]) -> None:
         """启动线程池消费者
@@ -219,16 +221,16 @@ class ThreadPoolRabbitMQConsumer:
             circuit_breaker: 熔断器
             channel: channel 实例
         """
-        circuit_open_time: Optional[float] = None
         recovery_timeout = 30.0
 
         # 熔断器拦截逻辑
         if isinstance(circuit_breaker.state, CircuitOpenState):
+            circuit_open_time = self._circuit_open_times.get(thread_id)
             if circuit_open_time and (
                 time.time() - circuit_open_time >= recovery_timeout
             ):
                 circuit_breaker.close()
-                circuit_open_time = None
+                self._circuit_open_times[thread_id] = None
                 logger.info(f"Thread-{thread_id}: Circuit breaker recovered")
             else:
                 logger.warning(f"Thread-{thread_id}: Circuit breaker OPEN, requeue message")
@@ -243,9 +245,10 @@ class ThreadPoolRabbitMQConsumer:
         if success:
             await message.ack()
             circuit_breaker.close()
+            self._circuit_open_times[thread_id] = None
         else:
             circuit_breaker.open()
-            circuit_open_time = time.time()
+            self._circuit_open_times[thread_id] = time.time()
             await message.ack()
             await self._republish_to_back(message, channel)
 
@@ -328,14 +331,38 @@ class ThreadPoolRabbitMQConsumer:
         )
 
 
-@singleton
+# 全局单例实例和锁
+_consumer_instance: Optional[ThreadPoolRabbitMQConsumer] = None
+_consumer_lock = None
+
+
+def _get_lock():
+    """获取异步锁（延迟初始化）"""
+    global _consumer_lock
+    if _consumer_lock is None:
+        _consumer_lock = asyncio.Lock()
+    return _consumer_lock
+
+
 async def get_thread_pool_consumer(
     num_threads: int = 4, prefetch_count: int = 1
 ) -> ThreadPoolRabbitMQConsumer:
     """获取线程池消费者单例
 
+    手动实现异步单例模式。
+
     Note: 参数在首次调用后会被忽略。
     """
-    return ThreadPoolRabbitMQConsumer(
-        num_threads=num_threads, prefetch_count=prefetch_count
-    )
+    global _consumer_instance
+
+    if _consumer_instance is not None:
+        return _consumer_instance
+
+    async with _get_lock():
+        if _consumer_instance is not None:
+            return _consumer_instance
+
+        _consumer_instance = ThreadPoolRabbitMQConsumer(
+            num_threads=num_threads, prefetch_count=prefetch_count
+        )
+        return _consumer_instance
