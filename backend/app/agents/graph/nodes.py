@@ -58,7 +58,7 @@ def router_node(state: AgentState) -> AgentState:
 
     Note:
         此节点仅用于内部路由决策，不返回任何用户可见内容。
-        避免返回 last_tool_result 以免泄露到前端。
+        避免返回 response_to_user 以免泄露到前端。
 
     Args:
         state: 当前状态
@@ -127,7 +127,7 @@ def extract_node(state: AgentState) -> AgentState:
     except Exception as e:
         logger.error(f"Extract failed: {e}")
         return {
-            "last_tool_result": f"提取失败：{e}",
+            "response_to_user": f"提取失败：{e}",
             "pending_confirmation": False,
         }
 
@@ -140,7 +140,7 @@ def confirm_node(state: AgentState) -> AgentState:
     interview = state.get("extracted_interview")
     if not interview:
         return {
-            "last_tool_result": "没有提取到面经数据",
+            "response_to_user": "没有提取到面经数据",
         }
 
     # 构建展示给用户的内容
@@ -157,7 +157,7 @@ def confirm_node(state: AgentState) -> AgentState:
     output.append("\n请确认以上信息是否正确？回复\"确认\"继续，或提出修改意见。")
 
     return {
-        "last_tool_result": "\n".join(output),
+        "response_to_user": "\n".join(output),
     }
 
 
@@ -204,7 +204,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
 
     interview = state.get("extracted_interview")
     if not interview:
-        return {"last_tool_result": "没有可存储的数据"}
+        return {"response_to_user": "没有可存储的数据"}
 
     qdrant = get_qdrant_manager()
     stored_count = 0
@@ -229,7 +229,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         result += f"，其中 {mq_count} 道题目将异步生成答案"
 
     return {
-        "last_tool_result": result,
+        "response_to_user": result,
         "current_subgraph": None,  # 退出子图
         "intent": "idle",
     }
@@ -380,11 +380,11 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
         # 返回消息列表，让外层能正确更新状态
         return {
             "messages": result.get("messages", []),
-            "last_tool_result": final_response,
+            "response_to_user": final_response,
         }
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}", exc_info=True)
-        return {"last_tool_result": f"查询失败：{e}"}
+        return {"response_to_user": f"查询失败：{e}"}
 
 
 __all__ = [

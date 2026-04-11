@@ -22,6 +22,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.agents.graph.state import AgentState
 from app.agents.graph import nodes, edges
+from app.db.checkpointer import get_checkpointer
 from app.utils.logger import logger
 from app.models.schemas import ExtractedInterview
 
@@ -101,26 +102,25 @@ async def run_workflow(
     messages: list[BaseMessage],
     thread_id: Optional[str] = None,
     user_id: Optional[str] = None,
-    **kwargs
 ) -> AgentState:
     """运行工作流（异步模式，带持久化）
 
-    简化版本：只需要传入 messages 和 thread_id。
-    其他状态（intent, params, context 等）由 Checkpointer 自动恢复。
+    状态管理原则：
+    - messages: 用户输入（必须）
+    - thread_id: 由 Checkpointer 恢复历史状态
+    - user_id: 注入到 session_context（用于长期记忆）
+    - 其他状态: 由 Checkpointer 自动恢复或 Agent 内部计算
 
     Args:
         messages: 当前消息（通常只有一条用户消息）
         thread_id: 会话 ID（用于持久化）
         user_id: 用户 ID（用于长期记忆检索）
-        **kwargs: 可选的状态覆盖（通常不需要）
 
     Returns:
         最终状态
     """
-    from app.db.checkpointer import get_checkpointer
-
     # 构建 initial_state，只传入 messages
-    # 其他字段不传，由 Checkpointer 恢复
+    # 其他字段由 Checkpointer 恢复
     initial_state: AgentState = {
         "messages": messages,
     }
@@ -128,12 +128,6 @@ async def run_workflow(
     # 将 user_id 放入 session_context 中
     if user_id:
         initial_state["session_context"] = {"user_id": user_id}
-
-    # 如果有额外的状态覆盖（通常不需要）
-    for key in ["intent", "params", "extracted_interview", "pending_confirmation",
-                "confirmed_data", "current_subgraph", "last_tool_result", "session_context"]:
-        if key in kwargs and kwargs[key] is not None:
-            initial_state[key] = kwargs[key]  # type: ignore
 
     config: RunnableConfig = {
         "configurable": {
@@ -152,12 +146,14 @@ async def astream_workflow(
     messages: list[BaseMessage],
     thread_id: Optional[str] = None,
     user_id: Optional[str] = None,
-    **kwargs
 ) -> AsyncGenerator[dict, None]:
     """运行工作流（流式模式，异步）
 
-    简化版本：只需要传入 messages 和 thread_id。
-    其他状态由 Checkpointer 自动恢复。
+    状态管理原则：
+    - messages: 用户输入（必须）
+    - thread_id: 由 Checkpointer 恢复历史状态
+    - user_id: 注入到 session_context（用于长期记忆）
+    - 其他状态: 由 Checkpointer 自动恢复或 Agent 内部计算
 
     基于 LangGraph astream_events，自动捕获 LLM Token 流以及节点状态更新。
     输出统一协议：
@@ -172,12 +168,10 @@ async def astream_workflow(
         messages: 当前消息（通常只有一条用户消息）
         thread_id: 会话 ID（用于持久化）
         user_id: 用户 ID（用于长期记忆检索）
-        **kwargs: 可选的状态覆盖（通常不需要）
 
     Yields:
         事件流
     """
-    from app.db.checkpointer import get_checkpointer
 
     # 构建 initial_state，只传入 messages
     initial_state: AgentState = {
@@ -187,12 +181,6 @@ async def astream_workflow(
     # 将 user_id 放入 session_context 中
     if user_id:
         initial_state["session_context"] = {"user_id": user_id}
-
-    # 如果有额外的状态覆盖（通常不需要）
-    for key in ["intent", "params", "extracted_interview", "pending_confirmation",
-                "confirmed_data", "current_subgraph", "last_tool_result", "session_context"]:
-        if key in kwargs and kwargs[key] is not None:
-            initial_state[key] = kwargs[key]  # type: ignore
 
     final_state = None
 
@@ -237,10 +225,10 @@ async def astream_workflow(
                         final_state = output
 
                     # 过滤内部节点（router 等）的输出，避免泄露到前端
-                    elif isinstance(output, dict) and "last_tool_result" in output:
+                    elif isinstance(output, dict) and "response_to_user" in output:
                         # 只输出用户可见的节点结果
                         if name in ["extract", "confirm", "handle_confirmation", "store_and_mq", "react_loop"]:
-                            content = output.get("last_tool_result", "")
+                            content = output.get("response_to_user", "")
                             if content:
                                 yield {
                                     "type": "update",
@@ -262,7 +250,7 @@ async def astream_workflow(
         yield {
             "type": "final",
             "node": "__end__",
-            "content": final_state.get("last_tool_result", ""),
+            "content": final_state.get("response_to_user", ""),
             "state": final_state,
         }
 

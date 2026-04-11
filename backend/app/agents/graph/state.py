@@ -41,7 +41,7 @@ class AgentState(TypedDict, total=False):
         pending_confirmation: 是否在等待用户确认
         confirmed_data: 用户是否已确认（用于确认节点）
         current_subgraph: 当前子图：None/ingest/query
-        last_tool_result: 上次工具调用结果
+        response_to_user: 返回给用户的响应文本
         session_context: 会话上下文（company, position, user_id 等）
         error: 错误信息
     """
@@ -62,8 +62,8 @@ class AgentState(TypedDict, total=False):
     # 子图状态
     current_subgraph: Optional[str]
 
-    # 工具调用结果
-    last_tool_result: str
+    # 返回给用户的响应文本
+    response_to_user: str
 
     # 会话上下文（运行时状态，如 company, position, user_id）
     session_context: SessionContext

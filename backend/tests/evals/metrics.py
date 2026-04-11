@@ -181,7 +181,7 @@ def evaluate_agent_trajectory(
     tool_eval = tool_correctness_score(actual_tools, expected_tools)
 
     # 任务完成率评估
-    output = result.get("last_tool_result", "")
+    output = result.get("response_to_user", "")
     keywords = test_case.get("expected_keywords")
     ground_truth = test_case.get("ground_truth")
     task_eval = task_completion_score(output, test_case["input"], keywords, ground_truth)

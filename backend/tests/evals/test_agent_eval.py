@@ -221,7 +221,7 @@ class TestEvaluateAgentTrajectory:
                     tool_calls=[{"name": "search_questions", "args": {}, "id": "1"}]
                 ),
             ],
-            "last_tool_result": "找到了字节跳动的面试题，包含 RAG 和 Agent",
+            "response_to_user": "找到了字节跳动的面试题，包含 RAG 和 Agent",
         }
 
         test_case = {
@@ -239,7 +239,7 @@ class TestEvaluateAgentTrajectory:
         """测试失败轨迹"""
         result = {
             "messages": [],
-            "last_tool_result": "",
+            "response_to_user": "",
         }
 
         test_case = {
@@ -261,7 +261,7 @@ class TestEvaluateAgentTrajectory:
                 AIMessage(content="", tool_calls=[{"name": "search", "args": {}, "id": "2"}]),
                 AIMessage(content="", tool_calls=[{"name": "search", "args": {}, "id": "3"}]),
             ],
-            "last_tool_result": "结果",
+            "response_to_user": "结果",
         }
 
         test_case = {
