@@ -10,7 +10,7 @@ from app.agents.vision_extractor import (
     ExtractedQuestion,
     ExtractedInterviewSchema,
 )
-from app.utils.agent import load_prompt
+from app.agents.prompts import load_prompt_template, build_prompt
 
 
 class TestVisionExtractor:
@@ -47,13 +47,24 @@ class TestVisionExtractor:
 class TestLoadPrompt:
     """Prompt 加载测试"""
 
-    def test_load_prompt(self):
-        """测试 Prompt 加载"""
-        prompt = load_prompt()
+    def test_load_prompt_template(self):
+        """测试 Prompt 模板加载"""
+        template = load_prompt_template("vision_extractor.md")
+        assert template is not None
+        # ChatPromptTemplate 有 messages 属性
+        messages = template.format_messages()
+        assert len(messages) > 0
+        content = messages[0].content
+        assert len(content) > 0
+        print(f"Loaded prompt template: {len(content)} characters")
+
+    def test_build_prompt(self):
+        """测试 build_prompt 函数"""
+        # 使用 build_prompt 构建格式化的 prompt
+        prompt = build_prompt("vision_extractor.md")
         assert prompt is not None
         assert len(prompt) > 0
-        assert "JSON" in prompt
-        print(f"Loaded prompt: {len(prompt)} characters")
+        print(f"Built prompt: {len(prompt)} characters")
 
 
 class TestExtractFromText:

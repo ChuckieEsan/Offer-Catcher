@@ -14,7 +14,7 @@ import pytest
 from app.config.settings import get_settings
 from app.utils.hasher import generate_question_id
 from app.models.schemas import MQTaskMessage
-from app.mq.producer import AsyncRabbitMQProducer, RabbitMQProducer
+from app.mq.producer import AsyncRabbitMQProducer
 from app.mq.consumer import AsyncRabbitMQConsumer, _message_breaker
 from app.mq.thread_pool_consumer import ThreadPoolRabbitMQConsumer
 
