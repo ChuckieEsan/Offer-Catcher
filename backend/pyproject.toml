@@ -34,6 +34,8 @@ dependencies = [
     "opentelemetry-exporter-prometheus>=0.49b0",
     "langgraph-checkpoint-postgres>=2.0.0",
     "psycopg[binary,pool]>=3.2.0",
+    # Agent 评估框架
+    "agentevals>=0.0.9",
     # FastAPI
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -48,6 +50,14 @@ dev = [
     "pytest>=9.0.2",
     "watchdog>=4.0.0",
 ]
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --tb=short"
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"

@@ -20,6 +20,18 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "agentevals"
+version = "0.0.9"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "openevals" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/31/ce/ebc8548e37d7352954980bb791594f262e084405c0bf29e749e44c8b341e/agentevals-0.0.9.tar.gz", hash = "sha256:35131a5e4b60d2a6ac3203d3d15983aa5f9162b8acb1b8700f9b2c777df1150d" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/7f/57/d5c3f161dcb74a2d853d44e02850be4341c92a3865d0562c10eca4ffc901/agentevals-0.0.9-py3-none-any.whl", hash = "sha256:4da425c1183fe8d24600e4316a31baca74e2bdc4d5e03d202fc1b314ece4cb02" },
+]
+
+[[package]]
 name = "aio-pika"
 version = "9.6.2"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
@@ -2319,6 +2331,7 @@ name = "offer-catcher"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "agentevals" },
     { name = "aio-pika" },
     { name = "aiobreaker" },
     { name = "apscheduler" },
@@ -2364,6 +2377,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agentevals", specifier = ">=0.0.9" },
     { name = "aio-pika", specifier = ">=9.6.2" },
     { name = "aiobreaker", specifier = ">=1.2.0" },
     { name = "apscheduler", specifier = ">=3.11.2" },
@@ -2461,6 +2475,21 @@ wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/4b/33/b5db29a6c00eb8f50708110d8d453747ca125c8b805bc437b289dbdcc057/opencv_python_headless-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:0bd48544f77c68b2941392fcdf9bcd2b9cdf00e98cb8c29b2455d194763cf99e" },
     { url = "https://mirrors.aliyun.com/pypi/packages/fb/c3/52cfea47cd33e53e8c0fbd6e7c800b457245c1fda7d61660b4ffe9596a7f/opencv_python_headless-4.13.0.92-cp37-abi3-win32.whl", hash = "sha256:a7cf08e5b191f4ebb530791acc0825a7986e0d0dee2a3c491184bd8599848a4b" },
     { url = "https://mirrors.aliyun.com/pypi/packages/4a/90/b338326131ccb2aaa3c2c85d00f41822c0050139a4bfe723cfd95455bd2d/opencv_python_headless-4.13.0.92-cp37-abi3-win_amd64.whl", hash = "sha256:77a82fe35ddcec0f62c15f2ba8a12ecc2ed4207c17b0902c7a3151ae29f37fb6" },
+]
+
+[[package]]
+name = "openevals"
+version = "0.2.0"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "langchain" },
+    { name = "langchain-openai" },
+    { name = "langsmith" },
+    { name = "rich" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/b0/b1/028a05846136805b29b7a3afb58a940c2d213fa2c3d0a7d7003c7fbaa115/openevals-0.2.0.tar.gz", hash = "sha256:7e95fa64625be53eaa8c657d7f69b842a52bda10bdf3bb91781c7d09a385b069" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/4a/8b/00f402b7f3475e235c339a9bc82d2eaf46cc08b53ecd85d4a117850170d3/openevals-0.2.0-py3-none-any.whl", hash = "sha256:2bce5964be9d162e3d38c2dfd026739156e1ac521536ade6b8e2f0a89b632f2c" },
 ]
 
 [[package]]

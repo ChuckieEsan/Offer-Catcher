@@ -3,7 +3,7 @@
 包含 router、ingest_flow、react_loop 等核心节点。
 """
 
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, trim_messages
 from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
@@ -263,52 +263,61 @@ def _get_react_agent() -> CompiledStateGraph:
     return create_agent(llm, tools=tools, system_prompt=system_prompt, context_schema=UserContext)
 
 
-def _apply_message_trimming(
+def _trim_messages_by_token(
     messages: list[BaseMessage],
-    max_messages: int = 10,
-    max_tokens: int = 8000
+    max_tokens: int = 8000,
 ) -> list[BaseMessage]:
-    """应用消息裁剪策略
+    """使用官方 trim_messages 进行精确 token 裁剪
 
     策略：
-    1. 保留 SystemMessage（如果有）
-    2. 保留最近 N 条消息
-    3. 如果 token 超限，进一步裁剪
+    1. 保留 SystemMessage
+    2. 保留最新消息（strategy="last"）
+    3. 按 token 数精确裁剪
 
     Args:
         messages: 原始消息列表
-        max_messages: 最大消息数量，默认 10 条
-        max_tokens: 最大 token 数（估算），默认 8000
+        max_tokens: 最大 token 数，默认 8000
 
     Returns:
         裁剪后的消息列表
     """
-    if len(messages) <= max_messages:
+    if len(messages) <= 5:
         return messages
 
-    # 分离 system message 和普通消息
-    system_messages = [m for m in messages if getattr(m, "type", "") == "system"]
-    other_messages = [m for m in messages if getattr(m, "type", "") != "system"]
+    def simple_token_counter(msgs: list[BaseMessage]) -> int:
+        """简单的 token 计数器（基于字符数估算）
 
-    # 保留最近的 N 条
-    trimmed = other_messages[-max_messages:]
+        中文字符约 1-2 token，英文约 4 字符 = 1 token
+        使用保守估算：每 2 字符 = 1 token
+        """
+        total = 0
+        for m in msgs:
+            content = getattr(m, "content", "")
+            if content:
+                # 保守估算：中英文混合，每 2 字符 = 1 token
+                total += len(content) // 2
+        return total
 
-    # 如果有 system message，放在最前面
-    if system_messages:
-        trimmed = [system_messages[0]] + trimmed
-
-    # Token 估算（简化：每条约 200 token）
-    estimated_tokens = sum(len(getattr(m, "content", "")) // 3 for m in trimmed)
-    if estimated_tokens > max_tokens:
-        # 进一步裁剪，只保留最近一半
-        trim_count = len(trimmed) // 2
-        if system_messages:
-            trimmed = [system_messages[0]] + trimmed[-trim_count:]
-        else:
-            trimmed = trimmed[-trim_count:]
-        logger.info(f"Trimmed messages due to token limit: {estimated_tokens} -> {sum(len(getattr(m, 'content', '')) // 3 for m in trimmed)} tokens")
-
-    return trimmed
+    try:
+        trimmed = trim_messages(
+            messages,
+            max_tokens=max_tokens,
+            strategy="last",  # 保留最新消息
+            include_system=True,  # 保留 system message
+            allow_partial=False,  # 不允许截断消息
+            token_counter=simple_token_counter,
+        )
+        logger.info(f"Trimmed messages: {len(messages)} -> {len(trimmed)}")
+        return trimmed
+    except Exception as e:
+        logger.warning(f"trim_messages failed: {e}, fallback to simple trimming")
+        # Fallback：保留最近 10 条消息
+        system_msgs = [m for m in messages if getattr(m, "type", "") == "system"]
+        other_msgs = [m for m in messages if getattr(m, "type", "") != "system"]
+        trimmed = other_msgs[-10:]
+        if system_msgs:
+            trimmed = [system_msgs[0]] + trimmed
+        return trimmed
 
 
 @traced_async
@@ -325,7 +334,7 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
     # 获取消息并应用裁剪策略
     all_messages: list[BaseMessage] = state.get("messages", [])
-    messages: list[BaseMessage] = _apply_message_trimming(all_messages)
+    messages: list[BaseMessage] = _trim_messages_by_token(all_messages)
 
     # 从会话上下文获取用户 ID
     session_context = state.get("session_context", {})

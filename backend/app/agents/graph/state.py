@@ -1,11 +1,13 @@
 """LangGraph 工作流状态定义
 
 定义 AgentState 和相关类型。
+使用 Annotated reducer 实现消息自动合并。
 """
 
-from typing import Optional
+from typing import Annotated, Optional
 
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 from app.models.schemas import ExtractedInterview
@@ -32,7 +34,7 @@ class AgentState(TypedDict, total=False):
     使用 total=False 支持 partial update，节点可以只返回局部状态。
 
     Attributes:
-        messages: 对话历史（整个会话）
+        messages: 对话历史（使用 add_messages reducer 自动合并）
         intent: 当前意图：idle/ingest/query/general
         params: 提取的参数（company, position, question 等）
         extracted_interview: 导入面经时提取的数据
@@ -44,8 +46,9 @@ class AgentState(TypedDict, total=False):
         error: 错误信息
     """
 
-    # 对话历史
-    messages: list[BaseMessage]
+    # 对话历史（使用 Annotated reducer 自动合并）
+    # add_messages 会将新消息追加到列表末尾，并处理消息删除
+    messages: Annotated[list[BaseMessage], add_messages]
 
     # 意图和参数
     intent: str
