@@ -4,15 +4,15 @@
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import asyncio
 
 from app.db.qdrant_client import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
-from app.models.schemas import QdrantQuestionPayload, SearchResult, QuestionItem, SearchFilter
+from app.models.schemas import QdrantQuestionPayload, QuestionItem, SearchFilter
 from app.models.enums import QuestionType, MasteryLevel
-from app.services.cache_service import get_cache_service, CacheKeys
+from app.services.cache_service import get_cache_service
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/questions", tags=["questions"])
@@ -77,7 +77,44 @@ class RegenerateResponse(BaseModel):
     question_answer: str
 
 
+class BatchAnswersRequest(BaseModel):
+    """批量获取答案请求"""
+    question_ids: List[str] = Field(description="题目 ID 列表")
+
+
+class BatchAnswersResponse(BaseModel):
+    """批量获取答案响应"""
+    answers: dict[str, Optional[str]] = Field(description="question_id -> answer 的映射")
+
+
 # ========== API Endpoints ==========
+
+@router.post("/batch/answers", response_model=BatchAnswersResponse)
+async def get_batch_answers(request: BatchAnswersRequest):
+    """批量获取题目答案
+
+    根据 question_id 列表批量查询答案，用于导入记录详情页显示答案。
+
+    Args:
+        request: 包含 question_ids 列表的请求
+
+    Returns:
+        BatchAnswersResponse 包含 question_id -> answer 的映射
+    """
+    logger.info(f"Get batch answers for {len(request.question_ids)} questions")
+
+    qdrant = get_qdrant_manager()
+    answers: dict[str, Optional[str]] = {}
+
+    for question_id in request.question_ids:
+        question = qdrant.get_question(question_id)
+        if question:
+            answers[question_id] = question.question_answer
+        else:
+            answers[question_id] = None
+
+    return BatchAnswersResponse(answers=answers)
+
 
 @router.get("", response_model=QuestionListResponse)
 async def list_questions(

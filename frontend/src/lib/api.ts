@@ -462,3 +462,14 @@ export async function deleteExtractTask(taskId: string): Promise<void> {
     headers: { "X-User-ID": getUserId() },
   });
 }
+
+/**
+ * 批量获取题目答案
+ * 用于导入记录详情页显示答案
+ */
+export async function getBatchAnswers(
+  questionIds: string[]
+): Promise<{ answers: Record<string, string | null> }> {
+  const res = await api.post("/questions/batch/answers", { question_ids: questionIds });
+  return res.data;
+}

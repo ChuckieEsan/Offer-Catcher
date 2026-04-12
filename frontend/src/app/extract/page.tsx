@@ -40,6 +40,7 @@ import {
   SyncOutlined,
   FileTextOutlined,
 } from "@ant-design/icons";
+import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
 import {
   submitExtractTask,
@@ -48,6 +49,7 @@ import {
   updateExtractTask,
   confirmExtractTask,
   deleteExtractTask,
+  getBatchAnswers,
 } from "@/lib/api";
 import type { Question, ExtractTaskListItem, ExtractTask } from "@/types";
 
@@ -87,6 +89,7 @@ export default function ExtractPage() {
     task: null,
   });
   const [detailLoading, setDetailLoading] = useState(false);
+  const [answersMap, setAnswersMap] = useState<Record<string, string | null>>({});
 
   // 编辑题目
   const [editModal, setEditModal] = useState<{
@@ -94,6 +97,13 @@ export default function ExtractPage() {
     questionIndex: number;
     questionText: string;
   }>({ visible: false, questionIndex: -1, questionText: "" });
+
+  // 展开答案的状态
+  const [answerModal, setAnswerModal] = useState<{
+    visible: boolean;
+    questionText: string;
+    answer: string | null;
+  }>({ visible: false, questionText: "", answer: null });
 
   // 加载任务列表
   const loadTasks = useCallback(async () => {
@@ -186,9 +196,21 @@ export default function ExtractPage() {
   // 查看任务详情
   const handleViewTask = async (taskId: string) => {
     setDetailLoading(true);
+    setAnswersMap({});
     try {
       const task = await getExtractTask(taskId);
       setDetailDrawer({ visible: true, task });
+
+      // 如果任务已入库，批量获取答案
+      if (task.status === "confirmed" && task.result?.questions?.length > 0) {
+        const questionIds = task.result.questions.map((q) => q.question_id);
+        try {
+          const { answers } = await getBatchAnswers(questionIds);
+          setAnswersMap(answers);
+        } catch (error) {
+          console.error("Failed to fetch answers:", error);
+        }
+      }
     } catch (error) {
       message.error("加载任务详情失败");
     } finally {
@@ -605,51 +627,85 @@ export default function ExtractPage() {
                 <Title level={5}>题目列表</Title>
                 <List
                   dataSource={detailDrawer.task.result.questions}
-                  renderItem={(q: Question, index: number) => (
-                    <List.Item
-                      actions={
-                        detailDrawer.task?.status === "completed"
-                          ? [
-                              <Button
-                                key="edit"
-                                size="small"
-                                icon={<EditOutlined />}
-                                onClick={() => handleEditQuestion(index)}
-                              >
-                                编辑
-                              </Button>,
-                              <Popconfirm
-                                key="delete"
-                                title="删除这道题目？"
-                                onConfirm={() => handleDeleteQuestion(index)}
-                              >
-                                <Button size="small" danger icon={<DeleteOutlined />} />
-                              </Popconfirm>,
-                            ]
-                          : []
-                      }
-                    >
-                      <List.Item.Meta
-                        avatar={
-                          <Tag color={questionTypeColor[q.question_type] || "default"}>
-                            {q.question_type}
-                          </Tag>
+                  renderItem={(q: Question, index: number) => {
+                    const answer = answersMap[q.question_id];
+                    return (
+                      <List.Item
+                        actions={
+                          detailDrawer.task?.status === "completed"
+                            ? [
+                                <Button
+                                  key="edit"
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => handleEditQuestion(index)}
+                                >
+                                  编辑
+                                </Button>,
+                                <Popconfirm
+                                  key="delete"
+                                  title="删除这道题目？"
+                                  onConfirm={() => handleDeleteQuestion(index)}
+                                >
+                                  <Button size="small" danger icon={<DeleteOutlined />} />
+                                </Popconfirm>,
+                              ]
+                            : answer && [
+                                <Button
+                                  key="view-answer"
+                                  size="small"
+                                  icon={<EyeOutlined />}
+                                  onClick={() =>
+                                    setAnswerModal({
+                                      visible: true,
+                                      questionText: q.question_text,
+                                      answer: answer,
+                                    })
+                                  }
+                                >
+                                  查看答案
+                                </Button>,
+                              ]
                         }
-                        title={`${index + 1}. ${q.question_text}`}
-                        description={
-                          q.core_entities?.length > 0 && (
-                            <Space size={[4, 8]} wrap>
-                              {q.core_entities.map((e) => (
-                                <Tag key={e} color="geekblue" style={{ fontSize: 12 }}>
-                                  {e}
-                                </Tag>
-                              ))}
-                            </Space>
-                          )
-                        }
-                      />
-                    </List.Item>
-                  )}
+                      >
+                        <List.Item.Meta
+                          avatar={
+                            <Tag color={questionTypeColor[q.question_type] || "default"}>
+                              {q.question_type}
+                            </Tag>
+                          }
+                          title={`${index + 1}. ${q.question_text}`}
+                          description={
+                            <div>
+                              {q.core_entities?.length > 0 && (
+                                <Space size={[4, 8]} wrap style={{ marginBottom: 4 }}>
+                                  {q.core_entities.map((e) => (
+                                    <Tag key={e} color="geekblue" style={{ fontSize: 12 }}>
+                                      {e}
+                                    </Tag>
+                                  ))}
+                                </Space>
+                              )}
+                              {/* 显示答案状态（已入库时） */}
+                              {detailDrawer.task?.status === "confirmed" && (
+                                <div style={{ marginTop: 8 }}>
+                                  {answer ? (
+                                    <Text type="secondary" style={{ fontSize: 13 }}>
+                                      答案：{answer.slice(0, 80)}...
+                                    </Text>
+                                  ) : (
+                                    <Tag color="orange" style={{ fontSize: 12 }}>
+                                      答案生成中...
+                                    </Tag>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          }
+                        />
+                      </List.Item>
+                    );
+                  }}
                 />
 
                 {/* 操作按钮 */}
@@ -701,6 +757,36 @@ export default function ExtractPage() {
           onChange={(e) => setEditModal({ ...editModal, questionText: e.target.value })}
           rows={4}
         />
+      </Modal>
+
+      {/* 查看答案弹窗 */}
+      <Modal
+        title="查看答案"
+        open={answerModal.visible}
+        onCancel={() => setAnswerModal({ visible: false, questionText: "", answer: null })}
+        footer={null}
+        width="70%"
+        style={{ top: 20 }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text strong>题目：</Text>
+          <Paragraph>{answerModal.questionText}</Paragraph>
+        </div>
+        <div>
+          <Text strong>答案：</Text>
+          <div
+            style={{
+              marginTop: 8,
+              padding: 16,
+              backgroundColor: "#fafafa",
+              borderRadius: 8,
+              fontSize: 14,
+              lineHeight: 1.8,
+            }}
+          >
+            <XMarkdown>{answerModal.answer || "暂无答案"}</XMarkdown>
+          </div>
+        </div>
       </Modal>
     </MainLayout>
   );
