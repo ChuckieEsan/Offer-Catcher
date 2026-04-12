@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Layout,
   Button,
@@ -48,6 +48,55 @@ function ThinkingIndicator() {
   );
 }
 
+// 消息项组件 - 使用 React.memo 避免不必要的重渲染
+const MessageItem = React.memo(function MessageItem({
+  msg,
+  isStreaming,
+  isCompleted,
+  streamingConfig,
+}: {
+  msg: Message;
+  isStreaming: boolean;
+  isCompleted: boolean;
+  streamingConfig: { hasNextChunk: boolean; enableAnimation: boolean; tail: boolean };
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+        marginBottom: 16,
+      }}
+    >
+      <Card
+        size="small"
+        style={{
+          maxWidth: "80%",
+          background: msg.role === "user" ? "#e6f7ff" : "#fff",
+        }}
+      >
+        {msg.role === "assistant" ? (
+          msg.content === "" ? (
+            <ThinkingIndicator />
+          ) : isStreaming && !isCompleted ? (
+            <XMarkdown
+              content={msg.content}
+              streaming={streamingConfig}
+              className="markdown-body"
+            />
+          ) : (
+            <XMarkdown content={msg.content} className="markdown-body" />
+          )
+        ) : (
+          <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+            {msg.content}
+          </Paragraph>
+        )}
+      </Card>
+    </div>
+  );
+});
+
 export default function ChatPage() {
   const { message } = App.useApp();
 
@@ -66,6 +115,17 @@ export default function ChatPage() {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   // 记录已完成的消息 ID，用于切换渲染模式
   const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
+
+  // 缓存 streaming 配置，避免每次渲染创建新对象导致 XMarkdown 无限循环
+  // 注意：禁用 enableAnimation 以避免动画触发无限循环
+  const streamingConfig = useMemo(
+    () => ({
+      hasNextChunk: true,
+      enableAnimation: false,  // 禁用动画，避免无限循环
+      tail: true,
+    }),
+    []
+  );
 
   // 标题编辑状态
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
@@ -441,57 +501,15 @@ export default function ChatPage() {
                   </div>
                 ) : (
                   <>
-                    {messages.map((msg) => {
-                      const isStreaming = msg.id === streamingMessageId;
-                      const isCompleted = completedMessageIds.has(msg.id);
-
-                      return (
-                        <div
-                          key={msg.id}
-                          style={{
-                            display: "flex",
-                            justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                            marginBottom: 16,
-                          }}
-                        >
-                          <Card
-                            size="small"
-                            style={{
-                              maxWidth: "80%",
-                              background: msg.role === "user" ? "#e6f7ff" : "#fff",
-                            }}
-                          >
-                            {msg.role === "assistant" ? (
-                              // 内容为空时显示思考中
-                              msg.content === "" ? (
-                                <ThinkingIndicator />
-                              ) : isStreaming && !isCompleted ? (
-                                // Streaming 中：使用 XMarkdown 流式渲染
-                                <XMarkdown
-                                  content={msg.content}
-                                  streaming={{
-                                    hasNextChunk: true,
-                                    enableAnimation: true,
-                                    tail: true,
-                                  }}
-                                  className="markdown-body"
-                                />
-                              ) : (
-                                // 已完成：不传 streaming 配置
-                                <XMarkdown
-                                  content={msg.content}
-                                  className="markdown-body"
-                                />
-                              )
-                            ) : (
-                              <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                                {msg.content}
-                              </Paragraph>
-                            )}
-                          </Card>
-                        </div>
-                      );
-                    })}
+                    {messages.map((msg) => (
+                      <MessageItem
+                        key={msg.id}
+                        msg={msg}
+                        isStreaming={msg.id === streamingMessageId}
+                        isCompleted={completedMessageIds.has(msg.id)}
+                        streamingConfig={streamingConfig}
+                      />
+                    ))}
                   </>
                 )}
               </div>

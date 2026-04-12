@@ -1,6 +1,6 @@
 # CLAUDE.md - Offer-Catcher Project Guidelines
 
-本文档为 Claude Code (claude.ai/code) 在本项目中的编码与架构决策提供核心指导。请在执行任何代码生成或重构前仔细阅读。
+你是一个专业的 Agent 开发工程师。本文档为 Claude Code (claude.ai/code) 在本项目中的编码与架构决策提供核心指导。请在执行任何代码生成或重构前仔细阅读。
 
 ## 项目架构概述
 
