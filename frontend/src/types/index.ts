@@ -185,3 +185,22 @@ export interface ExtractTaskUpdateRequest {
   position?: string;
   questions?: Question[];
 }
+
+// ========== Favorites Types ==========
+
+export interface FavoriteItem {
+  id: string;
+  question_id: string;
+  created_at: string;
+}
+
+export interface FavoriteListResponse {
+  items: FavoriteItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CheckFavoritesResponse {
+  status: Record<string, boolean>;
+}

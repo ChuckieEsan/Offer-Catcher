@@ -169,6 +169,27 @@ class PostgresClient:
                 ON extract_tasks(user_id, updated_at DESC)
             """)
 
+            # 创建收藏表
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS favorites (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL,
+                    question_id VARCHAR(36) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    UNIQUE(user_id, question_id)
+                )
+            """)
+
+            # 创建收藏表索引
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_favorites_user_id
+                ON favorites(user_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_favorites_user_created
+                ON favorites(user_id, created_at DESC)
+            """)
+
             self.conn.commit()
             logger.info("PostgreSQL tables initialized")
 
@@ -661,6 +682,161 @@ class PostgresClient:
             updated_at=row["updated_at"],
             result=result,
         )
+
+    # ========== 收藏操作 ==========
+
+    def add_favorite(
+        self,
+        user_id: str,
+        question_id: str,
+    ) -> str:
+        """添加收藏
+
+        Args:
+            user_id: 用户 ID
+            question_id: 题目 ID（MD5 hash）
+
+        Returns:
+            收藏记录 ID
+
+        Raises:
+            ValueError: 已收藏过该题目
+        """
+        favorite_id = str(uuid.uuid4())
+        now = datetime.now()
+
+        with self.conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO favorites (id, user_id, question_id, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (favorite_id, user_id, question_id, now),
+                )
+                self.conn.commit()
+                logger.info(f"Added favorite: user={user_id}, question={question_id}")
+                return favorite_id
+            except psycopg2.errors.UniqueViolation:
+                self.conn.rollback()
+                raise ValueError(f"题目已收藏: {question_id}")
+
+    def remove_favorite(
+        self,
+        user_id: str,
+        question_id: str,
+    ) -> bool:
+        """取消收藏
+
+        Args:
+            user_id: 用户 ID
+            question_id: 题目 ID
+
+        Returns:
+            是否成功删除
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM favorites
+                WHERE user_id = %s AND question_id = %s
+                """,
+                (user_id, question_id),
+            )
+            self.conn.commit()
+            deleted = cur.rowcount > 0
+            if deleted:
+                logger.info(f"Removed favorite: user={user_id}, question={question_id}")
+            return deleted
+
+    def get_favorites(
+        self,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[dict]:
+        """获取收藏列表
+
+        Args:
+            user_id: 用户 ID
+            limit: 每页数量
+            offset: 偏移量
+
+        Returns:
+            收藏记录列表（包含 question_id 和 created_at）
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, question_id, created_at
+                FROM favorites
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (user_id, limit, offset),
+            )
+            rows = cur.fetchall()
+
+        return [
+            {
+                "id": row["id"],
+                "question_id": row["question_id"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def count_favorites(
+        self,
+        user_id: str,
+    ) -> int:
+        """统计收藏数量
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            收藏总数
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM favorites
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            return cur.fetchone()[0]
+
+    def check_favorites(
+        self,
+        user_id: str,
+        question_ids: List[str],
+    ) -> dict[str, bool]:
+        """批量检查收藏状态
+
+        Args:
+            user_id: 用户 ID
+            question_ids: 题目 ID 列表
+
+        Returns:
+            question_id -> is_favored 的映射
+        """
+        if not question_ids:
+            return {}
+
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT question_id FROM favorites
+                WHERE user_id = %s AND question_id = ANY(%s)
+                """,
+                (user_id, question_ids),
+            )
+            favored_ids = {row[0] for row in cur.fetchall()}
+
+        return {qid: qid in favored_ids for qid in question_ids}
 
     def close(self):
         """关闭连接"""

@@ -24,6 +24,9 @@ import type {
   ExtractTaskSubmitRequest,
   ExtractTaskSubmitResponse,
   ExtractTaskUpdateRequest,
+  FavoriteItem,
+  FavoriteListResponse,
+  CheckFavoritesResponse,
 } from "@/types";
 
 // 默认使用相对路径（通过 Next.js rewrites 代理）
@@ -471,5 +474,40 @@ export async function getBatchAnswers(
   questionIds: string[]
 ): Promise<{ answers: Record<string, string | null> }> {
   const res = await api.post("/questions/batch/answers", { question_ids: questionIds });
+  return res.data;
+}
+
+// ========== Favorites API ==========
+
+export async function addFavorite(questionId: string): Promise<FavoriteItem> {
+  const res = await api.post("/favorites", { question_id: questionId }, {
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function removeFavorite(questionId: string): Promise<void> {
+  await api.delete(`/favorites/${questionId}`, {
+    headers: { "X-User-ID": getUserId() },
+  });
+}
+
+export async function getFavorites(params?: {
+  page?: number;
+  page_size?: number;
+}): Promise<FavoriteListResponse> {
+  const res = await api.get("/favorites", {
+    params,
+    headers: { "X-User-ID": getUserId() },
+  });
+  return res.data;
+}
+
+export async function checkFavorites(
+  questionIds: string[]
+): Promise<CheckFavoritesResponse> {
+  const res = await api.post("/favorites/check", { question_ids: questionIds }, {
+    headers: { "X-User-ID": getUserId() },
+  });
   return res.data;
 }

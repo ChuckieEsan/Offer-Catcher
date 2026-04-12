@@ -25,11 +25,13 @@ import {
   EditOutlined,
   ReloadOutlined,
   EyeOutlined,
+  StarOutlined,
+  StarFilled,
 } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { getQuestions, getCompanyStats, getClusterStats, updateQuestion, deleteQuestion, regenerateAnswer } from "@/lib/api";
+import { getQuestions, getCompanyStats, getClusterStats, updateQuestion, deleteQuestion, regenerateAnswer, addFavorite, removeFavorite, checkFavorites } from "@/lib/api";
 import type { Question, CompanyStats, ClusterStats } from "@/types";
 
 const { Title, Paragraph } = Typography;
@@ -66,6 +68,10 @@ export default function QuestionsPage() {
   const [filterMastery, setFilterMastery] = useState<number | undefined>();
   const [filterCluster, setFilterCluster] = useState<string | undefined>();
   const [searchKeyword, setSearchKeyword] = useState<string | undefined>();
+  const [filterFavorite, setFilterFavorite] = useState<boolean | undefined>();
+
+  // 收藏状态
+  const [favoriteStatus, setFavoriteStatus] = useState<Record<string, boolean>>({});
 
   // 查看 Drawer
   const [viewDrawer, setViewDrawer] = useState<{
@@ -100,7 +106,7 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     loadQuestions();
-  }, [page, pageSize, filterCompany, filterType, filterMastery, filterCluster, searchKeyword]);
+  }, [page, pageSize, filterCompany, filterType, filterMastery, filterCluster, searchKeyword, filterFavorite]);
 
   const loadCompanies = async () => {
     try {
@@ -132,12 +138,50 @@ export default function QuestionsPage() {
         page,
         page_size: pageSize,
       });
-      setQuestions(res.items);
-      setTotal(res.total);
+
+      // 如果有收藏过滤，只显示收藏的题目
+      let filteredItems = res.items;
+      if (filterFavorite) {
+        // 先检查所有题目的收藏状态
+        const questionIds = res.items.map((q) => q.question_id);
+        const { status } = await checkFavorites(questionIds);
+        filteredItems = res.items.filter((q) => status[q.question_id]);
+        setFavoriteStatus(status);
+      } else {
+        // 检查当前页题目的收藏状态
+        if (res.items.length > 0) {
+          const questionIds = res.items.map((q) => q.question_id);
+          const { status } = await checkFavorites(questionIds);
+          setFavoriteStatus(status);
+        }
+      }
+
+      setQuestions(filteredItems);
+      setTotal(filterFavorite ? filteredItems.length : res.total);
     } catch (error) {
       message.error("加载失败");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFavorite = async (questionId: string) => {
+    try {
+      if (favoriteStatus[questionId]) {
+        await removeFavorite(questionId);
+        setFavoriteStatus((prev) => ({ ...prev, [questionId]: false }));
+        message.success("已取消收藏");
+        // 如果在收藏过滤模式下，从列表移除
+        if (filterFavorite) {
+          setQuestions((prev) => prev.filter((q) => q.question_id !== questionId));
+        }
+      } else {
+        await addFavorite(questionId);
+        setFavoriteStatus((prev) => ({ ...prev, [questionId]: true }));
+        message.success("已收藏");
+      }
+    } catch (error) {
+      message.error("操作失败");
     }
   };
 
@@ -306,6 +350,18 @@ export default function QuestionsPage() {
       ),
     },
     {
+      title: "收藏",
+      key: "favorite",
+      width: 60,
+      render: (_: unknown, record: Question) => (
+        <Button
+          type="text"
+          icon={favoriteStatus[record.question_id] ? <StarFilled style={{ color: "#faad14" }} /> : <StarOutlined />}
+          onClick={() => handleToggleFavorite(record.question_id)}
+        />
+      ),
+    },
+    {
       title: "操作",
       key: "actions",
       width: 240,
@@ -405,6 +461,13 @@ export default function QuestionsPage() {
               { value: 2, label: "已掌握" },
             ]}
           />
+          <Button
+            type={filterFavorite ? "primary" : "default"}
+            icon={filterFavorite ? <StarFilled /> : <StarOutlined />}
+            onClick={() => setFilterFavorite(filterFavorite ? undefined : true)}
+          >
+            仅看收藏
+          </Button>
           <Input.Search
             placeholder="搜索题目关键词"
             allowClear

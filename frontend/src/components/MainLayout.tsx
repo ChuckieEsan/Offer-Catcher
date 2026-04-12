@@ -10,6 +10,7 @@ import {
   UnorderedListOutlined,
   DashboardOutlined,
   TeamOutlined,
+  StarOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -46,6 +47,11 @@ const menuItems: MenuProps["items"] = [
     key: "/questions",
     icon: <UnorderedListOutlined />,
     label: "题目管理",
+  },
+  {
+    key: "/favorites",
+    icon: <StarOutlined />,
+    label: "收藏夹",
   },
   {
     key: "/dashboard",
