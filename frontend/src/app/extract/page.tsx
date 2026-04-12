@@ -440,13 +440,44 @@ export default function ExtractPage() {
                 </span>
               ),
               children: (
-                <div>
+                <div
+                  onPaste={(e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+
+                    const newFiles: File[] = [];
+                    const newUrls: string[] = [];
+
+                    for (const item of items) {
+                      if (item.type.startsWith("image/")) {
+                        const file = item.getAsFile();
+                        if (file) {
+                          if (file.size > 10 * 1024 * 1024) {
+                            message.error("图片大小不能超过 10MB");
+                            continue;
+                          }
+                          newFiles.push(file);
+                          newUrls.push(URL.createObjectURL(file));
+                        }
+                      }
+                    }
+
+                    if (newFiles.length > 0) {
+                      setFiles((prev) => [...prev, ...newFiles]);
+                      setPreviewUrls((prev) => [...prev, ...newUrls]);
+                      message.success(`已粘贴 ${newFiles.length} 张图片`);
+                    }
+                  }}
+                  tabIndex={0}
+                  style={{ outline: "none" }}
+                >
                   <Dragger {...uploadProps}>
                     <p className="ant-upload-drag-icon">
                       <InboxOutlined />
                     </p>
                     <p className="ant-upload-text">点击或拖拽图片到此区域</p>
                     <p className="ant-upload-hint">支持多张图片，系统将异步 OCR 识别</p>
+                    <p className="ant-upload-hint">也可直接粘贴剪贴板中的图片 (Ctrl+V)</p>
                   </Dragger>
 
                   {previewUrls.length > 0 && (
