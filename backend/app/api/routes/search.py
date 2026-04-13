@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from app.pipelines.retrieval import get_retrieval_pipeline
-from app.models.schemas import SearchResult
+from app.models import SearchResult
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/search", tags=["search"])

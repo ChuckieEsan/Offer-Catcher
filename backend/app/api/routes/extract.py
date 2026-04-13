@@ -13,7 +13,7 @@ import os
 
 from app.agents.vision_extractor import get_vision_extractor
 from app.pipelines.ingestion import get_ingestion_pipeline
-from app.models.schemas import (
+from app.models import (
     ExtractedInterview,
     QuestionItem,
     ExtractTask,

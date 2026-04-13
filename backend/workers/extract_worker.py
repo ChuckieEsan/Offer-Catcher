@@ -18,7 +18,7 @@ import json
 
 from app.agents.vision_extractor import get_vision_extractor
 from app.db.postgres_client import get_postgres_client, ExtractTaskStatus
-from app.models.schemas import ExtractTaskCreate
+from app.models import ExtractTaskCreate
 from app.utils.logger import logger
 
 

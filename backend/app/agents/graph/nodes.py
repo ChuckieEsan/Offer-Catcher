@@ -200,7 +200,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         MQ 异步答案生成功能在 `app/pipelines/ingestion.py` 中实现。
     """
     from app.db.qdrant_client import get_qdrant_manager
-    from app.models.enums import QuestionType
+    from app.models.question import QuestionType
 
     interview = state.get("extracted_interview")
     if not interview:

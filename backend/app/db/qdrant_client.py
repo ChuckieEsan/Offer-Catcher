@@ -9,7 +9,7 @@ from qdrant_client import QdrantClient, models
 from qdrant_client.models import Distance, PointStruct
 
 from app.config.settings import get_settings
-from app.models.schemas import QdrantQuestionPayload, SearchFilter, SearchResult
+from app.models import QdrantQuestionPayload, SearchFilter, SearchResult
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
 from app.tools.embedding_tool import get_embedding_tool

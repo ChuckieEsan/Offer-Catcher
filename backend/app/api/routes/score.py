@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import List
 
 from app.agents.scorer import get_scorer_agent
-from app.models.schemas import ScoreResult
+from app.models import ScoreResult
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/score", tags=["score"])

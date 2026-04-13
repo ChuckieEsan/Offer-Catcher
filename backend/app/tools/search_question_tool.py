@@ -13,7 +13,7 @@ from langchain_core.tools import tool
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.reranker_tool import get_reranker_tool
 from app.db.qdrant_client import get_qdrant_manager
-from app.models.schemas import SearchResult
+from app.models import SearchResult
 from app.services.cache_service import get_cache_service, CacheKeys
 from app.utils.telemetry import traced, record_vector_query
 from app.utils.logger import logger

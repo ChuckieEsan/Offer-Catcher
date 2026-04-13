@@ -8,8 +8,8 @@ from typing import Optional
 from app.agents.base import BaseAgent
 from app.llm import create_llm
 from app.db.qdrant_client import get_qdrant_manager
-from app.models.enums import MasteryLevel
-from app.models.schemas import ScoreResult
+from app.models.question import MasteryLevel
+from app.models import ScoreResult
 from app.utils.logger import logger
 from app.utils.agent import parse_json_response
 from app.utils.cache import singleton

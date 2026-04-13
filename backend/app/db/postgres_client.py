@@ -8,9 +8,10 @@ from typing import List, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from pgvector.psycopg2 import register_vector
 
 from app.config.settings import get_settings
-from app.models.schemas import (
+from app.models import (
     ExtractTask,
     ExtractTaskCreate,
     ExtractTaskListItem,
@@ -18,44 +19,33 @@ from app.models.schemas import (
     ExtractedInterview,
     QuestionItem,
 )
+from app.models.chat_session import (
+    Conversation,
+    Message,
+    SessionSummary,
+    SessionSummarySearchResult,
+    SessionSummaryRecentResult,
+)
 from app.utils.logger import logger
 from app.utils.cache import singleton
 
 
-class Conversation:
-    """对话数据模型"""
-    def __init__(
-        self,
-        id: str,
-        user_id: str,
-        title: str,
-        created_at: datetime,
-        updated_at: datetime,
-    ):
-        self.id = id
-        self.user_id = user_id
-        self.title = title
-        self.created_at = created_at
-        self.updated_at = updated_at
+def _row_to_session_summary(row: dict) -> SessionSummary:
+    """将 RealDictCursor 返回的 row 转换为 SessionSummary 实例
 
+    pgvector 返回的 embedding 是 numpy.ndarray，需转换为 List[float]。
 
-class Message:
-    """消息数据模型"""
-    def __init__(
-        self,
-        id: str,
-        conversation_id: str,
-        user_id: str,
-        role: str,
-        content: str,
-        created_at: datetime,
-    ):
-        self.id = id
-        self.conversation_id = conversation_id
-        self.user_id = user_id
-        self.role = role
-        self.content = content
-        self.created_at = created_at
+    Args:
+        row: RealDictCursor 返回的字典行
+
+    Returns:
+        SessionSummary 实例
+    """
+    # 复制 row，处理 embedding
+    data = dict(row)
+    if data["embedding"] is not None:
+        data["embedding"] = list(data["embedding"])
+    return SessionSummary(**data)
 
 
 class PostgresClient:
@@ -81,6 +71,8 @@ class PostgresClient:
                 password=self.password,
                 database=self.database,
             )
+            # 注册 pgvector 适配器，自动处理 vector 类型转换
+            register_vector(self._conn)
             logger.info(f"PostgreSQL connected: {self.host}:{self.port}/{self.database}")
         elif self._conn.closed == 0:
             # 检查是否有未完成的事务，如果有则 rollback
@@ -97,6 +89,9 @@ class PostgresClient:
     def init_tables(self):
         """初始化表结构"""
         with self.conn.cursor() as cur:
+            # 创建 pgvector 扩展（如果不存在）
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
             # 创建对话表
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS conversations (
@@ -190,6 +185,37 @@ class PostgresClient:
                 ON favorites(user_id, created_at DESC)
             """)
 
+            # 创建会话摘要表（记忆模块）
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS session_summaries (
+                    conversation_id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL,
+                    summary TEXT NOT NULL,
+                    embedding vector(1024),
+                    session_type VARCHAR(20) DEFAULT 'chat',
+                    metadata JSONB,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 创建会话摘要表索引
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_id
+                ON session_summaries(user_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_created
+                ON session_summaries(user_id, created_at DESC)
+            """)
+            # 向量索引（使用 pgvector ivfflat）
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_embedding
+                ON session_summaries
+                USING ivfflat (embedding vector_cosine_ops)
+                WITH (lists = 100)
+            """)
+
             self.conn.commit()
             logger.info("PostgreSQL tables initialized")
 
@@ -242,16 +268,7 @@ class PostgresClient:
             )
             rows = cur.fetchall()
 
-        return [
-            Conversation(
-                id=row["id"],
-                user_id=row["user_id"],
-                title=row["title"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
-            for row in rows
-        ]
+        return [Conversation(**row) for row in rows]
 
     def get_conversation(
         self,
@@ -273,13 +290,7 @@ class PostgresClient:
         if not row:
             return None
 
-        return Conversation(
-            id=row["id"],
-            user_id=row["user_id"],
-            title=row["title"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+        return Conversation(**row)
 
     def update_conversation_title(
         self,
@@ -378,17 +389,7 @@ class PostgresClient:
             )
             rows = cur.fetchall()
 
-        return [
-            Message(
-                id=row["id"],
-                conversation_id=row["conversation_id"],
-                user_id=row["user_id"],
-                role=row["role"],
-                content=row["content"],
-                created_at=row["created_at"],
-            )
-            for row in rows
-        ]
+        return [Message(**row) for row in rows]
 
     # ========== 面经解析任务操作 ==========
 
@@ -838,6 +839,257 @@ class PostgresClient:
 
         return {qid: qid in favored_ids for qid in question_ids}
 
+    # ========== 会话摘要操作（记忆模块） ==========
+
+    def create_session_summary(
+        self,
+        conversation_id: str,
+        user_id: str,
+        summary: str,
+        embedding: Optional[List[float]],
+        session_type: str = "chat",
+        metadata: Optional[dict] = None,
+    ) -> SessionSummary:
+        """创建会话摘要
+
+        Args:
+            conversation_id: 会话 ID
+            user_id: 用户 ID
+            summary: 会话摘要内容
+            embedding: 语义向量（1024 维）
+            session_type: 会话类型（chat / interview）
+            metadata: 元数据（面试得分、公司等）
+
+        Returns:
+            SessionSummary 实例
+        """
+        now = datetime.now()
+
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO session_summaries
+                (conversation_id, user_id, summary, embedding, session_type, metadata, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING conversation_id, user_id, summary, embedding, session_type, metadata, created_at
+                """,
+                (
+                    conversation_id,
+                    user_id,
+                    summary,
+                    embedding,
+                    session_type,
+                    json.dumps(metadata) if metadata else None,
+                    now,
+                ),
+            )
+            row = cur.fetchone()
+            self.conn.commit()
+
+        logger.info(
+            f"Session summary created: conversation_id={conversation_id}, "
+            f"user_id={user_id}, session_type={session_type}"
+        )
+
+        return _row_to_session_summary(row)
+
+    def get_session_summary(
+        self,
+        conversation_id: str,
+        user_id: str,
+    ) -> Optional[SessionSummary]:
+        """获取会话摘要
+
+        Args:
+            conversation_id: 会话 ID
+            user_id: 用户 ID
+
+        Returns:
+            SessionSummary 实例或 None
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT conversation_id, user_id, summary, embedding, session_type, metadata, created_at
+                FROM session_summaries
+                WHERE conversation_id = %s AND user_id = %s
+                """,
+                (conversation_id, user_id),
+            )
+            row = cur.fetchone()
+
+        if not row:
+            return None
+
+        return _row_to_session_summary(row)
+
+    def search_session_summaries(
+        self,
+        user_id: str,
+        query_embedding: List[float],
+        top_k: int = 5,
+    ) -> List[SessionSummarySearchResult]:
+        """语义检索会话摘要
+
+        Args:
+            user_id: 用户 ID
+            query_embedding: 查询向量
+            top_k: 返回数量
+
+        Returns:
+            检索结果列表，包含 conversation_id, summary, similarity
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT conversation_id, summary, session_type, metadata,
+                       1 - (embedding <=> %s::vector) as similarity
+                FROM session_summaries
+                WHERE user_id = %s
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (query_embedding, user_id, query_embedding, top_k),
+            )
+            rows = cur.fetchall()
+
+        logger.debug(
+            f"Session summaries searched: user_id={user_id}, "
+            f"found={len(rows)}, top_k={top_k}"
+        )
+
+        return [
+            SessionSummarySearchResult(
+                conversation_id=row["conversation_id"],
+                summary=row["summary"],
+                session_type=row["session_type"],
+                metadata=row["metadata"] if row["metadata"] else None,
+                similarity=float(row["similarity"]) if row["similarity"] else 0.0,
+            )
+            for row in rows
+        ]
+
+    def get_recent_session_summaries(
+        self,
+        user_id: str,
+        limit: int = 5,
+    ) -> List[SessionSummaryRecentResult]:
+        """获取最近 N 条会话摘要（用于 MEMORY.md 概要）
+
+        Args:
+            user_id: 用户 ID
+            limit: 返回数量
+
+        Returns:
+            会话摘要列表（包含 title）
+        """
+        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT ss.conversation_id, ss.summary, ss.session_type, ss.metadata,
+                       c.title, c.created_at
+                FROM session_summaries ss
+                JOIN conversations c ON ss.conversation_id = c.id
+                WHERE ss.user_id = %s
+                ORDER BY c.created_at DESC
+                LIMIT %s
+                """,
+                (user_id, limit),
+            )
+            rows = cur.fetchall()
+
+        return [
+            SessionSummaryRecentResult(
+                conversation_id=row["conversation_id"],
+                summary=row["summary"],
+                session_type=row["session_type"],
+                metadata=row["metadata"] if row["metadata"] else None,
+                title=row["title"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def update_session_summary(
+        self,
+        conversation_id: str,
+        user_id: str,
+        summary: str,
+        embedding: Optional[List[float]] = None,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """更新会话摘要
+
+        Args:
+            conversation_id: 会话 ID
+            user_id: 用户 ID
+            summary: 新的摘要内容
+            embedding: 新的向量（可选）
+            metadata: 新的元数据（可选）
+
+        Returns:
+            是否成功更新
+        """
+        with self.conn.cursor() as cur:
+            if embedding is not None:
+                cur.execute(
+                    """
+                    UPDATE session_summaries
+                    SET summary = %s, embedding = %s, metadata = %s
+                    WHERE conversation_id = %s AND user_id = %s
+                    """,
+                    (
+                        summary,
+                        embedding,
+                        json.dumps(metadata) if metadata else None,
+                        conversation_id,
+                        user_id,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE session_summaries
+                    SET summary = %s, metadata = %s
+                    WHERE conversation_id = %s AND user_id = %s
+                    """,
+                    (
+                        summary,
+                        json.dumps(metadata) if metadata else None,
+                        conversation_id,
+                        user_id,
+                    ),
+                )
+            self.conn.commit()
+            updated = cur.rowcount > 0
+
+        if updated:
+            logger.info(f"Session summary updated: conversation_id={conversation_id}")
+
+        return updated
+
+    def count_session_summaries(
+        self,
+        user_id: str,
+    ) -> int:
+        """统计用户会话摘要数量
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            摘要总数
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) FROM session_summaries
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            return cur.fetchone()[0]
+
     def close(self):
         """关闭连接"""
         if self._conn and not self._conn.closed:
@@ -857,6 +1109,7 @@ __all__ = [
     "PostgresClient",
     "Conversation",
     "Message",
+    "SessionSummary",
     "get_postgres_client",
     # ExtractTask
     "ExtractTask",

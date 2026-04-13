@@ -165,6 +165,28 @@ class Settings(BaseSettings):
         default=86400,  # 24 小时
     )
 
+    # 记忆模块配置
+    memory_retrieval_min_length: int = Field(
+        description="触发记忆检索的最小消息长度",
+        default=10,
+    )
+    memory_retrieval_top_k: int = Field(
+        description="每次记忆检索返回的最大条数",
+        default=5,
+    )
+    memory_retrieval_lock_timeout: int = Field(
+        description="记忆检索锁超时时间（秒）",
+        default=60,
+    )
+    memory_context_max_size: int = Field(
+        description="记忆上下文最大窗口大小（字节）",
+        default=20 * 1024,  # 20kb
+    )
+    memory_lock_timeout: int = Field(
+        description="记忆更新锁超时时间（秒）",
+        default=30,
+    )
+
     # PostgreSQL 配置（历史对话）
     postgres_host: str = Field(
         description="PostgreSQL 服务地址",

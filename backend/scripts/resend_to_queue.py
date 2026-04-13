@@ -13,9 +13,9 @@ import asyncio
 
 from app.db.qdrant_client import get_qdrant_manager
 from app.mq.producer import get_producer
-from app.models.schemas import MQTaskMessage
+from app.models import MQTaskMessage
 from app.utils.logger import logger
-from app.models.schemas import QuestionType
+from app.models import QuestionType
 
 async def resend_unanswered_questions(dry_run: bool = True):
     """将没有答案的题目重新加入队列

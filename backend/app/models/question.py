@@ -1,11 +1,43 @@
-"""核心数据模型定义模块"""
+"""面经题目相关数据模型
+
+包含题目、面试经验、向量检索、聚类等数据结构。
+"""
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import IntentType, MasteryLevel, QuestionType
+
+class QuestionType(str, Enum):
+    """题目类型枚举
+
+    - knowledge: 客观基础题（八股文）
+    - project: 项目深挖题（针对个人简历）
+    - behavioral: 行为题（软技能）
+    - scenario: 场景题（和企业业务场景相关的题目）
+    - algorithm: 算法题（Leetcode 的手撕题目，或者是面试官出的算法题）
+    """
+
+    KNOWLEDGE = "knowledge"
+    PROJECT = "project"
+    BEHAVIORAL = "behavioral"
+    SCENARIO = "scenario"
+    ALGORITHM = "algorithm"
+
+
+class MasteryLevel(int, Enum):
+    """熟练度等级枚举
+
+    - LEVEL_0: 完全不会/未复习
+    - LEVEL_1: 比较熟悉
+    - LEVEL_2: 已掌握
+    """
+
+    LEVEL_0 = 0
+    LEVEL_1 = 1
+    LEVEL_2 = 2
 
 
 class QuestionItem(BaseModel):
@@ -59,71 +91,6 @@ class ExtractedInterview(BaseModel):
     company: str = Field(default="", description="公司名称")
     position: str = Field(default="", description="岗位名称")
     questions: list[QuestionItem] = Field(default_factory=list, description="题目列表")
-
-
-class ExtractTaskStatus:
-    """面经解析任务状态枚举"""
-    PENDING = "pending"         # 待处理
-    PROCESSING = "processing"   # 处理中
-    COMPLETED = "completed"     # 已完成
-    FAILED = "failed"           # 失败
-    CONFIRMED = "confirmed"     # 已确认入库
-
-
-class ExtractTask(BaseModel):
-    """面经解析任务模型
-
-    用于异步解析面经图片/文本，支持用户查看和编辑解析结果。
-    """
-
-    task_id: str = Field(description="任务 ID (UUID)")
-    user_id: str = Field(description="用户 ID")
-
-    # 输入
-    source_type: str = Field(description="来源类型: image / text")
-    source_content: Optional[str] = Field(default=None, description="文本内容（text 类型）")
-    source_images_gz: Optional[List[str]] = Field(
-        default=None,
-        description="图片 Base64 列表（image 类型）"
-    )
-
-    # 状态
-    status: str = Field(default=ExtractTaskStatus.PENDING, description="任务状态")
-    error_message: Optional[str] = Field(default=None, description="错误信息")
-    created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
-    updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
-
-    # 解析结果（可编辑）
-    result: Optional[ExtractedInterview] = Field(default=None, description="解析结果")
-
-
-class ExtractTaskCreate(BaseModel):
-    """创建解析任务请求"""
-
-    source_type: str = Field(description="来源类型: image / text")
-    source_content: Optional[str] = Field(default=None, description="文本内容")
-    source_images: Optional[List[str]] = Field(default=None, description="图片 Base64 列表")
-
-
-class ExtractTaskUpdate(BaseModel):
-    """更新解析结果请求"""
-
-    company: Optional[str] = None
-    position: Optional[str] = None
-    questions: Optional[List[QuestionItem]] = None
-
-
-class ExtractTaskListItem(BaseModel):
-    """任务列表项（精简版）"""
-
-    task_id: str
-    status: str
-    source_type: str
-    company: str = ""
-    position: str = ""
-    question_count: int = 0
-    created_at: datetime
-    updated_at: datetime
 
 
 class QdrantQuestionPayload(BaseModel):
@@ -215,46 +182,6 @@ class MQTaskMessage(BaseModel):
     )
 
 
-class RouterResult(BaseModel):
-    """路由结果模型
-
-    Router Agent 输出的结构化结果，包含意图分类和参数提取。
-    """
-
-    intent: IntentType = Field(description="意图类型: query/ingest/practice/stats")
-    params: dict[str, Any] = Field(
-        default_factory=dict,
-        description="提取的参数，包含 company, position, question 等",
-    )
-    confidence: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="置信度"
-    )
-    original_text: str = Field(description="原始用户输入")
-
-
-class ScoreResult(BaseModel):
-    """打分结果模型
-
-    Scorer Agent 输出的结构化结果，包含评分和反馈。
-    """
-
-    question_id: str = Field(description="题目唯一标识")
-    question_text: str = Field(description="题目文本")
-    standard_answer: Optional[str] = Field(
-        default=None, description="标准答案"
-    )
-    user_answer: str = Field(description="用户提交的答案")
-    score: int = Field(ge=0, le=100, description="评分 0-100")
-    mastery_level: MasteryLevel = Field(description="熟练度等级")
-    strengths: list[str] = Field(
-        default_factory=list, description="答案优点"
-    )
-    improvements: list[str] = Field(
-        default_factory=list, description="改进建议"
-    )
-    feedback: str = Field(description="综合反馈")
-
-
 class Cluster(BaseModel):
     """考点簇模型
 
@@ -273,3 +200,16 @@ class Cluster(BaseModel):
     frequency: int = Field(default=0, description="该簇题目总数")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+
+__all__ = [
+    "QuestionType",
+    "MasteryLevel",
+    "QuestionItem",
+    "ExtractedInterview",
+    "QdrantQuestionPayload",
+    "SearchFilter",
+    "SearchResult",
+    "MQTaskMessage",
+    "Cluster",
+]

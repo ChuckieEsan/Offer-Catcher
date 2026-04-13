@@ -7,7 +7,7 @@
 
 import pytest
 
-from app.models.schemas import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
+from app.models import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 from app.pipelines.ingestion import get_ingestion_pipeline, IngestionResult
 from app.pipelines.retrieval import get_retrieval_pipeline

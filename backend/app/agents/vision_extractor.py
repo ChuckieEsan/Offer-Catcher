@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.agents.base import BaseAgent
-from app.models.schemas import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
+from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 from app.utils.logger import logger
 from app.utils.cache import singleton

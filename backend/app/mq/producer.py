@@ -11,7 +11,7 @@ from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel
 from aio_pika import Message, DeliveryMode
 
 from app.config.settings import get_settings
-from app.models.schemas import MQTaskMessage
+from app.models import MQTaskMessage
 from app.utils.logger import logger
 
 

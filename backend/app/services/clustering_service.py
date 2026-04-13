@@ -14,7 +14,7 @@ from sklearn.preprocessing import normalize
 from app.db.qdrant_client import get_qdrant_manager
 from app.db.graph_client import get_graph_client
 from app.tools.embedding_tool import get_embedding_tool
-from app.models.schemas import QdrantQuestionPayload, Cluster
+from app.models import QdrantQuestionPayload, Cluster
 from app.utils.cache import singleton
 from app.utils.logger import logger
 

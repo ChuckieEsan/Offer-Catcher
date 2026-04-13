@@ -3,7 +3,7 @@
 import pytest
 
 from app.agents.scorer import ScorerAgent, get_scorer_agent, calculate_new_level
-from app.models.enums import MasteryLevel
+from app.models.question import MasteryLevel
 
 
 class TestCalculateNewLevel:

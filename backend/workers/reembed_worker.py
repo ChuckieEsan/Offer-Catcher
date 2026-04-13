@@ -78,7 +78,7 @@ async def reembed_all():
                 vector = embedding_tool.embed_text(context)
 
                 # 构建 payload
-                from app.models.schemas import QdrantQuestionPayload
+                from app.models import QdrantQuestionPayload
                 payload = QdrantQuestionPayload(
                     question_id=question.question_id,
                     question_text=question.question_text,

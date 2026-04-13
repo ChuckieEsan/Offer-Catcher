@@ -24,7 +24,7 @@ from app.agents.graph.state import AgentState
 from app.agents.graph import nodes, edges
 from app.db.checkpointer import get_checkpointer
 from app.utils.logger import logger
-from app.models.schemas import ExtractedInterview
+from app.models import ExtractedInterview
 
 
 def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> CompiledStateGraph:

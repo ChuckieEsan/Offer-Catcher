@@ -5,7 +5,7 @@
 
 import pytest
 
-from app.models.schemas import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
+from app.models import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
 
 

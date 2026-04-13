@@ -11,7 +11,7 @@ import pytest
 
 from app.config.settings import get_settings
 from app.db.qdrant_client import QdrantManager
-from app.models.schemas import QdrantQuestionPayload, SearchFilter
+from app.models import QdrantQuestionPayload, SearchFilter
 from app.utils.hasher import generate_question_id
 
 # 测试专用的 collection 名称

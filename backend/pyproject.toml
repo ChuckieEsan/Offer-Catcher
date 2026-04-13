@@ -44,6 +44,7 @@ dependencies = [
     "websockets>=16.0",
     "sentencepiece>=0.2.1",
     "langchain-deepseek>=1.0.1",
+    "pgvector>=0.4.0",
 ]
 
 [dependency-groups]
