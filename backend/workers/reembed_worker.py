@@ -9,6 +9,7 @@
 import asyncio
 from app.pipelines.ingestion import get_ingestion_pipeline
 from app.db.qdrant_client import get_qdrant_manager
+from app.models import QdrantQuestionPayload
 from app.tools.embedding_tool import get_embedding_tool
 from app.utils.logger import logger
 
@@ -78,7 +79,6 @@ async def reembed_all():
                 vector = embedding_tool.embed_text(context)
 
                 # 构建 payload
-                from app.models import QdrantQuestionPayload
                 payload = QdrantQuestionPayload(
                     question_id=question.question_id,
                     question_text=question.question_text,
