@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from app.db.qdrant_client import get_qdrant_manager
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.reranker_tool import get_reranker_tool
-from app.memory.long_term import get_long_term_memory
 from app.utils.logger import logger
 
 
@@ -44,8 +43,8 @@ def get_next_question(
 ) -> str:
     """获取下一道面试题。
 
-    基于用户画像和学习进度，智能推荐下一道面试题。
-    优先选择用户未掌握的知识点。
+    基于上下文智能推荐下一道面试题。
+    优先选择用户未掌握的知识点（通过 mastery_level 判断）。
 
     Args:
         company: 公司名称（可选）
@@ -83,24 +82,17 @@ def get_next_question(
     candidate_texts = [c.question_text for c in candidates]
     ranked_indices = reranker_tool.rerank(query_context, candidate_texts, top_k=5)
 
-    # 获取用户学习进度，优先推荐未掌握的题目
-    if user_id:
-        memory = get_long_term_memory()
-        progress = memory.get_progress(user_id)
-        mastered_entities = set(progress.mastered_entities) if progress else set()
+    # 优先推荐未掌握的题目（通过 mastery_level 判断）
+    # mastery_level 存储在 Qdrant payload 中，而非记忆模块
+    def score_question(idx_score):
+        idx, _ = idx_score
+        candidate = candidates[idx]
+        # LEVEL_0 表示未掌握，提高优先级
+        mastery = getattr(candidate, 'mastery_level', None)
+        mastery_priority = 0 if mastery == 'LEVEL_0' else 1 if mastery == 'LEVEL_1' else 2
+        return (mastery_priority, idx_score[1])
 
-        # 重排序：优先选择未掌握知识点的题目
-        def score_question(idx_score):
-            idx, _ = idx_score
-            candidate = candidates[idx]
-            # 如果题目涉及未掌握的知识点，提高优先级
-            unmastered_count = sum(
-                1 for e in candidate.core_entities
-                if e not in mastered_entities
-            )
-            return (unmastered_count, idx_score[1])
-
-        ranked_indices = sorted(ranked_indices, key=score_question, reverse=True)
+    ranked_indices = sorted(ranked_indices, key=score_question, reverse=True)
 
     # 返回最佳题目
     best_idx, score = ranked_indices[0]

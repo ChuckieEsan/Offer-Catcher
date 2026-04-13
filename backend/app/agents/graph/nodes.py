@@ -10,7 +10,6 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
 from app.agents.vision_extractor import get_vision_extractor
-from app.memory import get_user_context_prompt
 from app.utils.logger import logger
 from app.utils.telemetry import traced_async
 from app.llm import get_llm
@@ -20,13 +19,14 @@ from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph
 from app.tools.memory_tools import (
-    get_user_memory,
-    save_user_preferences,
-    save_user_profile,
-    update_learning_progress,
-    clear_user_memory,
+    load_memory_reference,
+    search_session_history,
+    load_skill,
     UserContext,
 )
+from app.memory.io import read_memory
+from app.memory.init import ensure_user_memory
+from app.memory.store import get_memory_store
 
 
 # ==================== State Gate Node ====================
@@ -249,13 +249,11 @@ def _get_react_agent() -> CompiledStateGraph:
     # 基础工具
     tools = [search_questions, search_web, query_graph]
 
-    # 长期记忆工具
+    # 记忆工具（新版）
     tools.extend([
-        get_user_memory,
-        save_user_preferences,
-        save_user_profile,
-        update_learning_progress,
-        clear_user_memory,
+        load_memory_reference,
+        search_session_history,
+        load_skill,
     ])
 
     prompt = load_prompt_template("react_agent.md")
@@ -330,6 +328,10 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
     执行 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
 
+    记忆注入：
+    - MEMORY.md 始终加载，注入到 System Prompt
+    - 确保用户记忆在首次对话时自动初始化
+
     Note:
         使用 ainvoke 而不是 astream_events，让外层的 astream_events 自动捕获 token 流。
         LangGraph 会递归地捕获所有子图的事件，包括 LLM 的 token 流和 reasoning_content。
@@ -344,19 +346,8 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     session_context = state.get("session_context", {})
     user_id = session_context.get("user_id") or "default_user"
 
-    # 注入长期记忆上下文到 System Prompt
-    try:
-        user_context_prompt = get_user_context_prompt(user_id)
-        # 找到 system message 并追加上下文
-        for i, msg in enumerate(messages):
-            if getattr(msg, "type", "") == "system":
-                original_content = getattr(msg, "content", "")
-                if user_context_prompt not in original_content:
-                    messages[i] = msg.__class__(content=original_content + "\n\n" + user_context_prompt)
-                break
-        logger.debug(f"Injected user context for user {user_id}")
-    except Exception as e:
-        logger.warning(f"Failed to inject user context: {e}")
+    # 注入用户记忆上下文（MEMORY.md）
+    _inject_memory_context(user_id, messages)
 
     logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 
@@ -390,6 +381,51 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}", exc_info=True)
         return {"response_to_user": f"查询失败：{e}"}
+
+
+def _inject_memory_context(user_id: str, messages: list[BaseMessage]) -> str:
+    """注入用户记忆上下文到 System Prompt
+
+    Args:
+        user_id: 用户 ID
+        messages: 消息列表（会被修改）
+
+    Returns:
+        注入的记忆内容（用于日志记录）
+    """
+    try:
+        memory_store = get_memory_store()
+        if not memory_store.initialized:
+            logger.warning("MemoryStore not initialized, skipping memory injection")
+            return ""
+
+        # 确保用户记忆存在（首次对话时自动初始化）
+        ensure_user_memory(user_id)
+
+        # 读取 MEMORY.md
+        memory_content = read_memory(user_id)
+        if not memory_content:
+            logger.debug(f"No MEMORY.md found for user {user_id}")
+            return ""
+
+        # 构建记忆上下文
+        memory_context = f"\n\n<用户记忆>\n{memory_content}\n</用户记忆>"
+
+        # 找到 system message 并追加记忆上下文
+        for i, msg in enumerate(messages):
+            if getattr(msg, "type", "") == "system":
+                original_content = getattr(msg, "content", "")
+                if memory_context not in original_content:
+                    # 创建新的 SystemMessage，避免修改原对象
+                    messages[i] = SystemMessage(content=original_content + memory_context)
+                    logger.info(f"Injected MEMORY.md for user {user_id} ({len(memory_content)} chars)")
+                break
+
+        return memory_content
+
+    except Exception as e:
+        logger.warning(f"Failed to inject memory context: {e}")
+        return ""
 
 
 __all__ = [

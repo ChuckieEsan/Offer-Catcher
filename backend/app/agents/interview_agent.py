@@ -14,7 +14,6 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from app.llm import get_llm
 from app.db.qdrant_client import get_qdrant_manager
-from app.memory.long_term import get_long_term_memory
 from app.models.interview_session import (
     InterviewSession,
     InterviewQuestion,
@@ -86,7 +85,6 @@ class InterviewManager:
     def __init__(self):
         self._sessions: dict[str, InterviewSession] = {}
         self._qdrant = get_qdrant_manager()
-        self._memory = get_long_term_memory()
         self._llm = get_llm("deepseek", "chat")
 
     def _get_system_prompt(self, session: InterviewSession) -> str:

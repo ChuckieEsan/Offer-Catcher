@@ -13,19 +13,19 @@ Tool 设计：
 - session_summaries 支持语义检索
 """
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import InjectedToolArg
 from pydantic import BaseModel, Field
 
+from app.db.postgres_client import get_postgres_client
 from app.memory.io import (
     read_memory_reference,
     memory_exists,
 )
 from app.memory.init import ensure_user_memory
 from app.memory.store import get_memory_store
-from app.db.postgres_client import get_postgres_client
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.context import UserContext
 from app.utils.logger import logger
