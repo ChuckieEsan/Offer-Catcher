@@ -7,11 +7,9 @@ from app.tools.embedding_tool import EmbeddingTool, get_embedding_tool
 from app.tools.reranker_tool import RerankerTool, get_reranker_tool
 from app.tools.web_search_tool import WebSearchTool, get_web_search_tool, WebSearchResult
 from app.tools.memory_tools import (
-    get_user_memory,
-    save_user_preferences,
-    save_user_profile,
-    update_learning_progress,
-    clear_user_memory,
+    load_memory_reference,
+    search_session_history,
+    load_skill,
     UserContext,
 )
 
@@ -27,10 +25,8 @@ __all__ = [
     "get_web_search_tool",
     "WebSearchResult",
     # Memory Tools
-    "get_user_memory",
-    "save_user_preferences",
-    "save_user_profile",
-    "update_learning_progress",
-    "clear_user_memory",
+    "load_memory_reference",
+    "search_session_history",
+    "load_skill",
     "UserContext",
 ]

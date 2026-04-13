@@ -163,16 +163,16 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Neo4j Graph Client init failed: {e}")
 
-    # 16. Long-term Memory
+    # 16. Memory Store (新版记忆模块)
     try:
-        from app.memory import get_long_term_memory
-        memory = get_long_term_memory()
-        if memory.initialized:
-            logger.info("[Warmup] Long-term memory initialized")
+        from app.memory.store import get_memory_store
+        memory_store = get_memory_store()
+        if memory_store.initialized:
+            logger.info("[Warmup] Memory Store initialized")
         else:
-            logger.warning("[Warmup] Long-term memory not fully initialized (using fallback)")
+            logger.warning(f"[Warmup] Memory Store not initialized: {memory_store.init_error}")
     except Exception as e:
-        logger.warning(f"[Warmup] Long-term memory init failed: {e}")
+        logger.warning(f"[Warmup] Memory Store init failed: {e}")
 
     logger.info("Warmup completed!")
 

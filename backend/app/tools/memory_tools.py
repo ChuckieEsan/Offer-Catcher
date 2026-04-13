@@ -1,313 +1,199 @@
-"""长期记忆读写工具
+"""记忆模块 Tool
 
-提供用户画像、偏好设置、学习进度的读写能力。
+提供用户记忆的加载和语义检索功能。
 使用 ToolRuntime 注入 user_id，支持多用户场景。
 
-工具设计：
-- get_user_memory: 聚合读取工具，一次性返回所有用户信息
-- save_*: 独立写入工具，按需调用
+Tool 设计：
+- load_memory_reference: 加载 preferences/behaviors 详情
+- search_session_history: 语义检索会话历史
+
+遵循设计方案：
+- MEMORY.md 始终加载（注入到 System Prompt）
+- references 按需查询（通过 Tool）
+- session_summaries 支持语义检索
 """
 
-from typing import Optional, Annotated, Any
+from typing import Annotated, Optional
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import InjectedToolArg
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from app.memory.long_term import (
-    get_long_term_memory,
-    UserProfile,
-    UserPreferences,
-    LearningProgress,
+from app.memory.io import (
+    read_memory_reference,
+    memory_exists,
 )
+from app.memory.init import ensure_user_memory
+from app.memory.store import get_memory_store
+from app.db.postgres_client import get_postgres_client
+from app.tools.embedding_tool import get_embedding_tool
 from app.tools.context import UserContext
-
-
-def _parse_list_field(value: Any) -> list[str]:
-    """解析列表字段，支持 JSON 字符串格式
-
-    某些 LLM（如通义千问）会将列表参数序列化为 JSON 字符串，
-    此函数自动处理这种情况。
-    """
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    if isinstance(value, str):
-        import json
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return [str(item) for item in parsed]
-            return [value]
-        except json.JSONDecodeError:
-            return [value]
-    return [str(value)]
+from app.utils.logger import logger
 
 
 # ==================== 输入模型 ====================
 
-class SaveUserProfileInput(BaseModel):
-    """save_user_profile 工具的输入参数"""
-    preferred_companies: Optional[list[str]] = Field(default=None, description="目标公司列表")
-    target_position: Optional[str] = Field(default=None, description="目标岗位")
-    tech_stack: Optional[list[str]] = Field(default=None, description="技术栈列表")
-    experience_years: Optional[int] = Field(default=None, description="工作年限")
-
-    @field_validator('preferred_companies', 'tech_stack', mode='before')
-    @classmethod
-    def parse_list_fields(cls, v: Any) -> Optional[list[str]]:
-        """自动解析 JSON 字符串格式的列表"""
-        if v is None:
-            return None
-        return _parse_list_field(v)
+class LoadMemoryReferenceInput(BaseModel):
+    """load_memory_reference 工具的输入参数"""
+    reference_name: str = Field(
+        description="Reference 名称：'preferences' 或 'behaviors'"
+    )
 
 
-class SaveUserPreferencesInput(BaseModel):
-    """save_user_preferences 工具的输入参数"""
-    language: Optional[str] = Field(default=None, description="语言偏好：zh/en")
-    difficulty: Optional[str] = Field(default=None, description="难度偏好：easy/medium/hard")
-    practice_batch_size: Optional[int] = Field(default=None, description="单次练习题目数量")
-    show_answer_immediately: Optional[bool] = Field(default=None, description="是否立即显示答案")
+class SearchSessionHistoryInput(BaseModel):
+    """search_session_history 工具的输入参数"""
+    query: str = Field(
+        description="查询文本，用于语义检索相关会话"
+    )
+    top_k: int = Field(
+        default=3,
+        description="返回的会话数量，默认 3"
+    )
 
 
-class UpdateLearningProgressInput(BaseModel):
-    """update_learning_progress 工具的输入参数"""
-    mastered_entities: Optional[list[str]] = Field(default=None, description="新掌握的知识点")
-    completed_question_ids: Optional[list[str]] = Field(default=None, description="已完成的题目 ID")
+# ==================== Tool 实现 ====================
 
-    @field_validator('mastered_entities', 'completed_question_ids', mode='before')
-    @classmethod
-    def parse_list_fields(cls, v: Any) -> Optional[list[str]]:
-        """自动解析 JSON 字符串格式的列表"""
-        if v is None:
-            return None
-        return _parse_list_field(v)
-
-
-# ==================== 聚合读取工具 ====================
-
-@tool
-def get_user_memory(
+@tool(args_schema=LoadMemoryReferenceInput)
+def load_memory_reference(
+    reference_name: str,
     runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
-    """获取用户的完整记忆信息。当用户询问'你对我了解多少'或'我的信息是什么'时使用。
+    """加载用户记忆的详细信息。
 
-    Returns:
-        一次性返回用户画像、偏好设置和学习进度的完整信息。
-    """
-    user_id = runtime.context.user_id
-    memory = get_long_term_memory()
-
-    lines = ["=== 用户记忆 ==="]
-
-    # 1. 用户画像
-    profile = memory.get_profile(user_id)
-    lines.append("\n【画像信息】")
-    if profile and (profile.preferred_companies or profile.target_position or profile.tech_stack):
-        if profile.preferred_companies:
-            lines.append(f"- 目标公司：{', '.join(profile.preferred_companies)}")
-        if profile.target_position:
-            lines.append(f"- 目标岗位：{profile.target_position}")
-        if profile.tech_stack:
-            lines.append(f"- 技术栈：{', '.join(profile.tech_stack)}")
-        if profile.experience_years:
-            lines.append(f"- 工作年限：{profile.experience_years} 年")
-    else:
-        lines.append("- 暂无画像信息")
-
-    # 2. 偏好设置
-    prefs = memory.get_preferences(user_id)
-    lines.append("\n【偏好设置】")
-    if prefs:
-        lang = "中文" if prefs.language == "zh" else "English"
-        lines.append(f"- 语言：{lang}")
-        lines.append(f"- 难度：{prefs.difficulty}")
-        lines.append(f"- 单次练习：{prefs.practice_batch_size} 道题")
-        lines.append(f"- 立即显示答案：{'是' if prefs.show_answer_immediately else '否'}")
-    else:
-        lines.append("- 暂无偏好设置")
-
-    # 3. 学习进度
-    progress = memory.get_progress(user_id)
-    lines.append("\n【学习进度】")
-    if progress:
-        lines.append(f"- 已掌握知识点：{len(progress.mastered_entities)} 个")
-        lines.append(f"- 待复习题目：{len(progress.pending_review_question_ids)} 道")
-        lines.append(f"- 累计答题：{progress.total_questions_answered} 道")
-    else:
-        lines.append("- 暂无学习进度记录")
-
-    return "\n".join(lines)
-
-
-# ==================== 写入工具 ====================
-
-@tool(args_schema=SaveUserPreferencesInput)
-def save_user_preferences(
-    language: Optional[str] = None,
-    difficulty: Optional[str] = None,
-    practice_batch_size: Optional[int] = None,
-    show_answer_immediately: Optional[bool] = None,
-    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
-) -> str:
-    """保存用户偏好设置。当用户明确说'记住我喜欢...'或'设置难度为...'时使用。
+    当 MEMORY.md 中的概要信息不足以回答问题时，使用此工具查询详情。
 
     Args:
-        language: 语言偏好，zh 表示中文，en 表示英文
-        difficulty: 难度偏好，easy/medium/hard
-        practice_batch_size: 单次练习题目数量
-        show_answer_immediately: 是否立即显示答案
+        reference_name: Reference 名称，可选值：
+            - 'preferences': 用户偏好详情（响应风格、话题偏好、反馈历史）
+            - 'behaviors': 用户行为模式详情（提问序列、关注焦点、追问风格）
 
     Returns:
-        操作结果消息
+        Reference 文件的完整内容（Markdown 格式）
     """
     user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
 
-        existing = memory.get_preferences(user_id)
+    # 确保 memory 存在
+    if not memory_exists(user_id):
+        store = get_memory_store()
+        if store.initialized:
+            ensure_user_memory(user_id)
 
-        prefs = UserPreferences(
-            language=language or (existing.language if existing else "zh"),
-            difficulty=difficulty or (existing.difficulty if existing else "medium"),
-            practice_batch_size=practice_batch_size or (existing.practice_batch_size if existing else 5),
-            show_answer_immediately=show_answer_immediately if show_answer_immediately is not None else (existing.show_answer_immediately if existing else False),
-        )
+    # 读取 reference（不带 .md 扩展名）
+    content = read_memory_reference(user_id, reference_name)
 
-        memory.save_preferences(user_id, prefs)
+    if not content:
+        return f"未找到 reference '{reference_name}'。可用 references：preferences, behaviors"
 
-        result_parts = []
-        if language:
-            result_parts.append(f"语言={language}")
-        if difficulty:
-            result_parts.append(f"难度={difficulty}")
-        if practice_batch_size:
-            result_parts.append(f"单次练习={practice_batch_size} 道")
-
-        return f"已保存偏好设置：{', '.join(result_parts) if result_parts else '无变化'}"
-    except Exception as e:
-        return f"保存偏好失败：{e}"
+    return content
 
 
-@tool(args_schema=SaveUserProfileInput)
-def save_user_profile(
-    preferred_companies: Optional[list[str]] = None,
-    target_position: Optional[str] = None,
-    tech_stack: Optional[list[str]] = None,
-    experience_years: Optional[int] = None,
+@tool(args_schema=SearchSessionHistoryInput)
+def search_session_history(
+    query: str,
+    top_k: int = 3,
     runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
-    """保存用户画像。当用户提到'我想去 XX 公司'或'我是 XX 开发'时使用。
+    """语义检索会话历史。
+
+    当需要查找过去对话中的特定话题或问题时使用。
 
     Args:
-        preferred_companies: 目标公司列表
-        target_position: 目标岗位
-        tech_stack: 技术栈列表
-        experience_years: 工作年限
+        query: 查询文本，如 "RAG 原理讨论"、"面试模拟复盘"
+        top_k: 返回的会话数量，默认 3
 
     Returns:
-        操作结果消息
+        相关会话的摘要内容（Markdown 格式），包含会话标题、时间和摘要
     """
     user_id = runtime.context.user_id
+
     try:
-        memory = get_long_term_memory()
+        # 1. 计算 query embedding
+        embedding_tool = get_embedding_tool()
+        query_embedding = embedding_tool.embed_text(query)
 
-        existing = memory.get_profile(user_id)
-
-        profile = UserProfile(
+        # 2. 语义检索 session_summaries
+        pg_client = get_postgres_client()
+        results = pg_client.search_session_summaries(
             user_id=user_id,
-            preferred_companies=preferred_companies or (existing.preferred_companies if existing else []),
-            target_position=target_position or (existing.target_position if existing else ""),
-            tech_stack=tech_stack or (existing.tech_stack if existing else []),
-            experience_years=experience_years or (existing.experience_years if existing else None),
+            query_embedding=query_embedding,
+            top_k=top_k,
         )
 
-        memory.save_profile(user_id, profile)
+        if not results:
+            return "未找到相关的历史会话。"
 
-        result_parts = []
-        if preferred_companies:
-            result_parts.append(f"目标公司={preferred_companies}")
-        if target_position:
-            result_parts.append(f"岗位={target_position}")
-        if tech_stack:
-            result_parts.append(f"技术栈={tech_stack}")
+        # 3. 格式化输出
+        output_lines = ["### 相关会话历史\n"]
 
-        return f"已更新用户画像：{', '.join(result_parts) if result_parts else '无变化'}"
+        for r in results:
+            # 获取对话标题
+            conv = pg_client.get_conversation(user_id, r.conversation_id)
+            title = conv.title if conv else "未知对话"
+            created_at = conv.created_at.strftime("%Y-%m-%d") if conv else ""
+
+            output_lines.append(f"#### {title} ({created_at})")
+            output_lines.append(f"相似度：{r.similarity:.2f}")
+            output_lines.append(f"类型：{r.session_type}")
+            output_lines.append(f"\n摘要：\n{r.summary}\n")
+            output_lines.append("---\n")
+
+        return "\n".join(output_lines)
+
     except Exception as e:
-        return f"保存画像失败：{e}"
+        logger.error(f"search_session_history failed: {e}")
+        return f"检索会话历史失败：{e}"
 
 
-@tool(args_schema=UpdateLearningProgressInput)
-def update_learning_progress(
-    mastered_entities: Optional[list[str]] = None,
-    completed_question_ids: Optional[list[str]] = None,
+# ==================== Phase 3: 用户自定义 Skill Tool ====================
+
+class LoadSkillInput(BaseModel):
+    """load_skill 工具的输入参数"""
+    skill_name: str = Field(
+        description="Skill 名称，如 'interview_tips'"
+    )
+
+
+@tool(args_schema=LoadSkillInput)
+def load_skill(
+    skill_name: str,
     runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
 ) -> str:
-    """更新学习进度。当用户完成练习或标记知识点为'已掌握'时使用。
+    """加载用户自定义 Skill。
+
+    当触发自定义 Skill 条件时，使用此工具加载完整的 Skill 内容。
 
     Args:
-        mastered_entities: 新掌握的知识点列表
-        completed_question_ids: 已完成的题目 ID 列表
+        skill_name: Skill 名称
 
     Returns:
-        操作结果消息
+        SKILL.md + references 的完整内容（Markdown 格式）
     """
     user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
 
-        existing = memory.get_progress(user_id)
+    # 确保 memory 存在
+    if not memory_exists(user_id):
+        store = get_memory_store()
+        if store.initialized:
+            ensure_user_memory(user_id)
 
-        existing_entities = existing.mastered_entities if existing else []
-        new_entities = mastered_entities or []
-        all_entities = list(set(existing_entities + new_entities))
+    # 读取 SKILL（存储键名不带 .md）
+    skill_content = read_memory_reference(user_id, f"skills/{skill_name}/SKILL")
 
-        existing_count = existing.total_questions_answered if existing else 0
-        new_count = len(completed_question_ids or [])
+    if not skill_content:
+        return f"未找到 Skill '{skill_name}'。请检查 Skill 名称或通过 UI 创建。"
 
-        progress = LearningProgress(
-            mastered_entities=all_entities,
-            pending_review_question_ids=existing.pending_review_question_ids if existing else [],
-            total_questions_answered=existing_count + new_count,
-            last_review_date=existing.last_review_date if existing else None,
-        )
+    # TODO: Phase 3 完成后，加载 references 目录下的文件
+    # 目前只返回 SKILL.md 内容
 
-        memory.save_progress(user_id, progress)
-
-        return (
-            f"已更新学习进度："
-            f"已掌握知识点={len(all_entities)} 个，"
-            f"累计答题={progress.total_questions_answered} 道"
-        )
-    except Exception as e:
-        return f"更新进度失败：{e}"
-
-
-@tool
-def clear_user_memory(
-    runtime: Annotated[ToolRuntime[UserContext], InjectedToolArg] = None,
-) -> str:
-    """清除用户记忆数据。当用户明确要求'清除我的所有数据'时使用。
-    """
-    user_id = runtime.context.user_id
-    try:
-        memory = get_long_term_memory()
-
-        memory.save_profile(user_id, UserProfile(user_id=user_id))
-        memory.save_preferences(user_id, UserPreferences())
-        memory.save_progress(user_id, LearningProgress())
-
-        return "已清除所有用户记忆数据"
-    except Exception as e:
-        return f"清除记忆失败：{e}"
+    return skill_content
 
 
 __all__ = [
-    "get_user_memory",
-    "save_user_preferences",
-    "save_user_profile",
-    "update_learning_progress",
-    "clear_user_memory",
+    "load_memory_reference",
+    "search_session_history",
+    "load_skill",
+    "LoadMemoryReferenceInput",
+    "SearchSessionHistoryInput",
+    "LoadSkillInput",
     "UserContext",
 ]
