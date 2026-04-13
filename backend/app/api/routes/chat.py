@@ -60,20 +60,26 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         try:
-            async for chunk in agent.achat_streaming(
+            async for event in agent.achat_streaming(
                 message=request.message,
                 conversation_id=request.conversation_id,
                 user_id=user_id,
             ):
-                response_chunks.append(chunk)
-                yield f"data: {json.dumps(chunk)}\n\n"
+                # event is now a dict with type, content, node fields
+                response_chunks.append(event)
+                yield f"data: {json.dumps(event)}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")
             yield f"data: [ERROR] {str(e)}\n\n"
         finally:
             # 同步消息到 PostgresClient（用于前端历史展示）
+            # 只收集 token 事件的 content 用于完整响应
             try:
-                full_response = "".join(response_chunks)
+                token_contents = [
+                    e.get("content", "") for e in response_chunks
+                    if e.get("type") == "token"
+                ]
+                full_response = "".join(token_contents)
                 pg.add_message(
                     user_id,
                     request.conversation_id,

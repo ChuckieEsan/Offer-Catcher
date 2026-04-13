@@ -239,8 +239,12 @@ def store_and_mq_node(state: AgentState) -> AgentState:
 
 @singleton
 def _get_react_agent() -> CompiledStateGraph:
-    """获取 ReAct Agent 实例（带缓存）"""
-    llm = get_llm("deepseek", "chat")
+    """获取 ReAct Agent 实例（带缓存）
+
+    启用 DeepSeek thinking mode 以支持思考 + 工具调用。
+    """
+    # 启用 thinking mode
+    llm = get_llm("deepseek", "chat", thinking_enabled=True)
 
     # 基础工具
     tools = [search_questions, search_web, query_graph]
@@ -328,7 +332,7 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
     Note:
         使用 ainvoke 而不是 astream_events，让外层的 astream_events 自动捕获 token 流。
-        LangGraph 会递归地捕获所有子图的事件，包括 LLM 的 token 流。
+        LangGraph 会递归地捕获所有子图的事件，包括 LLM 的 token 流和 reasoning_content。
     """
     agent = _get_react_agent()
 
@@ -372,6 +376,7 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
                 final_response = last_message.content
             else:
                 final_response = str(last_message)
+
             logger.info(f"ReAct completed, response length: {len(final_response)}")
         else:
             logger.warning("ReAct loop returned empty result")

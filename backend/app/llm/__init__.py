@@ -4,9 +4,10 @@
 """
 
 import time
-from typing import Optional
+from typing import Optional, Union
 
 from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 from langchain_core.callbacks import BaseCallbackHandler
 
 from app.config.settings import get_settings
@@ -32,8 +33,8 @@ PROVIDERS_CONFIG = {
     "deepseek": {
         "base_url": "https://api.deepseek.com",
         "models": {
-            "chat": "deepseek-chat",
-        }
+            "chat": "deepseek-chat",  # V3.2 已支持 thinking + tools
+        },
     },
     "dashscope": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -102,19 +103,22 @@ class TokenUsageCallback(BaseCallbackHandler):
         )
 
 
-def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
+def create_llm(provider: str, model_type: str = "chat", **kwargs) -> Union[ChatOpenAI, ChatDeepSeek]:
     """工厂函数：创建 LLM 实例
 
     Args:
         provider: provider 名称 (siliconflow/openai/deepseek/dashscope)
         model_type: 模型类型 ("chat" 或 "vision")
-        **kwargs: 其他传递给 ChatOpenAI 的参数
+        **kwargs: 其他传递给 ChatOpenAI/ChatDeepSeek 的参数
+            - thinking_enabled: 是否启用 DeepSeek thinking mode (仅 deepseek provider)
 
     Returns:
-        ChatOpenAI 实例
+        ChatOpenAI 或 ChatDeepSeek 实例
 
     Note:
         默认启用 streaming=True 以支持流式输出。
+        DeepSeek provider 使用 ChatDeepSeek 以正确提取 reasoning_content。
+        DeepSeek thinking mode 通过 extra_body 参数传递。
     """
     settings = get_settings()
 
@@ -134,6 +138,24 @@ def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
     # 默认启用流式输出（除非用户显式禁用）
     streaming = kwargs.pop("streaming", True)
 
+    # DeepSeek provider: 使用 ChatDeepSeek 以正确提取 reasoning_content
+    if provider == "deepseek":
+        thinking_enabled = kwargs.pop("thinking_enabled", False)
+        if thinking_enabled:
+            # ChatDeepSeek 支持通过 extra_body 传递 thinking 参数
+            extra_body = kwargs.pop("extra_body", {})
+            extra_body["thinking"] = {"type": "enabled"}
+            kwargs["extra_body"] = extra_body
+            logger.info("DeepSeek thinking mode enabled")
+
+        return ChatDeepSeek(
+            model=model,
+            api_key=api_key,
+            streaming=streaming,
+            **kwargs,
+        )
+
+    # 其他 provider 使用 ChatOpenAI
     return ChatOpenAI(
         model=model,
         api_key=api_key,
@@ -144,10 +166,10 @@ def create_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
 
 
 # LLM 实例缓存
-_llm_cache: dict[str, ChatOpenAI] = {}
+_llm_cache: dict[str, Union[ChatOpenAI, ChatDeepSeek]] = {}
 
 
-def get_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
+def get_llm(provider: str, model_type: str = "chat", **kwargs) -> Union[ChatOpenAI, ChatDeepSeek]:
     """获取 LLM 实例（带缓存和自动 Token 记录）
 
     对相同参数的调用返回缓存的实例，避免重复创建。
@@ -156,13 +178,14 @@ def get_llm(provider: str, model_type: str = "chat", **kwargs) -> ChatOpenAI:
     Args:
         provider: provider 名称 (dashscope/openai/deepseek/siliconflow)
         model_type: 模型类型 ("chat" 或 "vision")
-        **kwargs: 其他传递给 ChatOpenAI 的参数
+        **kwargs: 其他传递给 LLM 的参数
 
     Returns:
-        ChatOpenAI 实例
+        ChatOpenAI 或 ChatDeepSeek 实例
 
     Note:
         如果传入额外的 kwargs 参数，会创建新的实例并缓存。
+        DeepSeek provider 使用 ChatDeepSeek 以正确提取 reasoning_content。
     """
     # 生成缓存键
     key_parts = [provider, model_type]

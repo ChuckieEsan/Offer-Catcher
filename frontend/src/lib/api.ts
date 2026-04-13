@@ -118,11 +118,12 @@ export async function chatStream(
   request: ChatRequest & { user_id?: string },
   callbacks: {
     onChunk: (chunk: string) => void;
+    onReasoning?: (reasoning: string) => void;  // DeepSeek thinking mode
     onDone: () => void;
     onError: (error: string) => void;
   }
 ): Promise<void> {
-  const { onChunk, onDone, onError } = callbacks;
+  const { onChunk, onReasoning, onDone, onError } = callbacks;
   let doneCalled = false;
 
   const safeOnDone = () => {
@@ -163,7 +164,7 @@ export async function chatStream(
 
       if (done) {
         if (buffer.trim()) {
-          processSSELine(buffer, onChunk, safeOnDone);
+          processSSELine(buffer, onChunk, onReasoning, safeOnDone);
         }
         break;
       }
@@ -175,7 +176,7 @@ export async function chatStream(
 
       for (const line of lines) {
         if (line.trim()) {
-          processSSELine(line, onChunk, safeOnDone);
+          processSSELine(line, onChunk, onReasoning, safeOnDone);
         }
       }
     }
@@ -186,9 +187,16 @@ export async function chatStream(
   }
 }
 
+interface StreamEvent {
+  type: "token" | "reasoning" | "update" | "final" | "error";
+  content: string;
+  node?: string;
+}
+
 function processSSELine(
   line: string,
   onChunk: (chunk: string) => void,
+  onReasoning: ((reasoning: string) => void) | undefined,
   onDone: () => void
 ): void {
   if (line.startsWith("data: ")) {
@@ -206,8 +214,15 @@ function processSSELine(
 
     try {
       // Backend now sends json.dumps(chunk) to preserve newlines
-      const parsedChunk = JSON.parse(data);
-      onChunk(parsedChunk);
+      const parsedChunk: StreamEvent = JSON.parse(data);
+
+      // 根据事件类型分发
+      if (parsedChunk.type === "reasoning" && onReasoning) {
+        onReasoning(parsedChunk.content);
+      } else if (parsedChunk.type === "token") {
+        onChunk(parsedChunk.content);
+      }
+      // 其他事件类型（update, final, error）暂时忽略
     } catch (e) {
       // Fallback in case backend sends raw strings not json encoded
       onChunk(data);

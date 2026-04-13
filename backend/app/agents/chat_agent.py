@@ -46,7 +46,7 @@ class ChatAgent:
         message: str,
         conversation_id: str,
         user_id: Optional[str] = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[dict, None]:
         """处理用户消息（异步流式模式）
 
         状态由 LangGraph Checkpointer 自动管理：
@@ -59,7 +59,7 @@ class ChatAgent:
             user_id: 用户 ID（用于长期记忆检索，可选）
 
         Yields:
-            流式输出的内容片段
+            流式事件对象 {"type": "token"/"reasoning"/"error", "content": str, "node": str}
         """
         logger.info(f"ChatAgent streaming: conversation={conversation_id}, message={message[:50]}...")
 
@@ -76,10 +76,12 @@ class ChatAgent:
                 event_type = event.get("type")
 
                 if event_type == "token":
-                    # LLM token 级流式输出 - 这是主要内容
-                    content = event.get("content", "")
-                    if content:
-                        yield content
+                    # LLM token 级流式输出
+                    yield event
+
+                elif event_type == "reasoning":
+                    # DeepSeek thinking mode 思考过程
+                    yield event
 
                 elif event_type == "update":
                     # 工具调用完成的状态更新
@@ -92,13 +94,13 @@ class ChatAgent:
                     final_state = event.get("state", final_state)
 
                 elif event_type == "error":
-                    yield f"\n抱歉，我遇到了问题: {event.get('content')}"
+                    yield event
 
             logger.info("ChatAgent streaming completed")
 
         except Exception as e:
             logger.error(f"ChatAgent streaming error: {e}")
-            yield f"\n抱歉，我遇到了问题: {e}"
+            yield {"type": "error", "content": f"\n抱歉，我遇到了问题: {e}"}
 
     def chat_streaming(
         self,

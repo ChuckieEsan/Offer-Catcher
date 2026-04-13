@@ -210,12 +210,25 @@ async def astream_workflow(
                     # 过滤 router 节点的 token 流，避免泄露意图分类结果
 
                     chunk = event.get("data", {}).get("chunk")
-                    if chunk and hasattr(chunk, "content") and chunk.content:
-                        yield {
-                            "type": "token",
-                            "content": chunk.content,
-                            "node": name,
-                        }
+                    if chunk:
+                        # ChatDeepSeek 将 reasoning_content 放入 additional_kwargs
+                        # See: langchain_deepseek/chat_models.py lines 310-318
+                        if hasattr(chunk, "additional_kwargs"):
+                            reasoning = chunk.additional_kwargs.get("reasoning_content", "")
+                            if reasoning:
+                                yield {
+                                    "type": "reasoning",
+                                    "content": reasoning,
+                                    "node": name,
+                                }
+
+                        # 原有的 text content 流式输出
+                        if hasattr(chunk, "content") and chunk.content:
+                            yield {
+                                "type": "token",
+                                "content": chunk.content,
+                                "node": name,
+                            }
 
                 # 2. 捕获节点/子图完成状态
                 elif kind == "on_chain_end":

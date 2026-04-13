@@ -4,6 +4,7 @@ export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoning_content?: string;  // DeepSeek thinking mode 思考过程
   created_at: string;
 }
 

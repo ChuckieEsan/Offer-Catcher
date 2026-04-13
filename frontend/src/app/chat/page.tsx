@@ -11,6 +11,7 @@ import {
   Spin,
   Popconfirm,
   App,
+  Collapse,
 } from "antd";
 import {
   PlusOutlined,
@@ -18,6 +19,7 @@ import {
   DeleteOutlined,
   LoadingOutlined,
   EditOutlined,
+  BulbOutlined,
 } from "@ant-design/icons";
 import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
@@ -37,6 +39,58 @@ import type { Conversation, Message } from "@/types";
 const { Sider, Content } = Layout;
 const { TextArea } = Input;
 const { Title, Text, Paragraph } = Typography;
+
+// 思考过程展示组件
+function ThinkingBlock({
+  reasoning,
+  isStreaming,
+}: {
+  reasoning: string;
+  isStreaming: boolean;
+}) {
+  if (!reasoning) return null;
+
+  // 截取预览文本
+  const previewLength = 100;
+  const preview = reasoning.length > previewLength
+    ? reasoning.slice(0, previewLength) + "..."
+    : reasoning;
+
+  return (
+    <Collapse
+      size="small"
+      style={{ marginBottom: 8 }}
+      items={[
+        {
+          key: "1",
+          label: (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <BulbOutlined style={{ color: "#722ed1" }} />
+              <Text type="secondary">
+                {isStreaming ? "思考中..." : `思考过程 (${reasoning.length} 字符)`}
+              </Text>
+            </div>
+          ),
+          children: (
+            <div
+              style={{
+                background: "#f9f0ff",
+                padding: 12,
+                borderRadius: 4,
+                fontSize: 13,
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+                color: "#595959",
+              }}
+            >
+              {reasoning}
+            </div>
+          ),
+        },
+      ]}
+    />
+  );
+}
 
 // 思考中提示组件
 function ThinkingIndicator() {
@@ -76,17 +130,27 @@ const MessageItem = React.memo(function MessageItem({
         }}
       >
         {msg.role === "assistant" ? (
-          msg.content === "" ? (
-            <ThinkingIndicator />
-          ) : isStreaming && !isCompleted ? (
-            <XMarkdown
-              content={msg.content}
-              streaming={streamingConfig}
-              className="markdown-body"
-            />
-          ) : (
-            <XMarkdown content={msg.content} className="markdown-body" />
-          )
+          <>
+            {/* 思考过程展示 */}
+            {msg.reasoning_content && (
+              <ThinkingBlock
+                reasoning={msg.reasoning_content}
+                isStreaming={isStreaming && !isCompleted}
+              />
+            )}
+            {/* 最终回答 */}
+            {msg.content === "" ? (
+              !msg.reasoning_content && <ThinkingIndicator />
+            ) : isStreaming && !isCompleted ? (
+              <XMarkdown
+                content={msg.content}
+                streaming={streamingConfig}
+                className="markdown-body"
+              />
+            ) : (
+              <XMarkdown content={msg.content} className="markdown-body" />
+            )}
+          </>
         ) : (
           <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
             {msg.content}
@@ -272,6 +336,7 @@ export default function ChatPage() {
       id: aiMessageId,
       role: "assistant",
       content: "",
+      reasoning_content: "",  // 初始化思考内容
       created_at: new Date().toISOString(),
     };
 
@@ -288,6 +353,17 @@ export default function ChatPage() {
         user_id: getUserId(),
       },
       {
+        // 处理思考内容
+        onReasoning: (reasoning) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId
+                ? { ...msg, reasoning_content: (msg.reasoning_content || "") + reasoning }
+                : msg
+            )
+          );
+        },
+        // 处理最终回答
         onChunk: (chunk) => {
           setMessages((prev) =>
             prev.map((msg) =>
