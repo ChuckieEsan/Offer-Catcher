@@ -22,11 +22,12 @@
 - 数据传输必须且只能通过 `pydantic` (V2版本) 模型
 - 严禁使用裸字典 (`dict`) 在不同层之间传递核心业务数据
 
-### 2. Prompt 外置原则
+### 2. Prompt 编写原则
 
 - 严禁将长篇 Prompt 字符串硬编码在 Python 文件中
 - 所有的系统提示词必须作为单独的 `.md` 文件存放在 `backend/app/agents/prompts/` 目录下
 - 在代码中按需读取，使用 `load_prompt_template` 方法
+- 写 Prompt 时应以 xml 标记来提示 AI，而不要使用 Markdown 的标题。比如 <role>你是一个专业的...</role>
 
 ### 3. 日志优先
 
