@@ -18,15 +18,9 @@ from app.agents.prompts import load_prompt_template
 from app.tools.search_question_tool import search_questions
 from app.tools.web_search_tool import search_web
 from app.tools.query_graph_tool import query_graph
-from app.tools.memory_tools import (
-    load_memory_reference,
-    search_session_history,
-    load_skill,
-    UserContext,
-)
-from app.memory.io import read_memory
-from app.memory.init import ensure_user_memory
-from app.memory.store import get_memory_store
+from app.skills import load_skill
+from app.memory import inject_memory_context
+from app.tools.context import UserContext
 
 
 # ==================== State Gate Node ====================
@@ -249,12 +243,8 @@ def _get_react_agent() -> CompiledStateGraph:
     # 基础工具
     tools = [search_questions, search_web, query_graph]
 
-    # 记忆工具（新版）
-    tools.extend([
-        load_memory_reference,
-        search_session_history,
-        load_skill,
-    ])
+    # Skill 工具（用户自定义 Skill）
+    tools.append(load_skill)
 
     prompt = load_prompt_template("react_agent.md")
     # 提取原始模板字符串（create_agent 接受 str）
@@ -346,8 +336,8 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     session_context = state.get("session_context", {})
     user_id = session_context.get("user_id") or "default_user"
 
-    # 注入用户记忆上下文（MEMORY.md）
-    _inject_memory_context(user_id, messages)
+    # 注入用户记忆上下文（MEMORY.md + 相关历史）
+    inject_memory_context(user_id, messages)
 
     logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 
@@ -381,51 +371,6 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}", exc_info=True)
         return {"response_to_user": f"查询失败：{e}"}
-
-
-def _inject_memory_context(user_id: str, messages: list[BaseMessage]) -> str:
-    """注入用户记忆上下文到 System Prompt
-
-    Args:
-        user_id: 用户 ID
-        messages: 消息列表（会被修改）
-
-    Returns:
-        注入的记忆内容（用于日志记录）
-    """
-    try:
-        memory_store = get_memory_store()
-        if not memory_store.initialized:
-            logger.warning("MemoryStore not initialized, skipping memory injection")
-            return ""
-
-        # 确保用户记忆存在（首次对话时自动初始化）
-        ensure_user_memory(user_id)
-
-        # 读取 MEMORY.md
-        memory_content = read_memory(user_id)
-        if not memory_content:
-            logger.debug(f"No MEMORY.md found for user {user_id}")
-            return ""
-
-        # 构建记忆上下文
-        memory_context = f"\n\n<用户记忆>\n{memory_content}\n</用户记忆>"
-
-        # 找到 system message 并追加记忆上下文
-        for i, msg in enumerate(messages):
-            if getattr(msg, "type", "") == "system":
-                original_content = getattr(msg, "content", "")
-                if memory_context not in original_content:
-                    # 创建新的 SystemMessage，避免修改原对象
-                    messages[i] = SystemMessage(content=original_content + memory_context)
-                    logger.info(f"Injected MEMORY.md for user {user_id} ({len(memory_content)} chars)")
-                break
-
-        return memory_content
-
-    except Exception as e:
-        logger.warning(f"Failed to inject memory context: {e}")
-        return ""
 
 
 __all__ = [
