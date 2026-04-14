@@ -71,6 +71,10 @@ class PostgresClient:
                 password=self.password,
                 database=self.database,
             )
+            # 先确保 pgvector 扩展存在
+            with self._conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            self._conn.commit()
             # 注册 pgvector 适配器，自动处理 vector 类型转换
             register_vector(self._conn)
             logger.info(f"PostgreSQL connected: {self.host}:{self.port}/{self.database}")
