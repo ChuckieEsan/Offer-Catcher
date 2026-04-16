@@ -1,6 +1,7 @@
-"""异步 RabbitMQ 消息生产者模块 (基于 aio-pika)
+"""RabbitMQ 异步消息生产者模块
 
-提供消息发布功能，用于将需要异步生成答案的题目发送到队列。
+基于 aio-pika 提供消息发布功能，用于将需要异步生成答案的题目发送到队列。
+作为基础设施层消息组件，为应用层提供消息发布服务。
 """
 
 import asyncio
@@ -10,24 +11,33 @@ import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel
 from aio_pika import Message, DeliveryMode
 
-from app.config.settings import get_settings
+from app.infrastructure.config.settings import get_settings
+from app.infrastructure.common.logger import logger
 from app.models import MQTaskMessage
-from app.utils.logger import logger
 
 
-class AsyncRabbitMQProducer:
+class RabbitMQProducer:
     """基于 aio-pika 的异步消息生产者
 
     提供以下核心功能：
     - 建立与 RabbitMQ 的强健连接（自动处理断线重连）
     - 发布单条或批量任务消息
     - 可靠的消息发布（带重试机制）
-    - 连接管理
+
+    设计原则：
+    - 连接池管理
+    - 自动重连
+    - 支持依赖注入
     """
 
     def __init__(self) -> None:
         """初始化生产者"""
-        self.settings = get_settings()
+        settings = get_settings()
+        self._host = settings.rabbitmq_host
+        self._port = settings.rabbitmq_port
+        self._user = settings.rabbitmq_user
+        self._password = settings.rabbitmq_password
+        self._queue = settings.rabbitmq_queue
         self._connection: Optional[AbstractRobustConnection] = None
         self._channel: Optional[AbstractRobustChannel] = None
         self._exchange = None
@@ -35,32 +45,22 @@ class AsyncRabbitMQProducer:
     async def connect(self) -> bool:
         """建立与 RabbitMQ 的强健连接"""
         try:
-            # connect_robust 会在网络抖动时自动重连
             self._connection = await aio_pika.connect_robust(
-                host=self.settings.rabbitmq_host,
-                port=self.settings.rabbitmq_port,
-                login=self.settings.rabbitmq_user,
-                password=self.settings.rabbitmq_password,
+                host=self._host,
+                port=self._port,
+                login=self._user,
+                password=self._password,
             )
             self._channel = await self._connection.channel()
 
-            # 声明队列（确保队列存在）
-            await self._channel.declare_queue(
-                self.settings.rabbitmq_queue,
-                durable=True,
-            )
-
-            # 获取默认 Exchange
+            await self._channel.declare_queue(self._queue, durable=True)
             self._exchange = self._channel.default_exchange
 
-            logger.info(
-                f"Async RabbitMQ producer connected: {self.settings.rabbitmq_host}:"
-                f"{self.settings.rabbitmq_port}"
-            )
+            logger.info(f"RabbitMQProducer connected: {self._host}:{self._port}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to connect Async RabbitMQ: {e}")
+            logger.error(f"Failed to connect RabbitMQ: {e}")
             raise
 
     async def _ensure_connected(self) -> None:
@@ -75,7 +75,6 @@ class AsyncRabbitMQProducer:
                 logger.warning("RabbitMQ producer connection closed, reconnecting...")
                 await self.connect()
         except RuntimeError as e:
-            # 处理 "no running event loop" 错误，重新创建连接
             if "event loop" in str(e).lower():
                 logger.warning(f"Event loop issue: {e}, recreating connection...")
                 self._connection = None
@@ -98,10 +97,8 @@ class AsyncRabbitMQProducer:
 
         for attempt in range(retry):
             try:
-                # 序列化消息
                 body = task.model_dump_json()
 
-                # 发布消息
                 msg = Message(
                     body=body.encode("utf-8"),
                     delivery_mode=DeliveryMode.PERSISTENT,
@@ -109,23 +106,14 @@ class AsyncRabbitMQProducer:
                     message_id=task.question_id,
                 )
 
-                await self._exchange.publish(
-                    msg,
-                    routing_key=self.settings.rabbitmq_queue,
-                )
+                await self._exchange.publish(msg, routing_key=self._queue)
 
-                logger.info(
-                    f"Published task: question_id={task.question_id}, "
-                    f"company={task.company}"
-                )
+                logger.info(f"Published task: question_id={task.question_id}, company={task.company}")
                 return True
 
             except Exception as e:
-                logger.warning(
-                    f"Publish attempt {attempt + 1}/{retry} failed: {e}. "
-                    "Reconnecting..."
-                )
-                await self.connect()  # 重新连接
+                logger.warning(f"Publish attempt {attempt + 1}/{retry} failed: {e}. Reconnecting...")
+                await self.connect()
 
         logger.error(f"Failed to publish task after {retry} attempts")
         return False
@@ -140,7 +128,6 @@ class AsyncRabbitMQProducer:
             成功发布的数量
         """
         success_count = 0
-
         for task in tasks:
             if await self.publish_task(task):
                 success_count += 1
@@ -152,7 +139,7 @@ class AsyncRabbitMQProducer:
         """关闭连接
 
         Args:
-            cleanup: 如果为 True，则关闭连接并重置单例（仅在程序退出时使用）
+            cleanup: 如果为 True，则关闭连接并重置单例
         """
         try:
             if self._connection is None:
@@ -162,7 +149,6 @@ class AsyncRabbitMQProducer:
                 await self._connection.close()
                 logger.info("RabbitMQ producer connection closed")
         except RuntimeError as e:
-            # 处理 "no running event loop" 错误
             if "event loop" in str(e).lower():
                 logger.warning(f"Cannot close connection: {e}")
             else:
@@ -172,14 +158,13 @@ class AsyncRabbitMQProducer:
         finally:
             self._connection = None
             self._channel = None
-            # 仅在明确需要清理时重置单例
             if cleanup:
                 _reset_producer()
 
 
 # 全局单例实例和锁
-_producer_instance: Optional[AsyncRabbitMQProducer] = None
-_producer_lock = None  # 延迟初始化，因为需要在 event loop 中创建
+_producer_instance: Optional[RabbitMQProducer] = None
+_producer_lock = None
 
 
 def _get_lock():
@@ -196,32 +181,34 @@ def _reset_producer() -> None:
     _producer_instance = None
 
 
-async def get_producer() -> AsyncRabbitMQProducer:
+async def get_producer() -> RabbitMQProducer:
     """获取异步生产者单例
 
-    手动实现异步单例模式，确保：
-    1. 只创建一个 producer 实例
-    2. 连接只建立一次
-    3. 支持并发安全
-
     Returns:
-        AsyncRabbitMQProducer 实例
+        RabbitMQProducer 实例
     """
     global _producer_instance
 
-    # 快速路径：实例已存在且连接有效
     if _producer_instance is not None:
         if _producer_instance._connection is not None and not _producer_instance._connection.is_closed:
             return _producer_instance
 
-    # 慢速路径：需要创建或重连，加锁保护
     async with _get_lock():
-        # 双重检查
         if _producer_instance is not None:
             if _producer_instance._connection is not None and not _producer_instance._connection.is_closed:
                 return _producer_instance
 
-        # 创建新实例并连接
-        _producer_instance = AsyncRabbitMQProducer()
+        _producer_instance = RabbitMQProducer()
         await _producer_instance.connect()
         return _producer_instance
+
+
+# 向后兼容的别名
+AsyncRabbitMQProducer = RabbitMQProducer
+
+
+__all__ = [
+    "RabbitMQProducer",
+    "get_producer",
+    "AsyncRabbitMQProducer",
+]

@@ -1,7 +1,8 @@
-"""异步 RabbitMQ 消息消费者模块 (基于 aio-pika)
+"""RabbitMQ 异步消息消费者模块
 
-提供高并发的协程消息消费功能。
+基于 aio-pika 提供高并发的协程消息消费功能。
 支持断路器与降级机制（重新入队与死信队列 DLQ）。
+作为基础设施层消息组件，为应用层提供消息消费服务。
 """
 
 import asyncio
@@ -12,11 +13,12 @@ from typing import Callable, Awaitable, Optional
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
 
-from app.config.settings import get_settings
+from app.infrastructure.config.settings import get_settings
+from app.infrastructure.common.logger import logger
+from app.infrastructure.messaging.message_helper import get_mq_message_helper
 from app.models import MQTaskMessage
-from app.mq.message_helper import get_mq_message_helper
-from app.utils.logger import logger
 from app.utils.circuit_breaker import create_circuit_breaker, CircuitOpenState
+
 
 # 创建消费者专用的断路器
 _message_breaker = create_circuit_breaker(
@@ -26,7 +28,7 @@ _message_breaker = create_circuit_breaker(
 )
 
 
-class AsyncRabbitMQConsumer:
+class RabbitMQConsumer:
     """基于 aio-pika 的异步消息消费者
 
     提供以下核心功能：
@@ -34,8 +36,12 @@ class AsyncRabbitMQConsumer:
     - 启动并发消费协程
     - 支持手动 ACK/Nack
     - 可设置 prefetch_count 控制并发
-    - 连接管理
-    - 熔断与降级机制（基于 aiobreaker）
+    - 熔断与降级机制
+
+    设计原则：
+    - 连接池管理
+    - 自动重连
+    - 熔断保护
     """
 
     def __init__(self, prefetch_count: int = 5) -> None:
@@ -44,11 +50,18 @@ class AsyncRabbitMQConsumer:
         Args:
             prefetch_count: 预取消息数量，控制并发
         """
-        self.settings = get_settings()
+        settings = get_settings()
+        self._host = settings.rabbitmq_host
+        self._port = settings.rabbitmq_port
+        self._user = settings.rabbitmq_user
+        self._password = settings.rabbitmq_password
+        self._queue = settings.rabbitmq_queue
+        self._dlq = settings.rabbitmq_dlq
+
         self.prefetch_count = prefetch_count
         self._connection: Optional[AbstractRobustConnection] = None
         self._channel: Optional[AbstractRobustChannel] = None
-        self._queue = None
+        self._queue_obj = None
         self._exchange = None
 
         self.circuit_breaker = _message_breaker
@@ -57,55 +70,44 @@ class AsyncRabbitMQConsumer:
         self._message_helper = get_mq_message_helper()
 
     async def connect(self) -> bool:
-        """建立与 RabbitMQ 的强健连接（自动处理断线重连）"""
+        """建立与 RabbitMQ 的强健连接"""
         try:
-            # connect_robust 会在网络抖动时自动在底层重连并恢复队列
-            # heartbeat=300 避免长任务导致连接断开
             self._connection = await aio_pika.connect_robust(
-                host=self.settings.rabbitmq_host,
-                port=self.settings.rabbitmq_port,
-                login=self.settings.rabbitmq_user,
-                password=self.settings.rabbitmq_password,
+                host=self._host,
+                port=self._port,
+                login=self._user,
+                password=self._password,
                 heartbeat=300,
             )
             self._channel = await self._connection.channel()
 
-            # 设置 QoS 控制最大并发协程数
             await self._channel.set_qos(prefetch_count=self.prefetch_count)
 
-            # 声明队列 (保证幂等性)
-            self._queue = await self._channel.declare_queue(
-                self.settings.rabbitmq_queue, durable=True
-            )
-            # 声明死信队列 DLQ
-            await self._channel.declare_queue(
-                self.settings.rabbitmq_dlq, durable=True
-            )
+            self._queue_obj = await self._channel.declare_queue(self._queue, durable=True)
+            await self._channel.declare_queue(self._dlq, durable=True)
 
-            # 获取默认 Exchange 用于重新发布消息
             self._exchange = self._channel.default_exchange
 
             logger.info(
-                f"Async RabbitMQ connected: {self.settings.rabbitmq_host}:"
-                f"{self.settings.rabbitmq_port}, prefetch={self.prefetch_count}"
+                f"RabbitMQConsumer connected: {self._host}:{self._port}, "
+                f"prefetch={self.prefetch_count}"
             )
             return True
 
         except Exception as e:
-            logger.error(f"Failed to connect Async RabbitMQ: {e}")
+            logger.error(f"Failed to connect RabbitMQ: {e}")
             raise
 
     async def _ensure_connected(self) -> None:
-        """确保连接有效
-
-        Raises:
-            RuntimeError: 如果未连接
-        """
+        """确保连接有效"""
         if self._connection is None or self._connection.is_closed:
             raise RuntimeError("Consumer not connected. Call await connect() first.")
 
     async def republish_to_back(
-        self, original_msg: AbstractIncomingMessage, question_id: str, retry_count: int
+        self,
+        original_msg: AbstractIncomingMessage,
+        question_id: str,
+        retry_count: int,
     ) -> bool:
         """降级：将失败的消息重新发布到队尾"""
         await self._ensure_connected()
@@ -117,7 +119,9 @@ class AsyncRabbitMQConsumer:
         )
 
     async def _send_to_dlq(
-        self, original_msg: AbstractIncomingMessage, question_id: str
+        self,
+        original_msg: AbstractIncomingMessage,
+        question_id: str,
     ) -> bool:
         """死信处理"""
         await self._ensure_connected()
@@ -134,10 +138,7 @@ class AsyncRabbitMQConsumer:
     ) -> None:
         """单条消息的并发协程处理逻辑"""
 
-        # 不使用 process() 上下文，手动控制 ACK/Reject
-        # 避免程序中断时消息被意外 ACK
-
-        # --- 1. 熔断器拦截逻辑 ---
+        # 熔断器拦截逻辑
         if isinstance(self.circuit_breaker.state, CircuitOpenState):
             if self._circuit_open_time and (
                 time.time() - self._circuit_open_time >= self._recovery_timeout
@@ -146,33 +147,25 @@ class AsyncRabbitMQConsumer:
                 self._circuit_open_time = None
                 logger.info("Circuit breaker recovered after timeout.")
             else:
-                # 正在熔断中：拒绝该消息使其重新排队
                 logger.warning("Circuit breaker is OPEN. Rejecting and requeueing...")
                 await asyncio.sleep(2)
                 await message.reject(requeue=True)
                 return
 
-        # --- 2. 正常业务逻辑 ---
         question_id = "unknown"
-        retry_count = (
-            message.headers.get("x-retry-count", 0) if message.headers else 0
-        )
+        retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
 
         try:
             task = MQTaskMessage.model_validate_json(message.body)
             question_id = task.question_id
-            logger.info(
-                f"Received task: q_id={question_id}, retry={retry_count}"
-            )
+            logger.info(f"Received task: q_id={question_id}, retry={retry_count}")
 
-            # 执行异步的大模型调用回调
             success = await callback(task)
 
             if success:
                 await message.ack()
                 self.circuit_breaker.close()
             else:
-                # 业务明确返回失败：打开熔断器，原消息ACK，重新投递到队尾
                 self.circuit_breaker.open()
                 self._circuit_open_time = time.time()
 
@@ -181,35 +174,32 @@ class AsyncRabbitMQConsumer:
 
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON format: {e}. Message discarded.")
-            await message.ack()  # 脏数据直接丢弃，不重试
+            await message.ack()
 
         except asyncio.CancelledError:
-            # 处理程序被中断的情况：不 ACK，消息会重新入队
             logger.warning("Task cancelled, rejecting message to requeue...")
             await message.reject(requeue=True)
-            raise  # 重新抛出 CancelledError
+            raise
 
         except Exception as e:
             logger.error(f"Unexpected error processing message: {e}")
             self.circuit_breaker.open()
             self._circuit_open_time = time.time()
 
-            # 异常情况下拒绝消息，让其重新入队
             await message.reject(requeue=True)
             await self.republish_to_back(message, question_id, retry_count)
 
     async def consume(
-        self, callback: Callable[[MQTaskMessage], Awaitable[bool]]
+        self,
+        callback: Callable[[MQTaskMessage], Awaitable[bool]],
     ) -> None:
         """启动并发消费协程"""
         await self._ensure_connected()
 
-        # aio-pika 会自动根据 prefetch_count 并发拉起 _on_message 协程
-        await self._queue.consume(lambda msg: self._on_message(msg, callback))
+        await self._queue_obj.consume(lambda msg: self._on_message(msg, callback))
 
-        logger.info(f"Async Consumer is listening on '{self.settings.rabbitmq_queue}'...")
+        logger.info(f"Consumer is listening on '{self._queue}'...")
 
-        # 挂起当前协程，维持消费循环
         try:
             await asyncio.Future()
         except asyncio.CancelledError:
@@ -223,7 +213,7 @@ class AsyncRabbitMQConsumer:
 
 
 # 全局单例实例和锁
-_consumer_instance: Optional[AsyncRabbitMQConsumer] = None
+_consumer_instance: Optional[RabbitMQConsumer] = None
 _consumer_lock = None
 
 
@@ -235,18 +225,14 @@ def _get_lock():
     return _consumer_lock
 
 
-async def get_consumer(prefetch_count: int = 5) -> AsyncRabbitMQConsumer:
+async def get_consumer(prefetch_count: int = 5) -> RabbitMQConsumer:
     """获取异步消费者单例
-
-    手动实现异步单例模式。
-
-    Note: 参数在首次调用后会被忽略。
 
     Args:
         prefetch_count: 预取消息数量，控制并发
 
     Returns:
-        AsyncRabbitMQConsumer 实例
+        RabbitMQConsumer 实例
     """
     global _consumer_instance
 
@@ -257,6 +243,17 @@ async def get_consumer(prefetch_count: int = 5) -> AsyncRabbitMQConsumer:
         if _consumer_instance is not None:
             return _consumer_instance
 
-        _consumer_instance = AsyncRabbitMQConsumer(prefetch_count=prefetch_count)
+        _consumer_instance = RabbitMQConsumer(prefetch_count=prefetch_count)
         await _consumer_instance.connect()
         return _consumer_instance
+
+
+# 向后兼容的别名
+AsyncRabbitMQConsumer = RabbitMQConsumer
+
+
+__all__ = [
+    "RabbitMQConsumer",
+    "get_consumer",
+    "AsyncRabbitMQConsumer",
+]

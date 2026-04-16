@@ -1,15 +1,26 @@
 """消息队列层
 
-提供 RabbitMQ 生产者和消费者功能，用于实现主从 Agent 解耦。
-支持两种消费模式：
-1. AsyncRabbitMQConsumer: 基于协程的异步消费
-2. ThreadPoolRabbitMQConsumer: 基于线程池的消费（每个线程独立 channel）
+底层服务由 infrastructure/messaging 提供。
 """
 
-from app.mq.producer import AsyncRabbitMQProducer, get_producer
-from app.mq.consumer import AsyncRabbitMQConsumer, get_consumer
-from app.mq.thread_pool_consumer import ThreadPoolRabbitMQConsumer, get_thread_pool_consumer
+from app.infrastructure.messaging.producer import (
+    RabbitMQProducer,
+    get_producer,
+    AsyncRabbitMQProducer,
+)
+from app.infrastructure.messaging.consumer import (
+    RabbitMQConsumer,
+    get_consumer,
+    AsyncRabbitMQConsumer,
+)
+from app.infrastructure.messaging.thread_pool_consumer import (
+    ThreadPoolRabbitMQConsumer,
+    get_thread_pool_consumer,
+)
 
+# 向后兼容的别名
+AsyncRabbitMQProducer = RabbitMQProducer
+AsyncRabbitMQConsumer = RabbitMQConsumer
 
 __all__ = [
     "AsyncRabbitMQProducer",

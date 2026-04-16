@@ -15,7 +15,7 @@ from typing import Optional
 from app.models import ExtractedInterview, QuestionType, MQTaskMessage, QdrantQuestionPayload
 from app.tools.embedding_tool import get_embedding_tool
 from app.infrastructure.persistence.qdrant import get_qdrant_manager
-from app.mq.producer import get_producer
+from app.infrastructure.messaging import get_producer
 from app.utils.cache import singleton
 from app.utils.logger import logger
 from app.utils.hasher import generate_question_id
