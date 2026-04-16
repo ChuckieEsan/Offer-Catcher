@@ -25,8 +25,8 @@ from opentelemetry.sdk.resources import Resource
 # Prometheus exporter - 暴露 HTTP 端点供 Prometheus 抓取
 from opentelemetry.exporter.prometheus import PrometheusMetricReader
 
-from app.config.settings import get_settings
-from app.utils.logger import logger
+from app.infrastructure.config.settings import get_settings
+from app.infrastructure.common.logger import logger
 
 T = TypeVar("T")
 

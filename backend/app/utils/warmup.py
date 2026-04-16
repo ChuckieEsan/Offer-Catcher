@@ -8,7 +8,7 @@
     warmup()
 """
 
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def warmup() -> None:
