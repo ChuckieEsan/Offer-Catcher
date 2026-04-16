@@ -12,11 +12,9 @@ from langchain_core.tools import tool
 
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.reranker_tool import get_reranker_tool
-from app.db.qdrant_client import get_qdrant_manager
 from app.models import SearchResult
 from app.services.cache_service import get_cache_service, CacheKeys
-from app.utils.telemetry import traced, record_vector_query
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def _build_query_context(query: str, company: str = None, position: str = None) -> str:
@@ -52,6 +50,9 @@ def _do_search(query: str, company: str, position: str, k: int) -> list[SearchRe
     Returns:
         搜索结果列表
     """
+    from app.db.qdrant_client import get_qdrant_manager
+    from app.utils.telemetry import record_vector_query
+
     embedding_tool = get_embedding_tool()
     reranker_tool = get_reranker_tool()
     qdrant = get_qdrant_manager()
@@ -91,7 +92,6 @@ def _do_search(query: str, company: str, position: str, k: int) -> list[SearchRe
 
 
 @tool
-@traced
 def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
     """搜索本地题库中的面试题（默认首选工具）
 
@@ -108,6 +108,8 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
     Returns:
         搜索结果，以文本形式返回
     """
+    from app.utils.telemetry import traced
+
     cache = get_cache_service()
 
     # 构建缓存 key

@@ -16,8 +16,8 @@ from pydantic import BaseModel, Field
 from app.agents.base import BaseAgent
 from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
-from app.utils.logger import logger
-from app.utils.cache import singleton
+from app.infrastructure.common.logger import logger
+from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
 
 
 # 用于 with_structured_output 的 Pydantic 模型
@@ -64,6 +64,7 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         """
         super().__init__(provider)
         self.use_structured_output = use_structured_output
+        self._ocr_adapter = get_ocr_adapter()
 
     def _parse_json_response(self, response: str) -> ExtractedInterviewSchema:
         """手动解析 JSON 响应"""
@@ -170,15 +171,13 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
                     "图片提取必须使用 OCR 预处理，请设置 use_ocr=True"
                 )
 
-            from app.utils.ocr import ocr_images
-
             # 将 source 规范化为列表
             image_sources = [source] if isinstance(source, str) else source
 
             logger.info(f"OCR processing {len(image_sources)} images...")
 
-            # OCR 识别文字，返回纯文本
-            ocr_text = ocr_images(image_sources)
+            # 使用 OCRAdapter 识别文字
+            ocr_text = self._ocr_adapter.recognize_batch(image_sources)
 
             logger.info(f"OCR completed, extracted text length: {len(ocr_text)}")
 
@@ -202,10 +201,20 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             return self._extract_with_parsing(source)
 
 
-@singleton
+# 单例获取函数
+_vision_extractor: "VisionExtractor | None" = None
+
+
 def get_vision_extractor(provider: str = "deepseek") -> VisionExtractor:
     """获取 Vision Extractor 单例
 
-    Note: provider 参数在首次调用后会被忽略。
+    Args:
+        provider: LLM Provider 名称
+
+    Returns:
+        VisionExtractor 实例
     """
-    return VisionExtractor(provider=provider)
+    global _vision_extractor
+    if _vision_extractor is None:
+        _vision_extractor = VisionExtractor(provider=provider)
+    return _vision_extractor

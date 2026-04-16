@@ -8,17 +8,15 @@ import base64
 import json
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.services.xfyun_asr import get_xfyun_client, XfyunASRClient
-from app.utils.logger import logger
+from app.infrastructure.adapters.asr_adapter import (
+    XfyunASRAdapter,
+    get_xfyun_asr_adapter,
+)
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(tags=["speech"])
-
-
-async def get_xfyun_client_dep() -> XfyunASRClient:
-    """获取讯飞客户端依赖"""
-    return get_xfyun_client()
 
 
 @router.websocket("/ws/speech")
@@ -39,7 +37,7 @@ async def speech_websocket(
     await websocket.accept()
     logger.info("Speech WebSocket connected")
 
-    xfyun_client = get_xfyun_client()
+    asr_adapter = get_xfyun_asr_adapter()
 
     # 音频缓冲区
     audio_buffer = bytearray()
@@ -63,7 +61,7 @@ async def speech_websocket(
         """运行语音识别"""
         nonlocal is_recognizing
         try:
-            async for result in xfyun_client.recognize_stream(audio_generator(), language):
+            async for result in asr_adapter.recognize_stream(audio_generator(), language):
                 await result_queue.put(result.text)
             await result_queue.put(None)
         except Exception as e:

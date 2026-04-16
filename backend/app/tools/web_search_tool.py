@@ -1,134 +1,58 @@
 """Web 搜索工具模块
 
-为异步 Worker 提供联网搜索能力，使用 Tavily 搜索最新资料。
+封装 WebSearchAdapter，为 Agent 提供联网搜索能力。
+底层服务由 infrastructure/adapters 提供。
+
+包含：
+- WebSearchTool：封装 WebSearchAdapter 的工具类
+- search_web：LangChain @tool 装饰器函数（供 Agent 调用）
 """
 
-from typing import Optional
-from pydantic import BaseModel, Field
-
-from langchain_tavily import TavilySearch
-from langchain_core.tools import BaseTool  # noqa: F401
-
-from app.config.settings import get_settings
-from app.utils.logger import logger
-from app.utils.cache import singleton
-
-
-class WebSearchResult(BaseModel):
-    """Web 搜索结果
-
-    Attributes:
-        title: 结果标题
-        url: 结果链接
-        content: 结果内容摘要
-    """
-
-    title: str = Field(description="结果标题")
-    url: str = Field(description="结果链接")
-    content: str = Field(default="", description="结果内容摘要")
+from app.infrastructure.adapters.web_search_adapter import (
+    WebSearchAdapter,
+    WebSearchResult,
+    get_web_search_adapter,
+)
+from app.infrastructure.common.logger import logger
 
 
 class WebSearchTool:
     """Web 搜索工具
 
-    使用 Tavily 搜索网页，为异步 Worker 提供联网搜索能力。
-    用于在生成答案时搜索最新资料。
-
-    核心功能：
-    - 搜索网页获取最新信息
-    - 返回结构化的搜索结果
+    封装 WebSearchAdapter，提供联网搜索能力。
+    底层服务由 Adapter 提供。
     """
 
-    def __init__(
-        self,
-        max_results: int = 5,
-    ) -> None:
+    def __init__(self, max_results: int = 5) -> None:
         """初始化 Web 搜索工具
 
         Args:
             max_results: 最大返回结果数，默认 5
         """
-        self.max_results = max_results
-        # 直接初始化工具（不再延迟加载）
-        settings = get_settings()
-        self._tool = TavilySearch(
-            max_results=self.max_results,
-            tavily_api_key=settings.tavily_api_key,
-        )
-        logger.info(f"Web search tool initialized, max_results={max_results}")
+        self._adapter = get_web_search_adapter()
+        self._max_results = max_results
+        logger.info(f"WebSearchTool initialized, max_results={max_results}")
 
     @property
-    def tool(self) -> TavilySearch:
-        """获取 Tavily 工具实例"""
-        return self._tool
+    def adapter(self) -> WebSearchAdapter:
+        """获取底层 Adapter 实例"""
+        return self._adapter
 
     def search(
         self,
         query: str,
-        max_results: Optional[int] = None,
+        max_results: int | None = None,
     ) -> list[WebSearchResult]:
         """搜索网页
 
         Args:
             query: 搜索关键词
-            max_results: 最大返回结果数，默认使用初始化时的值
+            max_results: 最大返回结果数
 
         Returns:
             搜索结果列表
         """
-        max_results = max_results or self.max_results
-
-        try:
-            # 使用 Tavily 搜索
-            raw_results = self.tool.invoke(query)
-            logger.debug(f"Search query: {query}, raw results: {raw_results}")
-
-            # 解析结果
-            parsed_results = self._parse_results(raw_results, max_results)
-
-            logger.info(
-                f"Web search completed: query='{query}', results={len(parsed_results)}"
-            )
-            return parsed_results
-
-        except Exception as e:
-            logger.error(f"Web search failed: {e}")
-            raise
-
-    def _parse_results(
-        self,
-        raw_results,
-        max_results: int,
-    ) -> list[WebSearchResult]:
-        """解析搜索结果
-
-        Tavily 返回 dict，结构为 {'results': [dict(...), ...]}。
-
-        Args:
-            raw_results: 原始搜索结果
-            max_results: 最大结果数
-
-        Returns:
-            解析后的结果列表
-        """
-        if not raw_results:
-            return []
-
-        # Tavily 返回 dict，需要从 results 字段提取列表
-        items = raw_results.get("results", []) if isinstance(raw_results, dict) else raw_results
-
-        results = []
-        for item in items[:max_results]:
-            if isinstance(item, dict):
-                results.append(
-                    WebSearchResult(
-                        title=item.get("title", ""),
-                        url=item.get("url", ""),
-                        content=item.get("content", ""),
-                    )
-                )
-
-        return results
+        return self._adapter.search(query, max_results or self._max_results)
 
     def search_for_answer(
         self,
@@ -138,54 +62,36 @@ class WebSearchTool:
     ) -> str:
         """搜索题目相关资料
 
-        为生成答案搜索相关资料。
-
         Args:
             question: 题目文本
             company: 公司名称
             position: 岗位名称
 
         Returns:
-            格式化后的搜索结果（可用于 LLM 生成答案）
+            格式化后的搜索结果
         """
-        # 构造搜索关键词
-        search_query = f"{question} {company} {position}"
-
-        results = self.search(search_query)
-
-        if not results:
-            return "未找到相关资料"
-
-        # 格式化结果
-        formatted = "以下是搜索到的相关资料：\n\n"
-        for i, r in enumerate(results, 1):
-            formatted += f"{i}. {r.title}\n"
-            formatted += f"   来源：{r.url}\n"
-            if r.content:
-                formatted += f"   摘要：{r.content}\n"
-            formatted += "\n"
-
-        return formatted
+        return self._adapter.search_for_context(question, company, position)
 
 
-@singleton
+# 单例获取函数
+_web_search_tool: "WebSearchTool | None" = None
+
+
 def get_web_search_tool(max_results: int = 5) -> WebSearchTool:
     """获取 Web 搜索工具单例
 
     Args:
-        max_results: 最大返回结果数（首次调用时生效，后续调用忽略）
+        max_results: 最大返回结果数（首次调用时生效）
 
     Returns:
         WebSearchTool 实例
-
-    Note:
-        此函数使用 @singleton 装饰器，后续调用会忽略 max_results 参数。
-        如需重新配置，先调用 get_web_search_tool.clear_cache()。
     """
-    return WebSearchTool(max_results=max_results)
+    global _web_search_tool
+    if _web_search_tool is None:
+        _web_search_tool = WebSearchTool(max_results=max_results)
+    return _web_search_tool
 
 
-# 导出公共 API
 __all__ = [
     "WebSearchResult",
     "WebSearchTool",
