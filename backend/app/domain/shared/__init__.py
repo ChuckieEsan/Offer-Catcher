@@ -6,7 +6,7 @@
 - 值对象（如有）
 """
 
-from domain.shared.enums import (
+from app.domain.shared.enums import (
     ConversationStatus,
     DifficultyLevel,
     MasteryLevel,
@@ -16,7 +16,7 @@ from domain.shared.enums import (
     SessionStatus,
 )
 
-from domain.shared.exceptions import (
+from app.domain.shared.exceptions import (
     ChatDomainException,
     ConversationNotFoundError,
     ConversationNotActiveError,

@@ -202,7 +202,7 @@ export default function ExtractPage() {
       setDetailDrawer({ visible: true, task });
 
       // 如果任务已入库，批量获取答案
-      if (task.status === "confirmed" && task.result?.questions?.length > 0) {
+      if (task.status === "confirmed" && task.result?.questions?.length && task.result.questions.length > 0) {
         const questionIds = task.result.questions.map((q) => q.question_id);
         try {
           const { answers } = await getBatchAnswers(questionIds);
@@ -650,22 +650,24 @@ export default function ExtractPage() {
                                   <Button size="small" danger icon={<DeleteOutlined />} />
                                 </Popconfirm>,
                               ]
-                            : answer && [
-                                <Button
-                                  key="view-answer"
-                                  size="small"
-                                  icon={<EyeOutlined />}
-                                  onClick={() =>
-                                    setAnswerModal({
-                                      visible: true,
-                                      questionText: q.question_text,
-                                      answer: answer,
-                                    })
-                                  }
-                                >
-                                  查看答案
-                                </Button>,
-                              ]
+                            : answer
+                              ? [
+                                  <Button
+                                    key="view-answer"
+                                    size="small"
+                                    icon={<EyeOutlined />}
+                                    onClick={() =>
+                                      setAnswerModal({
+                                        visible: true,
+                                        questionText: q.question_text,
+                                        answer: answer,
+                                      })
+                                    }
+                                  >
+                                    查看答案
+                                  </Button>,
+                                ]
+                              : undefined
                         }
                       >
                         <List.Item.Meta
