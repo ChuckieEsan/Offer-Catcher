@@ -14,7 +14,7 @@ import random
 import time
 from typing import Any, Callable, List, Optional
 
-from app.db.redis_client import get_redis_client
+from app.infrastructure.persistence.redis import get_redis_client
 from app.utils.cache import singleton
 from app.utils.logger import logger
 

@@ -21,7 +21,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.tools import InjectedToolArg
 from pydantic import BaseModel, Field
 
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.memory.io import (
     write_memory,
     write_memory_reference,

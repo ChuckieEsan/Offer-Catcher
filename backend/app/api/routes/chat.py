@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.agents.chat_agent import get_chat_agent
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/chat", tags=["chat"])

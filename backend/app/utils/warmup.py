@@ -41,7 +41,7 @@ def warmup() -> None:
 
     # 2. PostgreSQL Client
     try:
-        from app.db.postgres_client import get_postgres_client
+        from app.infrastructure.persistence.postgres import get_postgres_client
         get_postgres_client()
         logger.info("[Warmup] PostgreSQL client initialized")
     except Exception as e:
@@ -49,7 +49,7 @@ def warmup() -> None:
 
     # 3. Redis Client
     try:
-        from app.db.redis_client import get_redis_client
+        from app.infrastructure.persistence.redis import get_redis_client
         get_redis_client()
         logger.info("[Warmup] Redis client initialized")
     except Exception as e:
@@ -57,7 +57,7 @@ def warmup() -> None:
 
     # 4. Qdrant Manager
     try:
-        from app.db.qdrant_client import get_qdrant_manager
+        from app.infrastructure.persistence.qdrant import get_qdrant_manager
         get_qdrant_manager()
         logger.info("[Warmup] Qdrant manager initialized")
     except Exception as e:
@@ -157,7 +157,7 @@ def warmup() -> None:
 
     # 15. Graph Client (Neo4j) - 懒加载连接，仅创建单例
     try:
-        from app.db.graph_client import get_graph_client
+        from app.infrastructure.persistence.neo4j import get_graph_client
         get_graph_client()  # 创建单例，实际连接在首次使用时建立
         logger.info("[Warmup] Neo4j Graph Client singleton created")
     except Exception as e:

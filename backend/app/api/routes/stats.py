@@ -9,8 +9,8 @@ from typing import List, Optional, Dict
 from collections import defaultdict
 
 from app.pipelines.retrieval import get_retrieval_pipeline
-from app.db.graph_client import get_graph_client
-from app.db.qdrant_client import get_qdrant_manager
+from app.infrastructure.persistence.neo4j import get_graph_client
+from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.services.cache_service import get_cache_service, CacheKeys
 from app.utils.logger import logger
 

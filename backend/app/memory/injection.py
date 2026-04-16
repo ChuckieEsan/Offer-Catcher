@@ -16,7 +16,7 @@
 from langchain_core.messages import BaseMessage, SystemMessage
 
 from app.config.settings import get_settings
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.memory.io import read_memory, memory_exists
 from app.memory.init import ensure_user_memory
 from app.memory.store import get_memory_store

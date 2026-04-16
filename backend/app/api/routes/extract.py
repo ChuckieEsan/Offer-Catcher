@@ -22,7 +22,7 @@ from app.models import (
     ExtractTaskListItem,
     ExtractTaskStatus,
 )
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/extract", tags=["extract"])

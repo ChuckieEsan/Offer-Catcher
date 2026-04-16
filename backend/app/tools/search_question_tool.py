@@ -50,7 +50,7 @@ def _do_search(query: str, company: str, position: str, k: int) -> list[SearchRe
     Returns:
         搜索结果列表
     """
-    from app.db.qdrant_client import get_qdrant_manager
+    from app.infrastructure.persistence.qdrant import get_qdrant_manager
     from app.utils.telemetry import record_vector_query
 
     embedding_tool = get_embedding_tool()

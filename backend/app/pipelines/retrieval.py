@@ -11,7 +11,7 @@
 from typing import List, Optional
 
 from app.models import SearchResult, SearchFilter
-from app.db.qdrant_client import get_qdrant_manager
+from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.tools.embedding_tool import get_embedding_tool
 from app.utils.cache import singleton
 from app.utils.logger import logger

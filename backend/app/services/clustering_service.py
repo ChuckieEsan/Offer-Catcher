@@ -11,8 +11,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
-from app.db.qdrant_client import get_qdrant_manager
-from app.db.graph_client import get_graph_client
+from app.infrastructure.persistence.qdrant import get_qdrant_manager
+from app.infrastructure.persistence.neo4j import get_graph_client
 from app.tools.embedding_tool import get_embedding_tool
 from app.models import QdrantQuestionPayload, Cluster
 from app.utils.cache import singleton

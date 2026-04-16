@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.agents.title_generator import get_title_generator_agent
 from app.utils.logger import logger
 

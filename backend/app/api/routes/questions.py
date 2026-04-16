@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import asyncio
 
-from app.db.qdrant_client import get_qdrant_manager
+from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.agents.answer_specialist import get_answer_specialist
 from app.models import QdrantQuestionPayload, QuestionItem, SearchFilter
 from app.models.question import QuestionType, MasteryLevel

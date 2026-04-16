@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 
-from app.db.postgres_client import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])

@@ -1,6 +1,10 @@
-"""数据库基础设施层
+"""基础设施层持久化模块
 
-底层服务由 infrastructure/persistence 提供。
+包含各种数据库客户端：
+- Qdrant：向量数据库
+- PostgreSQL：关系数据库 + LangGraph Checkpointer
+- Redis：短期记忆缓存
+- Neo4j：图数据库
 """
 
 from app.infrastructure.persistence.qdrant import (
@@ -24,19 +28,21 @@ from app.infrastructure.persistence.neo4j import (
     get_graph_client,
 )
 
-# 向后兼容的别名
-QdrantManager = QdrantClient
-get_qdrant_manager = get_qdrant_client
-
 __all__ = [
-    "QdrantManager",
-    "get_qdrant_manager",
+    # Qdrant
+    "QdrantClient",
+    "get_qdrant_client",
+    # PostgreSQL
     "PostgresClient",
     "get_postgres_client",
-    "RedisClient",
-    "get_redis_client",
-    "Neo4jGraphClient",
-    "get_graph_client",
     "get_checkpointer",
     "init_checkpointer",
+    # Redis
+    "RedisClient",
+    "get_redis_client",
+    # Neo4j
+    "Neo4jClient",
+    "get_neo4j_client",
+    "Neo4jGraphClient",
+    "get_graph_client",
 ]

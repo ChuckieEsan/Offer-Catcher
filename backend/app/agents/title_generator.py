@@ -6,7 +6,7 @@
 from typing import List, Optional
 
 from app.agents.base import BaseAgent
-from app.db.postgres_client import Message
+from app.models.chat_session import Message
 from app.utils.logger import logger
 from app.utils.cache import singleton
 

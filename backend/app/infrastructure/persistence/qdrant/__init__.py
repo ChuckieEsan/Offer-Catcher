@@ -12,9 +12,15 @@ from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,
 )
 
+# 向后兼容的别名
+QdrantManager = QdrantClient
+get_qdrant_manager = get_qdrant_client
+
 __all__ = [
     "QdrantClient",
     "get_qdrant_client",
+    "QdrantManager",
+    "get_qdrant_manager",
     "QdrantQuestionRepository",
     "get_question_repository",
 ]
