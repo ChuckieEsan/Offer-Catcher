@@ -11,6 +11,16 @@ from app.api.dto.question_dto import (
     BatchAnswersRequest,
     BatchAnswersResponse,
 )
+from app.api.dto.interview_dto import (
+    InterviewQuestionResponse,
+    InterviewSessionResponse,
+    InterviewSessionListResponse,
+    InterviewReportResponse,
+    AnswerResponse,
+    HintResponse,
+    InterviewSessionCreateRequest,
+    AnswerSubmitRequest,
+)
 
 __all__ = [
     "QuestionCreateRequest",
@@ -19,4 +29,12 @@ __all__ = [
     "QuestionUpdateRequest",
     "BatchAnswersRequest",
     "BatchAnswersResponse",
+    "InterviewQuestionResponse",
+    "InterviewSessionResponse",
+    "InterviewSessionListResponse",
+    "InterviewReportResponse",
+    "AnswerResponse",
+    "HintResponse",
+    "InterviewSessionCreateRequest",
+    "AnswerSubmitRequest",
 ]

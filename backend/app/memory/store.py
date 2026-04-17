@@ -14,7 +14,7 @@ from contextlib import contextmanager
 
 from langgraph.store.postgres import PostgresStore
 
-from app.config.settings import get_settings
+from app.infrastructure.config.settings import get_settings
 from app.utils.logger import logger
 from app.utils.cache import singleton
 

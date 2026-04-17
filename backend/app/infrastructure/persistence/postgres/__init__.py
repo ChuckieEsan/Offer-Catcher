@@ -15,6 +15,10 @@ from app.infrastructure.persistence.postgres.extract_task_repository import (
     PostgresExtractTaskRepository,
     get_extract_task_repository,
 )
+from app.infrastructure.persistence.postgres.interview_session_repository import (
+    PostgresInterviewSessionRepository,
+    get_interview_session_repository,
+)
 
 __all__ = [
     "PostgresClient",
@@ -23,4 +27,6 @@ __all__ = [
     "init_checkpointer",
     "PostgresExtractTaskRepository",
     "get_extract_task_repository",
+    "PostgresInterviewSessionRepository",
+    "get_interview_session_repository",
 ]

@@ -34,6 +34,10 @@ from app.application.services.stats_service import (
     ClusterStats,
     get_stats_service,
 )
+from app.application.services.interview_service import (
+    InterviewApplicationService,
+    get_interview_service,
+)
 
 __all__ = [
     "QuestionApplicationService",
@@ -55,4 +59,6 @@ __all__ = [
     "EntityStats",
     "ClusterStats",
     "get_stats_service",
+    "InterviewApplicationService",
+    "get_interview_service",
 ]

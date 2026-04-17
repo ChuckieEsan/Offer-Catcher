@@ -30,7 +30,7 @@ def warmup() -> None:
 
     # 1. Settings & OpenTelemetry
     try:
-        from app.config.settings import get_settings
+        from app.infrastructure.config.settings import get_settings
         settings = get_settings()
         if getattr(settings, 'telemetry_enabled', False):
             from app.utils.telemetry import init_telemetry
