@@ -146,7 +146,7 @@ class ScorerAgent(BaseAgent[ScoreResult]):
             raise ValueError(f"Question not found: {question_id}")
 
         question_text = question.question_text
-        standard_answer = question.question_answer
+        standard_answer = question.answer
         current_level = MasteryLevel(question.mastery_level)
         company = question.company
         position = question.position

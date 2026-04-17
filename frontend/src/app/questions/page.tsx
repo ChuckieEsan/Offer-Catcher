@@ -31,8 +31,8 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { getQuestions, getCompanyStats, getClusterStats, updateQuestion, deleteQuestion, regenerateAnswer, addFavorite, removeFavorite, checkFavorites } from "@/lib/api";
-import type { Question, CompanyStats, ClusterStats } from "@/types";
+import { getQuestions, getCompanyStats, getClusterStats, getOverviewStats, updateQuestion, deleteQuestion, regenerateAnswer, addFavorite, removeFavorite, checkFavorites } from "@/lib/api";
+import type { Question, CompanyStats, ClusterStats, OverviewStats } from "@/types";
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -61,6 +61,9 @@ export default function QuestionsPage() {
 
   // 聚类列表
   const [clusters, setClusters] = useState<ClusterStats[]>([]);
+
+  // 全局统计
+  const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
 
   // 过滤器
   const [filterCompany, setFilterCompany] = useState<string | undefined>();
@@ -102,6 +105,7 @@ export default function QuestionsPage() {
   useEffect(() => {
     loadCompanies();
     loadClusters();
+    loadOverviewStats();
   }, []);
 
   useEffect(() => {
@@ -123,6 +127,15 @@ export default function QuestionsPage() {
       setClusters(res);
     } catch (error) {
       console.error("加载聚类列表失败");
+    }
+  };
+
+  const loadOverviewStats = async () => {
+    try {
+      const res = await getOverviewStats();
+      setOverviewStats(res);
+    } catch (error) {
+      console.error("加载全局统计失败");
     }
   };
 
@@ -393,21 +406,17 @@ export default function QuestionsPage() {
             <Statistic title="聚类总数" value={clusters.length} />
           </Col>
           <Col span={6}>
-            <Statistic title="当前筛选结果" value={total} suffix="道题目" />
-          </Col>
-          <Col span={6}>
-            <Statistic
-              title="已分类题目"
-              value={questions.filter(q => q.cluster_ids && q.cluster_ids.length > 0).length}
-              suffix={`/ ${questions.length}`}
-            />
+            <Statistic title="题目总数" value={overviewStats?.total_questions ?? 0} suffix="道" />
           </Col>
           <Col span={6}>
             <Statistic
               title="有答案题目"
-              value={questions.filter(q => q.question_answer).length}
-              suffix={`/ ${questions.length}`}
+              value={overviewStats?.has_answer ?? 0}
+              suffix={`/ ${overviewStats?.total_questions ?? 0}`}
             />
+          </Col>
+          <Col span={6}>
+            <Statistic title="当前筛选结果" value={total} suffix="道题目" />
           </Col>
         </Row>
       </Card>

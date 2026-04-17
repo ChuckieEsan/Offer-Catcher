@@ -274,7 +274,7 @@ class QdrantQuestionRepository:
         try:
             self._client.set_payload(
                 ids=[question_id],
-                payload={"answer": answer},
+                payload={"question_answer": answer},
             )
             logger.info(f"Updated answer for question: {question_id}")
         except Exception as e:
