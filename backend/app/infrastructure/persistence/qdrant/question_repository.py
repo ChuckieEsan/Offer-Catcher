@@ -115,7 +115,7 @@ class QdrantQuestionRepository:
         filter_conditions: dict | None = None,
         limit: int = 10,
         score_threshold: Optional[float] = None,
-    ) -> list[Question]:
+    ) -> list[tuple[Question, float]]:
         """向量检索题目
 
         Args:
@@ -125,7 +125,7 @@ class QdrantQuestionRepository:
             score_threshold: 相似度阈值（0-1），只返回高于此阈值的结果
 
         Returns:
-            匹配的 Question 列表
+            [(Question, score)] 列表，按相似度降序排列
         """
         try:
             # 构建过滤条件
@@ -139,14 +139,15 @@ class QdrantQuestionRepository:
                 score_threshold=score_threshold,
             )
 
-            # 转换结果
-            questions = []
+            # 转换结果（保留 score）
+            results = []
             for point in response.points:
                 if point.payload:
-                    questions.append(Question.from_payload(point.payload))
+                    question = Question.from_payload(point.payload)
+                    results.append((question, point.score))
 
-            logger.info(f"Search returned {len(questions)} results")
-            return questions
+            logger.info(f"Search returned {len(results)} results")
+            return results
 
         except Exception as e:
             logger.error(f"Failed to search: {e}")

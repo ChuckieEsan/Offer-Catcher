@@ -150,7 +150,7 @@ class Question(BaseModel):
             "question_type": self.question_type.value,
             "mastery_level": self.mastery_level.value,
             "core_entities": self.core_entities,
-            "answer": self.answer,
+            "question_answer": self.answer,
             "cluster_ids": self.cluster_ids,
             "metadata": self.metadata,
         }
@@ -169,7 +169,7 @@ class Question(BaseModel):
             question_type=QuestionType(payload["question_type"]),
             mastery_level=MasteryLevel(payload["mastery_level"]),
             core_entities=payload.get("core_entities", []),
-            answer=payload.get("answer"),
+            answer=payload.get("question_answer"),
             cluster_ids=payload.get("cluster_ids", []),
             metadata=payload.get("metadata", {}),
         )

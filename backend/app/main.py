@@ -8,8 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat, extract, score, search, stats, conversations, interview, speech, favorites
-from app.api.routes.questions_v2 import router as questions_v2_router
+from app.api.routes import chat, extract, score, search, stats, conversations, interview, speech, favorites, questions
 from app.utils.logger import logger
 from app.utils.warmup import warmup
 
@@ -60,8 +59,8 @@ app.include_router(interview.router, prefix="/api/v1")
 app.include_router(speech.router, prefix="/api/v1")
 app.include_router(favorites.router, prefix="/api/v1")
 
-# 注册 v2 路由（DDD 架构）
-app.include_router(questions_v2_router, prefix="/api/v2")
+# 注册题目路由（DDD 架构）
+app.include_router(questions.router, prefix="/api/v1")
 
 
 @app.get("/health")

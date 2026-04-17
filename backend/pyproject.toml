@@ -45,6 +45,7 @@ dependencies = [
     "sentencepiece>=0.2.1",
     "langchain-deepseek>=1.0.1",
     "pgvector>=0.4.0",
+    "pyroscope-io>=1.0.5",
 ]
 
 [dependency-groups]

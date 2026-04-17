@@ -57,7 +57,7 @@ class QuestionRepository(Protocol):
         filter_conditions: dict | None = None,
         limit: int = 10,
         score_threshold: float | None = None,
-    ) -> list[Question]:
+    ) -> list[tuple[Question, float]]:
         """向量检索题目
 
         混合检索：先 Payload 过滤，后向量计算。
@@ -69,7 +69,7 @@ class QuestionRepository(Protocol):
             score_threshold: 相似度阈值（0-1），只返回高于此阈值的结果
 
         Returns:
-            匹配的 Question 列表
+            [(Question, score)] 列表，按相似度降序排列
         """
         ...
 

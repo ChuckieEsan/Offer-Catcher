@@ -33,11 +33,6 @@ import type {
 // 如需直接连接后端（绕过代理），设置 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
-// v2 API（DDD 架构）
-const API_V2_BASE = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL.replace("/v1", "/v2")
-  : "/api/v2";
-
 const USER_ID_KEY = "offer_catcher_user_id";
 
 /**
@@ -324,7 +319,7 @@ export async function scoreAnswer(request: ScoreRequest): Promise<ScoreResult> {
   return res.data;
 }
 
-// ========== Questions API (v2 - DDD 架构) ==========
+// ========== Questions API ==========
 
 export async function getQuestions(params: {
   company?: string;
@@ -335,12 +330,12 @@ export async function getQuestions(params: {
   page?: number;
   page_size?: number;
 }): Promise<QuestionListResponse> {
-  const res = await api.get("/questions", { params, baseURL: API_V2_BASE });
+  const res = await api.get("/questions", { params });
   return res.data;
 }
 
 export async function getQuestion(id: string): Promise<Question> {
-  const res = await api.get(`/questions/${id}`, { baseURL: API_V2_BASE });
+  const res = await api.get(`/questions/${id}`);
   return res.data;
 }
 
@@ -351,7 +346,7 @@ export async function createQuestion(data: {
   question_type?: string;
   core_entities?: string[];
 }): Promise<Question> {
-  const res = await api.post("/questions", data, { baseURL: API_V2_BASE });
+  const res = await api.post("/questions", data);
   return res.data;
 }
 
@@ -359,28 +354,26 @@ export async function updateQuestion(
   id: string,
   data: Partial<Question>
 ): Promise<Question> {
-  const res = await api.put(`/questions/${id}`, data, { baseURL: API_V2_BASE });
+  const res = await api.put(`/questions/${id}`, data);
   return res.data;
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
-  await api.delete(`/questions/${id}`, { baseURL: API_V2_BASE });
+  await api.delete(`/questions/${id}`);
 }
 
 /**
  * 重新生成答案
  *
- * TODO: v2 暂未实现 regenerate 接口，需要后端补充
+ * TODO: 改用 SSE 流式返回，避免长时间等待
  *   - 后端改为 StreamingResponse，实时返回生成内容
  *   - 前端使用 EventSource 或 fetch + ReadableStream 接收
- *   - 用户可以看到生成进度，体验更好
  */
 export async function regenerateAnswer(
   id: string,
   preview: boolean = true
-): Promise<{ question_answer: string }> {
+): Promise<{ answer: string }> {
   // LLM + Web Search 耗时较长（可能超过 60 秒）
-  // v2 暂未实现此接口，暂时使用 v1
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   // 使用 AbortController 实现超时（3 分钟）
@@ -504,7 +497,7 @@ export async function deleteExtractTask(taskId: string): Promise<void> {
 export async function getBatchAnswers(
   questionIds: string[]
 ): Promise<{ answers: Record<string, string | null> }> {
-  const res = await api.post("/questions/batch/answers", { question_ids: questionIds }, { baseURL: API_V2_BASE });
+  const res = await api.post("/questions/batch/answers", { question_ids: questionIds });
   return res.data;
 }
 

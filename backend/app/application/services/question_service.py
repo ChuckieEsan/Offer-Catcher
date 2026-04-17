@@ -3,10 +3,12 @@
 编排题目的 CRUD 用例，协调领域层和基础设施层。
 作为应用层，负责：
 - 调用仓库持久化聚合
+- 缓存管理（查询缓存、失效策略）
+- 答案生成（调用 AnswerSpecialist）
 - 发布领域事件（未来）
-- 事务边界管理
 """
 
+import asyncio
 from typing import Optional
 
 from app.domain.question.aggregates import Question
@@ -16,6 +18,12 @@ from app.domain.shared.enums import MasteryLevel, QuestionType
 from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,
 )
+from app.application.services.cache_service import (
+    CacheApplicationService,
+    CacheKeys,
+    get_cache_service,
+)
+from app.models import QuestionItem
 from app.infrastructure.common.logger import logger
 
 
@@ -27,20 +35,24 @@ class QuestionApplicationService:
 
     应用层职责：
     - 调用仓库持久化聚合
+    - 缓存管理（查询缓存、失效策略）
     - 编排多个聚合的协作
-    - 发布领域事件
+    - 答案生成（调用 Agent）
     """
 
     def __init__(
         self,
         question_repo: Optional[QuestionRepository] = None,
+        cache: Optional[CacheApplicationService] = None,
     ) -> None:
         """初始化应用服务
 
         Args:
             question_repo: Question 仓库（支持依赖注入）
+            cache: 缓存服务（支持依赖注入）
         """
         self._question_repo = question_repo or get_question_repository()
+        self._cache = cache or get_cache_service()
 
     def create_question(
         self,
@@ -77,18 +89,18 @@ class QuestionApplicationService:
         # 持久化聚合
         self._question_repo.save(question)
 
-        # 发布领域事件（未来实现）
-        # self._event_publisher.publish(QuestionCreated(...))
+        # 失效缓存
+        self._cache.invalidate_question()
 
         logger.info(
             f"Created question: {question.question_id}, "
-            f"type={question_type.value}, requires_answer={question.requires_async_answer()}"
+            f"type={question_type.value}"
         )
 
         return question
 
     def get_question(self, question_id: str) -> Question | None:
-        """获取题目
+        """获取题目（不带缓存）
 
         Args:
             question_id: 题目 ID
@@ -97,6 +109,30 @@ class QuestionApplicationService:
             Question 实例或 None
         """
         return self._question_repo.find_by_id(question_id)
+
+    def get_question_with_cache(self, question_id: str) -> Question | None:
+        """获取题目（带缓存防穿透）
+
+        Args:
+            question_id: 题目 ID
+
+        Returns:
+            Question 实例或 None
+        """
+
+        def fetch() -> dict | None:
+            """获取数据并转换为可序列化的 dict"""
+            question = self._question_repo.find_by_id(question_id)
+            return question.to_payload() if question else None
+
+        # 缓存返回 dict 或 None
+        cached_dict = self._cache.get_question_item(question_id, fetch)
+
+        if cached_dict is None:
+            return None
+
+        # 转换回 Question 对象
+        return Question.from_payload(cached_dict)
 
     def update_question(
         self,
@@ -124,6 +160,9 @@ class QuestionApplicationService:
             logger.warning(f"Question not found: {question_id}")
             return None
 
+        # 延迟双删：第一次删除缓存
+        self._cache.invalidate_question(question_id)
+
         # 更新字段
         if answer is not None:
             question.update_answer(answer)
@@ -143,6 +182,10 @@ class QuestionApplicationService:
             question.question_text = question_text
 
         logger.info(f"Updated question: {question_id}")
+
+        # 延迟双删：后台任务在 1 秒后再次删除
+        asyncio.create_task(self._cache.invalidate_question_delayed(question_id))
+
         return question
 
     def delete_question(self, question_id: str) -> bool:
@@ -163,8 +206,8 @@ class QuestionApplicationService:
         # 删除
         self._question_repo.delete(question_id)
 
-        # 发布领域事件（未来实现）
-        # self._event_publisher.publish(QuestionDeleted(question_id, question.cluster_ids))
+        # 失效缓存
+        self._cache.invalidate_question(question_id)
 
         logger.info(f"Deleted question: {question_id}")
         return True
@@ -180,7 +223,7 @@ class QuestionApplicationService:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Question], int]:
-        """列出题目（带过滤和分页）
+        """列出题目（不带缓存，带过滤和分页）
 
         Args:
             company: 公司过滤
@@ -195,28 +238,34 @@ class QuestionApplicationService:
         Returns:
             (题目列表, 总数)
         """
-        # 构建过滤条件
-        filter_conditions = {}
+        # 获取所有数据
+        all_questions = self._question_repo.find_all()
+
+        # 内存过滤
         if company:
-            filter_conditions["company"] = company
+            all_questions = [q for q in all_questions if q.company == company]
+
         if position:
-            filter_conditions["position"] = position
+            all_questions = [q for q in all_questions if q.position == position]
+
         if question_type:
-            filter_conditions["question_type"] = question_type.value
+            all_questions = [
+                q for q in all_questions
+                if q.question_type == question_type
+            ]
+
         if mastery_level is not None:
-            filter_conditions["mastery_level"] = mastery_level.value
+            all_questions = [
+                q for q in all_questions
+                if q.mastery_level == mastery_level
+            ]
+
         if cluster_id:
-            filter_conditions["cluster_ids"] = [cluster_id]
+            all_questions = [
+                q for q in all_questions
+                if cluster_id in q.cluster_ids
+            ]
 
-        # 获取所有符合条件的数据
-        if company and position:
-            all_questions = self._question_repo.find_by_company_and_position(
-                company, position, limit=10000
-            )
-        else:
-            all_questions = self._question_repo.find_all()
-
-        # 内存过滤（关键词和其他条件）
         if keyword:
             keyword_lower = keyword.lower()
             all_questions = [
@@ -224,29 +273,74 @@ class QuestionApplicationService:
                 if keyword_lower in q.question_text.lower()
             ]
 
-        if question_type and not filter_conditions.get("question_type"):
-            all_questions = [
-                q for q in all_questions
-                if q.question_type == question_type
-            ]
-
-        if mastery_level is not None and not filter_conditions.get("mastery_level"):
-            all_questions = [
-                q for q in all_questions
-                if q.mastery_level == mastery_level
-            ]
-
-        if cluster_id and not filter_conditions.get("cluster_ids"):
-            all_questions = [
-                q for q in all_questions
-                if cluster_id in q.cluster_ids
-            ]
-
         # 计算总数和分页
         total = len(all_questions)
         start = (page - 1) * page_size
         end = start + page_size
 
+        return all_questions[start:end], total
+
+    def list_questions_with_cache(
+        self,
+        company: Optional[str] = None,
+        position: Optional[str] = None,
+        question_type: Optional[QuestionType] = None,
+        mastery_level: Optional[MasteryLevel] = None,
+        cluster_id: Optional[str] = None,
+        keyword: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Question], int]:
+        """列出题目（带缓存，带过滤和分页）
+
+        Args:
+            company: 公司过滤
+            position: 岗位过滤
+            question_type: 题目类型过滤
+            mastery_level: 熟练度过滤
+            cluster_id: 考点簇过滤
+            keyword: 关键词过滤（内存过滤）
+            page: 页码
+            page_size: 每页数量
+
+        Returns:
+            (题目列表, 总数)
+        """
+        # 构建过滤参数（用于缓存哈希）
+        filter_params = {
+            "company": company,
+            "position": position,
+            "question_type": question_type.value if question_type else None,
+            "mastery_level": mastery_level.value if mastery_level else None,
+            "cluster_id": cluster_id,
+            "keyword": keyword,
+        }
+
+        def fetch() -> tuple[list[dict], int]:
+            """获取数据并转换为可序列化的 dict"""
+            questions, total = self.list_questions(
+                company=company,
+                position=position,
+                question_type=question_type,
+                mastery_level=mastery_level,
+                cluster_id=cluster_id,
+                keyword=keyword,
+                page=page,
+                page_size=page_size,
+            )
+            # 转换为 dict 以便缓存序列化
+            dicts = [q.to_payload() for q in questions]
+            return dicts, total
+
+        # 通过缓存获取（返回 tuple[list[dict], int]）
+        all_dicts, total = self._cache.get_questions_list(filter_params, fetch)
+
+        # 转换回 Question 对象
+        all_questions = [Question.from_payload(d) for d in all_dicts]
+
+        # 分页处理
+        start = (page - 1) * page_size
+        end = start + page_size
         return all_questions[start:end], total
 
     def get_batch_answers(self, question_ids: list[str]) -> dict[str, str | None]:
@@ -263,6 +357,56 @@ class QuestionApplicationService:
             question = self._question_repo.find_by_id(question_id)
             answers[question_id] = question.answer if question else None
         return answers
+
+    def regenerate_answer(
+        self,
+        question_id: str,
+        preview: bool = True,
+    ) -> str | None:
+        """重新生成答案
+
+        Args:
+            question_id: 题目 ID
+            preview: 是否仅预览（不保存）
+
+        Returns:
+            生成的新答案，或 None（题目不存在）
+        """
+        # 延迟导入避免循环依赖
+        from app.agents.answer_specialist import get_answer_specialist
+
+        # 获取题目
+        question = self._question_repo.find_by_id(question_id)
+        if not question:
+            logger.warning(f"Question not found for regenerate: {question_id}")
+            return None
+
+        # 构建 QuestionItem（用于 AnswerSpecialist）
+        question_item = QuestionItem(
+            question_id=question.question_id,
+            question_text=question.question_text,
+            company=question.company,
+            position=question.position,
+            question_type=question.question_type,
+            core_entities=question.core_entities,
+            metadata=question.metadata,
+        )
+
+        # 调用 AnswerSpecialist 生成答案
+        specialist = get_answer_specialist()
+        answer = specialist.generate_answer(question_item)
+
+        # 仅当 preview=False 时才保存
+        if not preview:
+            question.update_answer(answer)
+            self._question_repo.update_answer(question_id, answer)
+
+            # 失效缓存
+            self._cache.invalidate_question(question_id)
+
+            logger.info(f"Answer saved for question: {question_id}")
+
+        return answer
 
     def count_questions(self) -> int:
         """统计题目总数"""

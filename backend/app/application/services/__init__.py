@@ -22,6 +22,18 @@ from app.application.services.cache_service import (
     CacheApplicationService,
     get_cache_service,
 )
+from app.application.services.retrieval_service import (
+    RetrievalApplicationService,
+    get_retrieval_service,
+)
+from app.application.services.stats_service import (
+    StatsApplicationService,
+    OverviewStats,
+    CompanyStats,
+    EntityStats,
+    ClusterStats,
+    get_stats_service,
+)
 
 __all__ = [
     "QuestionApplicationService",
@@ -35,4 +47,12 @@ __all__ = [
     "CacheKeys",
     "CacheApplicationService",
     "get_cache_service",
+    "RetrievalApplicationService",
+    "get_retrieval_service",
+    "StatsApplicationService",
+    "OverviewStats",
+    "CompanyStats",
+    "EntityStats",
+    "ClusterStats",
+    "get_stats_service",
 ]

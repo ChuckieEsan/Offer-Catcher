@@ -22,7 +22,7 @@ class QuestionResponse(BaseModel):
     question_type: str = Field(description="题目类型")
     mastery_level: int = Field(description="熟练度等级")
     core_entities: list[str] = Field(default_factory=list, description="知识点列表")
-    answer: Optional[str] = Field(default=None, description="标准答案")
+    question_answer: Optional[str] = Field(default=None, description="标准答案")
     cluster_ids: list[str] = Field(default_factory=list, description="考点簇列表")
     metadata: dict[str, Any] = Field(default_factory=dict, description="元数据")
 
@@ -62,7 +62,7 @@ class QuestionUpdateRequest(BaseModel):
     """更新题目请求"""
 
     question_text: Optional[str] = Field(default=None, description="新题目文本")
-    answer: Optional[str] = Field(default=None, description="新答案")
+    question_answer: Optional[str] = Field(default=None, description="新答案")
     mastery_level: Optional[int] = Field(default=None, ge=0, le=2, description="新熟练度")
     core_entities: Optional[list[str]] = Field(default=None, description="新知识点列表")
 
@@ -73,6 +73,18 @@ class BatchAnswersRequest(BaseModel):
     question_ids: list[str] = Field(description="题目 ID 列表")
 
 
+class RegenerateRequest(BaseModel):
+    """重新生成答案请求"""
+
+    preview: bool = Field(default=True, description="是否仅预览（不保存）")
+
+
+class RegenerateResponse(BaseModel):
+    """重新生成答案响应"""
+
+    question_answer: str = Field(description="生成的答案")
+
+
 __all__ = [
     "QuestionResponse",
     "QuestionListResponse",
@@ -80,4 +92,6 @@ __all__ = [
     "QuestionCreateRequest",
     "QuestionUpdateRequest",
     "BatchAnswersRequest",
+    "RegenerateRequest",
+    "RegenerateResponse",
 ]

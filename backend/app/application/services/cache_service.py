@@ -46,6 +46,16 @@ class CacheKeys:
     def stats_companies(cls) -> str:
         return f"{cls.PREFIX}:stats:companies"
 
+    @classmethod
+    def stats_entities(cls, company: Optional[str] = None, limit: int = 20) -> str:
+        """考点统计缓存 key"""
+        company_key = company or "all"
+        return f"{cls.PREFIX}:stats:entities:{company_key}:{limit}"
+
+    @classmethod
+    def stats_entities_pattern(cls) -> str:
+        return f"{cls.PREFIX}:stats:entities:*"
+
     # ========== Questions Keys ==========
 
     @classmethod
@@ -251,6 +261,7 @@ class CacheApplicationService:
             self._adapter.delete_pattern(CacheKeys.questions_count_pattern())
 
             # 2. 删除统计数据缓存
+            self._adapter.delete_pattern(CacheKeys.stats_entities_pattern())
             self._adapter.delete(
                 CacheKeys.stats_overview(),
                 CacheKeys.stats_clusters(),
