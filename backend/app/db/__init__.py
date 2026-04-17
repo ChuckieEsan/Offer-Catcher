@@ -23,6 +23,7 @@ from app.infrastructure.persistence.neo4j import (
     Neo4jGraphClient,
     get_graph_client,
 )
+from app.models.chat_session import SessionSummary
 
 # 向后兼容的别名
 QdrantManager = QdrantClient
@@ -33,6 +34,7 @@ __all__ = [
     "get_qdrant_manager",
     "PostgresClient",
     "get_postgres_client",
+    "SessionSummary",
     "RedisClient",
     "get_redis_client",
     "Neo4jGraphClient",
