@@ -1,6 +1,6 @@
 """PostgreSQL 持久化模块
 
-提供 PostgreSQL 客户端和 LangGraph Checkpointer。
+提供 PostgreSQL 客户端、LangGraph Checkpointer 和仓库实现。
 """
 
 from app.infrastructure.persistence.postgres.client import (
@@ -11,10 +11,16 @@ from app.infrastructure.persistence.postgres.checkpointer import (
     get_checkpointer,
     init_checkpointer,
 )
+from app.infrastructure.persistence.postgres.extract_task_repository import (
+    PostgresExtractTaskRepository,
+    get_extract_task_repository,
+)
 
 __all__ = [
     "PostgresClient",
     "get_postgres_client",
     "get_checkpointer",
     "init_checkpointer",
+    "PostgresExtractTaskRepository",
+    "get_extract_task_repository",
 ]

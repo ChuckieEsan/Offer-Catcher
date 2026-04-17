@@ -90,6 +90,10 @@ class Settings(BaseSettings):
         description="Qdrant 集合名称",
         default="questions",
     )
+    qdrant_test_collection: str = Field(
+        description="Qdrant 测试集合名称",
+        default="questions_test",
+    )
     qdrant_vector_size: int = Field(
         description="向量维度（BGE-M3 为 1024）",
         default=1024,

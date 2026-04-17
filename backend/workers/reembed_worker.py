@@ -8,7 +8,7 @@
 
 import asyncio
 from app.pipelines.ingestion import get_ingestion_pipeline
-from app.db.qdrant_client import get_qdrant_manager
+from app.db import get_qdrant_manager
 from app.models import QdrantQuestionPayload
 from app.tools.embedding_tool import get_embedding_tool
 from app.utils.logger import logger

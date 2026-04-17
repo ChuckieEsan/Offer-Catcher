@@ -17,7 +17,8 @@ import gzip
 import json
 
 from app.agents.vision_extractor import get_vision_extractor
-from app.db.postgres_client import get_postgres_client, ExtractTaskStatus
+from app.domain.question import ExtractTaskStatus
+from app.db import get_postgres_client
 from app.models import ExtractTaskCreate
 from app.utils.logger import logger
 

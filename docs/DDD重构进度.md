@@ -13,60 +13,68 @@
 | 层级 | 状态 | 说明 |
 |------|------|------|
 | `domain/shared/` | **已完成** | 枚举和异常定义已完成，测试通过 |
-| `domain/question/` | 待开始 | 题库领域聚合待定义 |
+| `domain/question/` | **已完成** | Question、Cluster、ExtractTask 聚合 + Repository Protocol + 领域事件 |
 | `domain/interview/` | 待开始 | 面试领域待定义 |
 | `domain/chat/` | 待开始 | 对话领域待定义 |
 | `domain/memory/` | 待开始 | 记忆领域待定义 |
-| `infrastructure/` | 骨架已建立 | 目录结构存在，源码待迁移 |
-| `application/` | 骨架已建立 | 目录结构存在，源码待迁移 |
-| `models/` | 旧代码完整 | 需迁移到 `domain/*/aggregates.py` |
+| `infrastructure/common/` | **已完成** | logger、cache、retry、circuit_breaker、prompt、image 已迁移 |
+| `infrastructure/adapters/` | **已完成** | embedding、reranker、web_search、ocr、asr、llm 已迁移 |
+| `infrastructure/persistence/` | **已完成** | Qdrant、PostgreSQL、Redis、Neo4j 客户端已迁移 |
+| `infrastructure/messaging/` | **已完成** | MQ 生产者、消费者、线程池消费者已迁移 |
+| `infrastructure/config/` | **已完成** | settings 已迁移 |
+| `application/` | 骨架已建立 | QuestionService 已完成，其他待实现 |
+| `api/dto/` | **已完成** | QuestionDTO 已完成 |
+| `api/routes/` | **已完成** | questions_v2 已完成 |
+| `models/` | 向后兼容 | 已迁移到 `domain/`，保留转发导入 |
 | `agents/` | 旧代码完整 | Workflow 迁移到 `domain/*/workflow/`，执行器迁移到 `application/services/` |
-| `db/` | 旧代码完整 | 需迁移到 `infrastructure/persistence/` |
+| `db/` | 向后兼容 | 已迁移到 `infrastructure/persistence/`，保留转发导入 |
 | `pipelines/` | 旧代码完整 | 需迁移到 `application/services/` |
-| `tools/` | 旧代码完整 | 领域工具迁移到 `domain/*/tools.py`，适配器迁移到 `infrastructure/adapters/` |
-| `mq/` | 旧代码完整 | 需迁移到 `infrastructure/messaging/` |
-| `services/` | 旧代码完整 | 按职责拆分到不同层 |
-| `utils/` | 旧代码完整 | 按职责拆分到不同层 |
+| `tools/` | 部分迁移 | embedding、reranker、web_search 已使用 adapter |
+| `mq/` | 向后兼容 | 已迁移到 `infrastructure/messaging/`，保留转发导入 |
+| `services/` | 部分迁移 | xfyun_asr 已迁移到 adapters |
+| `utils/` | 向后兼容 | 大部分已迁移，保留转发导入 |
 
 ---
 
 ## 阶段划分与进度
 
-### 阶段 1：基础设施层基础模块（最低风险）
+### 阶段 1：基础设施层基础模块（最低风险） ✅ 已完成（部分）
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
-| 1.1 | logger 迁移 | `infrastructure/common/logger.py` | `utils/logger.py` | 待开始 | - | 纯工具类，无依赖 |
-| 1.2 | cache 装饰器迁移 | `infrastructure/common/cache.py` | `utils/cache.py` | 待开始 | - | `@singleton` 装饰器 |
-| 1.3 | circuit_breaker 迁移 | `infrastructure/common/circuit_breaker.py` | `utils/circuit_breaker.py` | 待开始 | - | 熔断器模式 |
-| 1.4 | retry 迁移 | `infrastructure/common/retry.py` | `utils/retry.py` | 待开始 | - | 重试机制 |
+| 1.1 | logger 迁移 | `infrastructure/common/logger.py` | `utils/logger.py` | **已完成** | 2026-04-17 | 纯工具类，无依赖，utils/logger.py 改为转发 |
+| 1.2 | cache 装饰器迁移 | `infrastructure/common/cache.py` | `utils/cache.py` | **已完成** | 2026-04-17 | `@singleton` 装饰器，utils/cache.py 改为转发 |
+| 1.3 | circuit_breaker 迁移 | `infrastructure/common/circuit_breaker.py` | `utils/circuit_breaker.py` | **已完成** | 2026-04-17 | 熔断器模式，含 CircuitOpenState 转发 |
+| 1.4 | retry 迁移 | `infrastructure/common/retry.py` | `utils/retry.py` | **已完成** | 2026-04-17 | 重试机制，utils/retry.py 改为转发 |
 | 1.5 | telemetry 迁移 | `infrastructure/common/telemetry.py` | `utils/telemetry.py` | 待开始 | - | 遗测追踪 |
-| 1.6 | prompt_loader 迁移 | `infrastructure/common/prompt.py` | `utils/prompt.py` | 待开始 | - | 提示词加载工具 |
-| 1.7 | exceptions 定义 | `infrastructure/common/exceptions.py` | - | 待开始 | - | 基础异常类 |
-| 1.8 | config 迁移 | `infrastructure/config/settings.py` | `config/settings.py` | 待开始 | - | 配置类 |
+| 1.6 | prompt_loader 迁移 | `infrastructure/common/prompt.py` | `utils/prompt.py` | **已完成** | 2026-04-17 | 提示词加载工具，utils/prompt.py 改为转发 |
+| 1.7 | image 迁移 | `infrastructure/common/image.py` | `utils/image.py` | **已完成** | 2026-04-17 | 图片处理工具，utils/image.py 改为转发 |
+| 1.8 | hasher 迁移 | `domain/question/utils.py` | `utils/hasher.py` | **已完成** | 2026-04-17 | **领域逻辑**，infra/common/hasher.py 已删除 |
 
 **阶段 1 检查点**：
-- [ ] 所有基础工具类迁移完成
-- [ ] import 路径更新到新位置
-- [ ] 旧 `utils/` 目录可删除（仅保留 hasher.py 等领域逻辑）
+- [x] logger、cache、retry、circuit_breaker、prompt、image 迁移完成
+- [x] hasher 已正确迁移到 domain/question/utils.py
+- [x] utils/*.py 改为导入转发，保持向后兼容
+- [ ] telemetry 迁移待完成
 
 ---
 
-### 阶段 2：外部服务适配器
+### 阶段 2：外部服务适配器 ✅ 已完成
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
-| 2.1 | embedding_adapter | `infrastructure/adapters/embedding_adapter.py` | `tools/embedding_tool.py` | 待开始 | - | 向量嵌入适配 |
-| 2.2 | reranker_adapter | `infrastructure/adapters/reranker_adapter.py` | `tools/reranker_tool.py` | 待开始 | - | 重排序适配 |
-| 2.3 | web_search_adapter | `infrastructure/adapters/web_search_adapter.py` | `tools/web_search_tool.py` | 待开始 | - | Web搜索适配 |
-| 2.4 | ocr_adapter | `infrastructure/adapters/ocr_adapter.py` | `utils/ocr.py` | 待开始 | - | OCR服务适配 |
-| 2.5 | image_adapter | `infrastructure/adapters/image_adapter.py` | `utils/image.py` | 待开始 | - | 图片处理适配 |
-| 2.6 | asr_adapter | `infrastructure/adapters/asr_adapter.py` | `services/xfyun_asr.py` | 待开始 | - | 讯飞语音识别 |
-| 2.7 | llm_adapter | `infrastructure/adapters/llm_adapter.py` | `llm/` | 待开始 | - | LLM调用统一封装 |
+| 2.1 | embedding_adapter | `infrastructure/adapters/embedding_adapter.py` | `tools/embedding_tool.py` | **已完成** | 2026-04-16 | 向量嵌入适配，tools/embedding_tool.py 改为使用 adapter |
+| 2.2 | reranker_adapter | `infrastructure/adapters/reranker_adapter.py` | `tools/reranker_tool.py` | **已完成** | 2026-04-16 | 重排序适配，tools/reranker_tool.py 改为使用 adapter |
+| 2.3 | web_search_adapter | `infrastructure/adapters/web_search_adapter.py` | `tools/web_search_tool.py` | **已完成** | 2026-04-16 | Web搜索适配，tools/web_search_tool.py 改为使用 adapter |
+| 2.4 | ocr_adapter | `infrastructure/adapters/ocr_adapter.py` | `utils/ocr.py` | **已完成** | 2026-04-16 | OCR服务适配，utils/ocr.py 已删除 |
+| 2.5 | image 工具迁移 | `infrastructure/common/image.py` | `utils/image.py` | **已完成** | 2026-04-17 | 图片处理为通用工具，非外部服务 |
+| 2.6 | asr_adapter | `infrastructure/adapters/asr_adapter.py` | `services/xfyun_asr.py` | **已完成** | 2026-04-16 | 讯飞语音识别，services/xfyun_asr.py 已删除 |
+| 2.7 | llm_adapter | `infrastructure/adapters/llm_adapter.py` | `llm/` | **已完成** | 2026-04-16 | LLM调用统一封装，app/llm/__init__.py 改为转发 |
 
 **阶段 2 检查点**：
-- [ ] 所有外部服务调用统一封装为 Adapter
-- [ ] Adapter 支持依赖注入，便于测试 Mock
+- [x] 所有外部服务调用统一封装为 Adapter
+- [x] Adapter 支持依赖注入，便于测试 Mock
+- [x] 旧工具文件改为使用 adapter 或删除
 
 ---
 
@@ -108,20 +116,22 @@
 
 ---
 
-### 阶段 5：题库仓库实现（基础设施层） ✅ 已完成（部分）
+### 阶段 5：题库仓库实现（基础设施层） ✅ 已完成
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
 | 5.1 | Qdrant 客户端迁移 | `infrastructure/persistence/qdrant/client.py` | `db/qdrant_client.py` | **已完成** | 2026-04-16 | 新版客户端，支持依赖注入 |
 | 5.2 | QuestionRepository 实现 | `infrastructure/persistence/qdrant/question_repository.py` | - | **已完成** | 2026-04-16 | 实现 Protocol，含 embedding 计算 |
-| 5.3 | ClusterRepository 实现 | `infrastructure/persistence/qdrant/cluster_repository.py` | - | 待开始 | - | 实现 Protocol |
-| 5.4 | ExtractTaskRepository 实现 | `infrastructure/persistence/postgres/extract_task_repository.py` | `db/postgres_client.py` | 待开始 | - | PostgreSQL 实现 |
+| 5.3 | ClusterRepository 实现 | `infrastructure/persistence/qdrant/cluster_repository.py` | - | **已完成** | 2026-04-17 | 实现 Protocol，使用 entity_type 区分 |
+| 5.4 | ExtractTaskRepository 实现 | `infrastructure/persistence/postgres/extract_task_repository.py` | `db/postgres_client.py` | **已完成** | 2026-04-17 | PostgreSQL 实现，复用现有表 |
 | 5.5 | EmbeddingAdapter 实现 | `infrastructure/adapters/embedding_adapter.py` | `tools/embedding_tool.py` | **已完成** | 2026-04-16 | 向量嵌入适配器 |
 | 5.6 | 集成测试 | - | - | 待开始 | - | 仓库实现测试 |
 
 **阶段 5 检查点**：
 - [x] Qdrant 客户端迁移完成
 - [x] QuestionRepository 实现完成，可 CRUD Question
+- [x] ClusterRepository 实现完成
+- [x] ExtractTaskRepository 实现完成
 - [ ] 与旧代码功能对比测试通过
 - [ ] 性能无明显下降
 
@@ -145,16 +155,21 @@
 
 ---
 
-### 阶段 7：面试仓库实现
+### 阶段 7：面试仓库实现 ✅ 已完成（部分）
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
-| 7.1 | PostgreSQL 客户端迁移 | `infrastructure/persistence/postgres/client.py` | `db/postgres_client.py` | 待开始 | - | 关系数据库客户端 |
-| 7.2 | InterviewSessionRepository 实现 | `infrastructure/persistence/postgres/interview_session_repository.py` | `db/postgres_client.py` | 待开始 | - | 实现 Protocol |
-| 7.3 | Checkpointer 迁移 | `infrastructure/persistence/postgres/checkpointer.py` | `db/checkpointer.py` | 待开始 | - | LangGraph 状态持久化 |
-| 7.4 | 集成测试 | - | - | 待开始 | - | 仓库实现测试 |
+| 7.1 | PostgreSQL 客户端迁移 | `infrastructure/persistence/postgres/client.py` | `db/postgres_client.py` | **已完成** | 2026-04-16 | 关系数据库客户端 |
+| 7.2 | Redis 客户端迁移 | `infrastructure/persistence/redis/client.py` | `db/redis_client.py` | **已完成** | 2026-04-16 | Redis 短期记忆缓存 |
+| 7.3 | Neo4j 客户端迁移 | `infrastructure/persistence/neo4j/client.py` | `db/graph_client.py` | **已完成** | 2026-04-16 | 图数据库（考点关系） |
+| 7.4 | Checkpointer 迁移 | `infrastructure/persistence/postgres/checkpointer.py` | `db/checkpointer.py` | **已完成** | 2026-04-16 | LangGraph 状态持久化 |
+| 7.5 | InterviewSessionRepository 实现 | `infrastructure/persistence/postgres/interview_session_repository.py` | `db/postgres_client.py` | 待开始 | - | 实现 Protocol |
+| 7.6 | 集成测试 | - | - | 待开始 | - | 仓库实现测试 |
 
----
+**阶段 7 检查点**：
+- [x] PostgreSQL、Redis、Neo4j 客户端迁移完成
+- [x] Checkpointer 迁移完成
+- [x] db/__init__.py 改为导入转发
 
 ### 阶段 8：智能对话领域
 
@@ -199,16 +214,20 @@
 
 ---
 
-### 阶段 12：消息队列迁移
+### 阶段 12：消息队列迁移 ✅ 已完成
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
-| 12.1 | Producer 迁移 | `infrastructure/messaging/rabbitmq/producer.py` | `mq/producer.py` | 待开始 | - | MQ 生产者 |
-| 12.2 | Consumer 迁移 | `infrastructure/messaging/rabbitmq/consumer.py` | `mq/consumer.py` | 待开始 | - | MQ 消费者 |
-| 12.3 | ThreadPoolConsumer 迁移 | `infrastructure/messaging/rabbitmq/thread_pool_consumer.py` | `mq/thread_pool_consumer.py` | 待开始 | - | 线程池消费 |
-| 12.4 | EventBus 实现 | `infrastructure/messaging/rabbitmq/event_bus.py` | - | 待开始 | - | 事件总线 |
+| 12.1 | Producer 迁移 | `infrastructure/messaging/producer.py` | `mq/producer.py` | **已完成** | 2026-04-16 | MQ 生产者，mq/__init__.py 改为转发 |
+| 12.2 | Consumer 迁移 | `infrastructure/messaging/consumer.py` | `mq/consumer.py` | **已完成** | 2026-04-16 | MQ 消费者，含熔断保护 |
+| 12.3 | ThreadPoolConsumer 迁移 | `infrastructure/messaging/thread_pool_consumer.py` | `mq/thread_pool_consumer.py` | **已完成** | 2026-04-16 | 线程池消费 |
+| 12.4 | MessageHelper 迁移 | `infrastructure/messaging/message_helper.py` | `mq/message_helper.py` | **已完成** | 2026-04-16 | 重试/DLQ 工具 |
+| 12.5 | EventBus 实现 | `infrastructure/messaging/event_bus.py` | - | 待开始 | - | 事件总线（可选） |
 
----
+**阶段 12 检查点**：
+- [x] MQ 生产者、消费者、线程池消费者迁移完成
+- [x] mq/__init__.py 改为导入转发
+- [x] 消费者支持熔断保护
 
 ### 阶段 13：应用层事件机制
 
@@ -224,7 +243,7 @@
 
 | 序号 | 任务 | 目标位置 | 源位置 | 状态 | 完成日期 | 备注 |
 |------|------|----------|--------|------|----------|------|
-| 14.1 | IngestionApplicationService | `application/services/ingestion_service.py` | `pipelines/ingestion.py` | 待开始 | - | 入库用例编排 |
+| 14.1 | IngestionApplicationService | `application/services/ingestion_service.py` | `pipelines/ingestion.py` | **已完成** | 2026-04-17 | 入库用例编排，含分类熔断和答案复用 |
 | 14.2 | RetrievalApplicationService | `application/services/retrieval_service.py` | `pipelines/retrieval.py` | 待开始 | - | 检索用例编排 |
 | 14.3 | ChatApplicationService | `application/services/chat_service.py` | `agents/chat_agent.py` | 待开始 | - | 对话 Agent 执行器 |
 | 14.4 | InterviewApplicationService | `application/services/interview_service.py` | `agents/interview_agent.py` | 待开始 | - | 面试 Agent 执行器 |
@@ -233,7 +252,8 @@
 
 **阶段 14 检查点**：
 - [x] QuestionApplicationService 完成，支持 CRUD 操作
-- [ ] 其他应用服务待实现
+- [x] IngestionApplicationService 完成，含分类熔断和答案复用
+- [x] pipelines/ingestion.py 改为向后兼容转发层
 
 ---
 
@@ -310,40 +330,36 @@
 |------|------|
 | 总阶段数 | 19 |
 | 总任务数 | 91 |
-| 已完成 | 16 |
-| 进行中 | 2 |
-| 待开始 | 73 |
-| 完成进度 | 17.6% |
+| 已完成 | 40 |
+| 进行中 | 0 |
+| 待开始 | 51 |
+| 完成进度 | 43.9% |
 
 ---
 
 ## 下一步行动
 
-**已完成题目 CRUD 的垂直切片！**
+**已完成题库垂直切片！**
 
-已实现的完整链路：
+入库流程已打通：
 ```
-domain/question/aggregates.py → domain/question/repositories.py (Protocol)
-    ↓
-infrastructure/persistence/qdrant/question_repository.py (实现)
-    ↓
-application/services/question_service.py (应用服务)
-    ↓
-api/routes/questions_v2.py (API 端点)
+面经图片上传 → VisionExtractor → ExtractTask (PostgreSQL)
+    → 用户确认 → IngestionService → QuestionRepository (Qdrant)
+    → MQ → AnswerWorker → 答案回填
 ```
 
-**新增 API 端点**：`/api/v2/questions`
-- GET `/api/v2/questions` - 列出题目
-- GET `/api/v2/questions/{id}` - 获取题目
-- POST `/api/v2/questions` - 创建题目
-- PUT `/api/v2/questions/{id}` - 更新题目
-- DELETE `/api/v2/questions/{id}` - 删除题目
-- POST `/api/v2/questions/batch/answers` - 批量获取答案
+**已完成的模块：**
+- `domain/question/` - Question、Cluster、ExtractTask 聚合 + Repository Protocol + 领域事件
+- `infrastructure/persistence/qdrant/` - QuestionRepository、ClusterRepository 实现
+- `infrastructure/persistence/postgres/` - ExtractTaskRepository 实现
+- `application/services/question_service.py` - 题 CRUD 用例
+- `application/services/ingestion_service.py` - 入库用例（分类熔断 + 答案复用）
+- `pipelines/ingestion.py` - 向后兼容转发层（仅保留 `process` 方法）
 
-**推荐下一步**：
-1. 启动服务验证 `/api/v2/questions` 端点是否正常工作
-2. 继续实现其他 API 的 v2 版本
-3. 或继续完善题库入库功能（入库用例）
+**推荐下一步：**
+1. 测试数据库配置 - 让测试使用 `offer_catcher_test` 而非生产数据库
+2. 继续实现其他领域的 Repository 和 Service
+3. 或验证完整的入库流程（启动服务 + 调用 API）
 
 ---
 

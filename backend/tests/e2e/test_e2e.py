@@ -9,7 +9,7 @@ import pytest
 
 from app.models import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
 from app.utils.hasher import generate_question_id
-from app.pipelines.ingestion import get_ingestion_pipeline, IngestionResult
+from app.pipelines.ingestion import get_ingestion_pipeline
 from app.pipelines.retrieval import get_retrieval_pipeline
 
 
@@ -103,31 +103,6 @@ class TestEndToEnd:
             assert r.mastery_level == 0
 
         print("\n=== End-to-end test PASSED ===")
-
-
-class TestIngestionPipeline:
-    """入库流水线测试"""
-
-    @pytest.mark.asyncio
-    async def test_ingest_single_question(self):
-        """测试单条题目入库"""
-        ingestion = get_ingestion_pipeline()
-
-        result = await ingestion.ingest_single_question(
-            question_text='LangChain 是什么？',
-            company='阿里',
-            position='大模型开发',
-            question_type=QuestionType.KNOWLEDGE,
-            mastery_level=0,
-        )
-
-        print(f"\n=== Single Question Ingestion ===")
-        print(f"Processed: {result.processed}")
-        print(f"Async tasks: {result.async_tasks}")
-        print(f"Question IDs: {result.question_ids}")
-
-        assert result.processed == 1
-        assert result.async_tasks == 1  # knowledge 类型
 
 
 class TestRetrievalPipeline:

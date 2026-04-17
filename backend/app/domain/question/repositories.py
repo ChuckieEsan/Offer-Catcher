@@ -56,6 +56,7 @@ class QuestionRepository(Protocol):
         query_vector: list[float],
         filter_conditions: dict | None = None,
         limit: int = 10,
+        score_threshold: float | None = None,
     ) -> list[Question]:
         """向量检索题目
 
@@ -65,6 +66,7 @@ class QuestionRepository(Protocol):
             query_vector: 查询向量
             filter_conditions: Payload 过滤条件
             limit: 返回数量限制
+            score_threshold: 相似度阈值（0-1），只返回高于此阈值的结果
 
         Returns:
             匹配的 Question 列表

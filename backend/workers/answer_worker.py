@@ -17,8 +17,8 @@ import signal
 import sys
 
 from app.agents.answer_specialist import get_answer_specialist
-from app.db.qdrant_client import get_qdrant_manager
-from app.mq.thread_pool_consumer import get_thread_pool_consumer
+from app.db import get_qdrant_manager
+from app.mq import get_thread_pool_consumer
 from app.models import MQTaskMessage
 from app.models import QuestionItem, QuestionType, MasteryLevel
 from app.utils.logger import logger

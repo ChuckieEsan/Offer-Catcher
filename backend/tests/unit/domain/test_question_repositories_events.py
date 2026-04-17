@@ -6,12 +6,12 @@
 import pytest
 from datetime import datetime
 
-from domain.question.repositories import (
+from app.domain.question.repositories import (
     ClusterRepository,
     ExtractTaskRepository,
     QuestionRepository,
 )
-from domain.question.events import (
+from app.domain.question.events import (
     AnswerGenerated,
     ClusterAssigned,
     ClusterCreated,
@@ -20,7 +20,7 @@ from domain.question.events import (
     QuestionCreated,
     QuestionDeleted,
 )
-from domain.question.aggregates import Question, Cluster, ExtractTask
+from app.domain.question.aggregates import Question, Cluster, ExtractTask
 
 
 class TestQuestionRepositoryProtocol:

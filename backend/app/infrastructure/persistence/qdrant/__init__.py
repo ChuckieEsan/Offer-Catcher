@@ -11,6 +11,10 @@ from app.infrastructure.persistence.qdrant.question_repository import (
     QdrantQuestionRepository,
     get_question_repository,
 )
+from app.infrastructure.persistence.qdrant.cluster_repository import (
+    QdrantClusterRepository,
+    get_cluster_repository,
+)
 
 # 向后兼容的别名
 QdrantManager = QdrantClient
@@ -23,4 +27,6 @@ __all__ = [
     "get_qdrant_manager",
     "QdrantQuestionRepository",
     "get_question_repository",
+    "QdrantClusterRepository",
+    "get_cluster_repository",
 ]

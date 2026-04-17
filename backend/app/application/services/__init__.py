@@ -7,8 +7,16 @@ from app.application.services.question_service import (
     QuestionApplicationService,
     get_question_service,
 )
+from app.application.services.ingestion_service import (
+    IngestionApplicationService,
+    IngestionResult,
+    get_ingestion_service,
+)
 
 __all__ = [
     "QuestionApplicationService",
     "get_question_service",
+    "IngestionApplicationService",
+    "IngestionResult",
+    "get_ingestion_service",
 ]

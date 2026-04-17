@@ -114,6 +114,7 @@ class QdrantQuestionRepository:
         query_vector: list[float],
         filter_conditions: dict | None = None,
         limit: int = 10,
+        score_threshold: Optional[float] = None,
     ) -> list[Question]:
         """向量检索题目
 
@@ -121,6 +122,7 @@ class QdrantQuestionRepository:
             query_vector: 查询向量
             filter_conditions: Payload 过滤条件
             limit: 返回数量限制
+            score_threshold: 相似度阈值（0-1），只返回高于此阈值的结果
 
         Returns:
             匹配的 Question 列表
@@ -134,6 +136,7 @@ class QdrantQuestionRepository:
                 query_vector=query_vector,
                 query_filter=query_filter,
                 limit=limit,
+                score_threshold=score_threshold,
             )
 
             # 转换结果
