@@ -208,6 +208,32 @@ class Cluster(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
+    @classmethod
+    def create(
+        cls,
+        cluster_id: str,
+        cluster_name: str,
+        summary: str,
+        knowledge_points: list[str] | None = None,
+    ) -> "Cluster":
+        """创建考点簇（工厂方法）
+
+        Args:
+            cluster_id: 考点簇唯一标识
+            cluster_name: 考点簇名称
+            summary: 一句话总结
+            knowledge_points: 核心知识点列表
+
+        Returns:
+            Cluster 实例
+        """
+        return cls(
+            cluster_id=cluster_id,
+            cluster_name=cluster_name,
+            summary=summary,
+            knowledge_points=knowledge_points or [],
+        )
+
     def add_question(self, question_id: str) -> None:
         """添加题目引用
 

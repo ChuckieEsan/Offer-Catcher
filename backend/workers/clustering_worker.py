@@ -85,11 +85,11 @@ def main():
             f"max_clusters={args.max_clusters}, auto_k={auto_k})..."
         )
 
-        # 重置单例以使用新参数
-        import app.services.clustering_service as cs_module
-        cs_module._clustering_service = None
+        # 清除单例缓存以使用新参数
+        from app.application.services.clustering_service import get_clustering_service as get_service
+        get_service.clear_cache()
 
-        service = cs_module.get_clustering_service(
+        service = get_clustering_service(
             min_cluster_size=args.min_cluster_size,
             max_clusters=args.max_clusters,
             auto_k=auto_k,

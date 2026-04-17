@@ -326,6 +326,108 @@ class Neo4jClient:
             logger.error(f"Failed to create cluster node: {e}")
             return False
 
+    def create_related_to_relationship(
+        self,
+        cluster_id: str,
+        knowledge_point: str,
+    ) -> bool:
+        """创建簇与知识点的关联关系
+
+        Args:
+            cluster_id: 簇 ID
+            knowledge_point: 知识点名称
+
+        Returns:
+            是否成功
+        """
+        if not self._ensure_connected():
+            return False
+
+        # 先确保 Entity 节点存在
+        self.create_entity_node(knowledge_point)
+
+        query = """
+        MATCH (c:Cluster {cluster_id: $cluster_id})
+        MATCH (e:Entity {name: $knowledge_point})
+        MERGE (c)-[r:RELATED_TO]->(e)
+        RETURN r
+        """
+
+        try:
+            with self._driver.session(database=self._database) as session:
+                session.run(
+                    query,
+                    cluster_id=cluster_id,
+                    knowledge_point=knowledge_point,
+                )
+            logger.debug(f"Created RELATED_TO: {cluster_id} -> {knowledge_point}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create RELATED_TO relationship: {e}")
+            return False
+
+    def create_belongs_to_relationship(
+        self,
+        question_id: str,
+        cluster_id: str,
+    ) -> bool:
+        """创建题目归属簇的关系
+
+        Args:
+            question_id: 题目 ID
+            cluster_id: 簇 ID
+
+        Returns:
+            是否成功
+        """
+        if not self._ensure_connected():
+            return False
+
+        # 先创建 Question 节点（如果不存在）
+        self._create_question_node_if_not_exists(question_id)
+
+        query = """
+        MATCH (q:Question {question_id: $question_id})
+        MATCH (c:Cluster {cluster_id: $cluster_id})
+        MERGE (q)-[r:BELONGS_TO]->(c)
+        RETURN r
+        """
+
+        try:
+            with self._driver.session(database=self._database) as session:
+                session.run(
+                    query,
+                    question_id=question_id,
+                    cluster_id=cluster_id,
+                )
+            logger.debug(f"Created BELONGS_TO: {question_id} -> {cluster_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create BELONGS_TO relationship: {e}")
+            return False
+
+    def _create_question_node_if_not_exists(self, question_id: str) -> bool:
+        """创建 Question 节点（如果不存在）
+
+        Args:
+            question_id: 题目 ID
+
+        Returns:
+            是否成功
+        """
+        query = """
+        MERGE (q:Question {question_id: $question_id})
+        RETURN q
+        """
+
+        try:
+            with self._driver.session(database=self._database) as session:
+                session.run(query, question_id=question_id)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create question node: {e}")
+            return False
+
     def get_cluster_by_id(self, cluster_id: str) -> Optional[dict]:
         """根据 ID 获取考点簇"""
         if not self._ensure_connected():

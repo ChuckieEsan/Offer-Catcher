@@ -7,6 +7,7 @@
 - OCRAdapter：OCR 识别适配
 - XfyunASRAdapter：讯飞语音识别适配
 - LLMAdapter：LLM 调用适配
+- CacheAdapter：缓存适配（Redis）
 """
 
 from app.infrastructure.adapters.embedding_adapter import (
@@ -38,6 +39,10 @@ from app.infrastructure.adapters.llm_adapter import (
     get_llm,
     PROVIDERS_CONFIG,
 )
+from app.infrastructure.adapters.cache_adapter import (
+    CacheAdapter,
+    get_cache_adapter,
+)
 
 __all__ = [
     "EmbeddingAdapter",
@@ -57,4 +62,6 @@ __all__ = [
     "create_llm",
     "get_llm",
     "PROVIDERS_CONFIG",
+    "CacheAdapter",
+    "get_cache_adapter",
 ]

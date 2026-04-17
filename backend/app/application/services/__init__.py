@@ -12,6 +12,16 @@ from app.application.services.ingestion_service import (
     IngestionResult,
     get_ingestion_service,
 )
+from app.application.services.clustering_service import (
+    ClusteringApplicationService,
+    ClusteringResult,
+    get_clustering_service,
+)
+from app.application.services.cache_service import (
+    CacheKeys,
+    CacheApplicationService,
+    get_cache_service,
+)
 
 __all__ = [
     "QuestionApplicationService",
@@ -19,4 +29,10 @@ __all__ = [
     "IngestionApplicationService",
     "IngestionResult",
     "get_ingestion_service",
+    "ClusteringApplicationService",
+    "ClusteringResult",
+    "get_clustering_service",
+    "CacheKeys",
+    "CacheApplicationService",
+    "get_cache_service",
 ]
