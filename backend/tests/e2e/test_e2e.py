@@ -8,9 +8,9 @@
 import pytest
 
 from app.models import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
-from app.utils.hasher import generate_question_id
-from app.pipelines.ingestion import get_ingestion_pipeline
-from app.pipelines.retrieval import get_retrieval_pipeline
+from app.domain.question.utils import generate_question_id
+from app.application.services.ingestion_service import get_ingestion_service
+from app.application.services.retrieval_service import get_retrieval_service
 
 
 class TestEndToEnd:

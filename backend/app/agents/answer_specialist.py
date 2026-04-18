@@ -13,8 +13,8 @@ from typing import Optional
 from app.agents.base import BaseAgent
 from app.models import QuestionItem
 from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
-from app.utils.logger import logger
-from app.utils.cache import singleton
+from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache import singleton
 
 
 class AnswerSpecialistAgent(BaseAgent):

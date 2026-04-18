@@ -7,8 +7,8 @@ from typing import List, Optional
 
 from app.agents.base import BaseAgent
 from app.models.chat_session import Message
-from app.utils.logger import logger
-from app.utils.cache import singleton
+from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache import singleton
 
 
 class TitleGeneratorAgent(BaseAgent[str]):

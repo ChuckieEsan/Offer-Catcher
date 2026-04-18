@@ -36,7 +36,7 @@ from app.memory.templates import (
     get_behaviors_template,
 )
 from app.memory.store import get_memory_store
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 @pytest.fixture

@@ -4,7 +4,7 @@
 
 使用方式：
     # 在 FastAPI lifespan 中调用
-    from app.utils.warmup import warmup
+    from app.infrastructure.bootstrap import warmup
     warmup()
 """
 
@@ -33,7 +33,7 @@ def warmup() -> None:
         from app.infrastructure.config.settings import get_settings
         settings = get_settings()
         if getattr(settings, 'telemetry_enabled', False):
-            from app.utils.telemetry import init_telemetry
+            from app.infrastructure.observability import init_telemetry
             init_telemetry()
             logger.info("[Warmup] OpenTelemetry initialized")
     except Exception as e:

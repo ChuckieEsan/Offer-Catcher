@@ -32,7 +32,7 @@ T = TypeVar("T")
 
 # ==================== Context Variables ====================
 
-# Request ID 贯穿整个请求链路
+# Request ID 贅穿整个请求链路
 _request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
 # Session ID 用于区分不同会话

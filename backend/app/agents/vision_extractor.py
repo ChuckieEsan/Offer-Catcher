@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.base import BaseAgent
 from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
-from app.utils.hasher import generate_question_id
+from app.domain.question.utils import generate_question_id
 from app.infrastructure.common.logger import logger
 from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
 

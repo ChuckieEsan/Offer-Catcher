@@ -19,8 +19,8 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from app.agents.graph import run_workflow
 from app.agents.graph.workflow import astream_workflow
-from app.utils.logger import logger
-from app.utils.cache import singleton
+from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache import singleton
 
 
 class ChatAgent:

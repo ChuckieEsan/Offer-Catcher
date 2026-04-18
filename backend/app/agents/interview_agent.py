@@ -22,9 +22,9 @@ from app.models.interview_session import (
 )
 from app.tools.search_question_tool import search_questions
 from app.tools.embedding_tool import get_embedding_tool
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 from app.agents.prompts import build_prompt
-from app.utils.cache import singleton
+from app.infrastructure.common.cache import singleton
 
 
 # 公司类型与面试风格映射

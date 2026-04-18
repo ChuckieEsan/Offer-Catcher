@@ -6,7 +6,7 @@
 import pytest
 
 from app.models import QuestionItem, ExtractedInterview, QuestionType, MasteryLevel
-from app.utils.hasher import generate_question_id
+from app.domain.question.utils import generate_question_id
 
 
 class TestQuestionItem:

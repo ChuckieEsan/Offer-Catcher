@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import chat, extract, score, search, stats, conversations, interview, speech, favorites, questions
-from app.utils.logger import logger
-from app.utils.warmup import warmup
+from app.infrastructure.common.logger import logger
+from app.infrastructure.bootstrap import warmup
 
 
 @asynccontextmanager

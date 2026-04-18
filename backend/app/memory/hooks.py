@@ -19,7 +19,7 @@ from typing import Optional
 from langchain_core.messages import BaseMessage
 
 from app.memory.agent.agent import run_memory_agent
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 async def trigger_memory_update(

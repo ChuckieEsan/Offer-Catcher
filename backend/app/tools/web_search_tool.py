@@ -102,7 +102,7 @@ __all__ = [
 # ==================== LangChain @tool 装饰器函数 ====================
 
 from langchain_core.tools import tool
-from app.utils.telemetry import traced
+from app.infrastructure.observability import traced
 from app.application.services.cache_service import get_cache_service, CacheKeys
 
 

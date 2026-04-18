@@ -36,8 +36,8 @@ from app.memory.agent.tools import (
     update_cursor,
 )
 from app.memory.agent.prompts import get_memory_agent_system_prompt
-from app.utils.logger import logger
-from app.utils.cache import singleton
+from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache import singleton
 
 
 # ==================== Agent 创建 ====================

@@ -10,9 +10,9 @@ from typing import List
 import pytest
 
 from app.infrastructure.config.settings import get_settings
-from app.db import QdrantManager
+from app.infrastructure.persistence.qdrant import QdrantManager
 from app.models import QdrantQuestionPayload, SearchFilter
-from app.utils.hasher import generate_question_id
+from app.domain.question.utils import generate_question_id
 
 # 测试专用的 collection 名称
 TEST_COLLECTION = "questions_test"

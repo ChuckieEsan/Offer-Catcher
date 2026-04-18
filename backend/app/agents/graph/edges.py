@@ -4,7 +4,7 @@
 """
 
 from app.agents.graph.state import AgentState
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def state_gate(state: AgentState) -> str:

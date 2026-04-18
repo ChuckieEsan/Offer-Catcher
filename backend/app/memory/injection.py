@@ -21,7 +21,7 @@ from app.memory.io import read_memory, memory_exists
 from app.memory.init import ensure_user_memory
 from app.memory.store import get_memory_store
 from app.tools.embedding_tool import get_embedding_tool
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # ==================== 记忆上下文构建 ====================

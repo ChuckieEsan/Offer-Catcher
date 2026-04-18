@@ -5,7 +5,7 @@
 
 import pytest
 
-from app.db import Neo4jGraphClient, get_graph_client
+from app.infrastructure.persistence.neo4j import Neo4jGraphClient, get_graph_client
 
 
 class TestNeo4jGraphClient:
@@ -184,7 +184,7 @@ class TestGraphClientSingleton:
 
     def test_get_graph_client_singleton(self):
         """测试单例获取"""
-        from app.db import graph_client as graph_client_module
+        from app.infrastructure.persistence.neo4j import graph_client as graph_client_module
         graph_client_module._graph_client = None
 
         client1 = get_graph_client()

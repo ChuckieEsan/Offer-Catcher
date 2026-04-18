@@ -23,7 +23,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.agents.graph.state import AgentState
 from app.agents.graph import nodes, edges
 from app.infrastructure.persistence.postgres import get_checkpointer
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 from app.models import ExtractedInterview
 
 

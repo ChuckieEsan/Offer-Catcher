@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from app.services import CacheService, CacheKeys, get_cache_service
+from app.application.services.cache_service import CacheService, CacheKeys, get_cache_service
 from app.models import QdrantQuestionPayload
 from app.models.question import QuestionType, MasteryLevel
 

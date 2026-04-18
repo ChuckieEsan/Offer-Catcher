@@ -10,7 +10,7 @@
 """
 
 from app.memory.store import get_memory_store
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # 键名转换函数（LangGraph PostgresStore 不允许命名空间标签包含点号）

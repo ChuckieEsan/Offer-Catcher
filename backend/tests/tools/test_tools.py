@@ -5,7 +5,7 @@
 """
 import pytest
 
-from app.db import QdrantManager
+from app.infrastructure.persistence.qdrant import QdrantManager
 from app.tools.embedding_tool import EmbeddingTool, get_embedding_tool
 from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
 

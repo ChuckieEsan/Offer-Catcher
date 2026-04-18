@@ -30,7 +30,7 @@ from app.memory.io import (
 from app.memory.cursor import save_cursor
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.context import UserContext
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # ==================== 输入模型 ====================

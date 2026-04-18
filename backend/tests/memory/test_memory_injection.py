@@ -23,7 +23,7 @@ from app.agents.graph.nodes import _inject_memory_context
 from app.memory.io import write_memory, read_memory
 from app.memory.templates import get_memory_template
 from app.memory.store import get_memory_store
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 @pytest.fixture

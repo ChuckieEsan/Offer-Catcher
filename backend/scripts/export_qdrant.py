@@ -12,8 +12,8 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter
 
-from app.config.settings import get_settings
-from app.utils.logger import logger
+from app.infrastructure.config.settings import get_settings
+from app.infrastructure.common.logger import logger
 
 
 def export_collection(

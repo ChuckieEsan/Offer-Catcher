@@ -12,7 +12,7 @@ sys.path.insert(0, ".")
 # 设置测试环境变量，使用测试数据库
 os.environ["POSTGRES_DB"] = "offer_catcher_test"
 
-from app.db import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 
 
 def test_connection():

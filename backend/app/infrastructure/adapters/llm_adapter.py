@@ -86,7 +86,7 @@ class TokenUsageCallback(BaseCallbackHandler):
 
         if input_tokens > 0 or output_tokens > 0:
             try:
-                from app.utils.telemetry import record_llm_tokens
+                from app.infrastructure.observability import record_llm_tokens
                 record_llm_tokens(
                     provider=self._provider,
                     model=self._model,

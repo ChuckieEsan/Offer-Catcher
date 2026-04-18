@@ -27,7 +27,7 @@ from app.memory.io import read_memory_reference, memory_exists
 from app.memory.init import ensure_user_memory
 from app.memory.store import get_memory_store
 from app.tools.context import UserContext
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # ==================== Skill 加载 ====================

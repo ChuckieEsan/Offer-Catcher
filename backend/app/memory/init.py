@@ -17,7 +17,7 @@ from app.memory.templates import (
     get_preferences_template,
     get_behaviors_template,
 )
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def initialize_user_memory(user_id: str) -> bool:

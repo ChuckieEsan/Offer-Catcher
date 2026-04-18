@@ -17,7 +17,7 @@ from typing import Optional
 from langchain_core.messages import BaseMessage
 
 from app.infrastructure.persistence.redis import get_redis_client
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # ==================== 游标存储 ====================

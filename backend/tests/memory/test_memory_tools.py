@@ -36,8 +36,8 @@ from app.memory.templates import (
     get_behaviors_template,
 )
 from app.memory.store import get_memory_store
-from app.db import get_postgres_client
-from app.utils.logger import logger
+from app.infrastructure.persistence.postgres import get_postgres_client
+from app.infrastructure.common.logger import logger
 
 
 @pytest.fixture

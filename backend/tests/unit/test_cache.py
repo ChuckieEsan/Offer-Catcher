@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from app.utils.cache import cached, singleton
+from app.infrastructure.common.cache import cached, singleton
 
 
 class Counter:

@@ -1,12 +1,9 @@
-"""Agent 工具函数模块
-
-提供 Agent 共用的工具函数。
-"""
+"""Agent 共用工具函数"""
 
 import json
 from typing import Any, Optional
 
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def parse_json_response(

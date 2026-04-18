@@ -8,8 +8,8 @@ from langchain_core.tools import tool
 
 from app.infrastructure.persistence.neo4j import get_graph_client
 from app.application.services.cache_service import get_cache_service, CacheKeys
-from app.utils.logger import logger
-from app.utils.telemetry import traced
+from app.infrastructure.common.logger import logger
+from app.infrastructure.observability import traced
 
 
 def _do_query_graph(question: str) -> str:

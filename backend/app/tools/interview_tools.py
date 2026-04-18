@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.tools.embedding_tool import get_embedding_tool
 from app.tools.reranker_tool import get_reranker_tool
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 # ==================== 输入模型 ====================

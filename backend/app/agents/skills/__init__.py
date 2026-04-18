@@ -9,8 +9,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
-from app.utils.cache import singleton
-from app.utils.logger import logger
+from app.infrastructure.common.cache import singleton
+from app.infrastructure.common.logger import logger
 
 
 class Skill:

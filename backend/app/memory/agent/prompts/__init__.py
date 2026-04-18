@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.utils.prompt import load_prompt_template as _load_prompt_template
-from app.utils.prompt import build_prompt as _build_prompt
-from app.utils.prompt import load_prompt_content
+from app.infrastructure.common.prompt import load_prompt_template as _load_prompt_template
+from app.infrastructure.common.prompt import build_prompt as _build_prompt
+from app.infrastructure.common.prompt import load_prompt_content
 
 
 if TYPE_CHECKING:

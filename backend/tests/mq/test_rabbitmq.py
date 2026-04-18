@@ -12,11 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from app.infrastructure.config.settings import get_settings
-from app.utils.hasher import generate_question_id
+from app.domain.question.utils import generate_question_id
 from app.models import MQTaskMessage
-from app.mq.producer import AsyncRabbitMQProducer
-from app.mq.consumer import AsyncRabbitMQConsumer, _message_breaker
-from app.mq.thread_pool_consumer import ThreadPoolRabbitMQConsumer
+from app.infrastructure.messaging import AsyncRabbitMQProducer
+from app.infrastructure.messaging.consumer import AsyncRabbitMQConsumer, _message_breaker
+from app.infrastructure.messaging.thread_pool_consumer import ThreadPoolRabbitMQConsumer
 
 
 class TestAsyncRabbitMQConnection:

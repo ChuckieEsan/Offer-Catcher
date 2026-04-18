@@ -17,8 +17,8 @@ os.environ["POSTGRES_DB"] = "offer_catcher_test"
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.db import PostgresClient, SessionSummary, get_postgres_client
-from app.utils.logger import logger
+from app.infrastructure.persistence.postgres import PostgresClient, SessionSummary, get_postgres_client
+from app.infrastructure.common.logger import logger
 
 
 @pytest.fixture
