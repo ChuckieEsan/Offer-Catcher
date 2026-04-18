@@ -19,8 +19,8 @@ import argparse
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from app.services.clustering_service import get_clustering_service
-from app.utils.logger import logger
+from app.application.services.clustering_service import get_clustering_service
+from app.infrastructure.common.logger import logger
 
 
 def run_clustering_job():

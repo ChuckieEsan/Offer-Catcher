@@ -12,7 +12,7 @@ import uuid
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from app.llm import get_llm
+from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.models.interview_session import (
     InterviewSession,

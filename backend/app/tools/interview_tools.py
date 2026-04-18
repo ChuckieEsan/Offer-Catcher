@@ -239,7 +239,7 @@ def generate_follow_up(
         追问问题
     """
     # 使用 LLM 生成追问
-    from app.llm import get_llm
+    from app.infrastructure.adapters.llm_adapter import get_llm
     from langchain_core.messages import HumanMessage, SystemMessage
 
     llm = get_llm("deepseek", "chat")

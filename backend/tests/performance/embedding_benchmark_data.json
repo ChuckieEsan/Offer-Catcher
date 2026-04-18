@@ -1,0 +1,702 @@
+[
+  {
+    "question_id": "85e99d2c-5598-542d-87d8-99fc6e42448b",
+    "context": "公司：腾讯 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：RAG,召回率,评估指标 | 题目：如何评估 RAG 系统的召回率？常用的评估指标有哪些？",
+    "question_text": "如何评估 RAG 系统的召回率？常用的评估指标有哪些？",
+    "company": "腾讯",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "7c163431-74a1-3ed2-fe69-155d9636332d",
+    "context": "公司：腾讯 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：RAG,向量索引 | 题目：在 RAG 检索中，数据如何进行向量索引？",
+    "question_text": "在 RAG 检索中，数据如何进行向量索引？",
+    "company": "腾讯",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "5bb458c0-977d-44fd-a996-aed4370c535f",
+    "context": "公司：阿里巴巴 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：Agent,多步推理,延迟问题,优化方法 | 题目：对于Agent多步推理带来的延迟问题，有哪些优化方法？",
+    "question_text": "对于Agent多步推理带来的延迟问题，有哪些优化方法？",
+    "company": "阿里巴巴",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "cef33c4b-e0aa-6b89-3f35-d44a96faad77",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：scenario | 考点：大模型,幻觉,线上优化 | 题目：如果线上出现大模型幻觉问题，你会如何优化？",
+    "question_text": "如果线上出现大模型幻觉问题，你会如何优化？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "4b655fa1-bca6-1901-cc77-d60473c79f67",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：scenario | 考点：代码知识库,Agent设计,RAG应用 | 题目：请设计一个基于代码构建知识库的Agent系统。",
+    "question_text": "请设计一个基于代码构建知识库的Agent系统。",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "2651cdc5-c001-f236-10b5-15475ede3bc6",
+    "context": "公司：阿里巴巴 | 岗位：后端开发 | 类型：project | 考点：数据库存储,ID列表,片段缓存 | 题目：在你的项目中，ID列表数据会存储在数据库中吗？片段缓存数据会存储在数据库中吗？",
+    "question_text": "在你的项目中，ID列表数据会存储在数据库中吗？片段缓存数据会存储在数据库中吗？",
+    "company": "阿里巴巴",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "e2d4d2f9-4484-ac1f-34d1-ad338231175f",
+    "context": "公司：影石创新科技股份有限公司 | 岗位：AI开发工程师 | 类型：knowledge | 考点：SSL,TLS | 题目：请解释SSL/TLS协议的工作原理。",
+    "question_text": "请解释SSL/TLS协议的工作原理。",
+    "company": "影石创新科技股份有限公司",
+    "position": "AI开发工程师"
+  },
+  {
+    "question_id": "0e95074d-6372-967d-a9f0-9103cbe39b1e",
+    "context": "公司：百度 | 岗位：Agent开发 | 类型：scenario | 考点：RAG,内容安全,有害信息过滤 | 题目：在检索增强生成（RAG）过程中，如果检索到了有害或敏感信息，系统应如何处理以确保内容安全？",
+    "question_text": "在检索增强生成（RAG）过程中，如果检索到了有害或敏感信息，系统应如何处理以确保内容安全？",
+    "company": "百度",
+    "position": "Agent开发"
+  },
+  {
+    "question_id": "e8a55cc6-8fae-0782-1606-bba36a9e0f05",
+    "context": "公司：字节跳动 | 岗位：Agent应用开发 | 类型：behavioral | 考点：主动学习,新技术应用 | 题目：请描述一次你主动学习一项与 Agent 相关的新技术，并将其成功应用到实际工作中的经历。",
+    "question_text": "请描述一次你主动学习一项与 Agent 相关的新技术，并将其成功应用到实际工作中的经历。",
+    "company": "字节跳动",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "d94eb41e-5ab1-3e11-45df-a4d2d7fffc06",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：project | 考点：训练数据构建,数据量,测试集构建 | 题目：请详细说明该项目的训练数据是如何构建的，数据量级大概是多少？测试集又是如何构建的？",
+    "question_text": "请详细说明该项目的训练数据是如何构建的，数据量级大概是多少？测试集又是如何构建的？",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "82dbcbde-f90c-7156-d87e-885e25104610",
+    "context": "公司：未知 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：RAG,文档切片 | 题目：在RAG系统中，你是如何进行文档切片的？",
+    "question_text": "在RAG系统中，你是如何进行文档切片的？",
+    "company": "未知",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "391a894c-c882-a218-4311-fc851e75ba47",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：scenario | 考点：大模型,性能优化,响应时间 | 题目：你会从哪些维度去优化大模型的响应时间？",
+    "question_text": "你会从哪些维度去优化大模型的响应时间？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "c8e5926b-58a7-8771-03f9-0a5e9795ff4b",
+    "context": "公司：字节跳动 | 岗位：Agent应用开发 | 类型：knowledge | 考点：对话状态管理,Agent开发 | 题目：在 Agent 开发中，你如何处理对话状态管理（Dialogue State Tracking）遇到的挑战？",
+    "question_text": "在 Agent 开发中，你如何处理对话状态管理（Dialogue State Tracking）遇到的挑战？",
+    "company": "字节跳动",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "7b11e60a-ff13-544a-8d13-f9219b168aa0",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：A2A,通信协议 | 题目：请介绍一下 A2A (Agent-to-Agent) 通信协议的核心思想和应用场景。",
+    "question_text": "请介绍一下 A2A (Agent-to-Agent) 通信协议的核心思想和应用场景。",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "3e1beec1-3ea1-5160-f49b-a125d6eb1550",
+    "context": "公司：阿里巴巴 | 岗位：后端开发 | 类型：knowledge | 考点：上下文管理,上下文压缩,大模型 | 题目：在大模型应用中，当上下文过长时需要进行压缩，这可能会导致信息损失。你了解哪些管理上下文的技术方法？",
+    "question_text": "在大模型应用中，当上下文过长时需要进行压缩，这可能会导致信息损失。你了解哪些管理上下文的技术方法？",
+    "company": "阿里巴巴",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "e0e1354f-57a7-692d-d7a3-159a5c3f0170",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：scenario | 考点：排障建议,幻觉处理,Agent优化 | 题目：当AI Agent给出的排障建议与实际不符时，你会采取什么措施来修正或优化系统？",
+    "question_text": "当AI Agent给出的排障建议与实际不符时，你会采取什么措施来修正或优化系统？",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "d8e7f968-4a29-fd19-dd81-361ae425971e",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：project | 考点：RAG,分块 | 题目：RAG分块是怎么做的？在分块过程中遇到了什么问题？",
+    "question_text": "RAG分块是怎么做的？在分块过程中遇到了什么问题？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "17a28ba8-d069-d0cc-7da5-a64c4491b58f",
+    "context": "公司：未知 | 岗位：AI大模型与Agent应用开发 | 类型：project | 考点：项目架构,技术难点 | 题目：请详细介绍一下你所负责的实习项目的整体架构设计以及遇到的核心技术难点。",
+    "question_text": "请详细介绍一下你所负责的实习项目的整体架构设计以及遇到的核心技术难点。",
+    "company": "未知",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "7f62c5e2-664c-1549-ac3d-3912ee0f0a36",
+    "context": "公司：字节跳动 | 岗位：Agent应用开发 | 类型：knowledge | 考点：Agent评估,性能指标 | 题目：你通常会采用哪些关键指标和方法来评估一个 Agent 系统的整体性能好坏？",
+    "question_text": "你通常会采用哪些关键指标和方法来评估一个 Agent 系统的整体性能好坏？",
+    "company": "字节跳动",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "666a14a3-d3f2-a724-a52e-6faa3cbe868e",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：用户情绪,Agent干预,主流程 | 题目：当用户在与 Agent 交互过程中表现出异常情绪（例如投诉或愤怒）时，Agent 应该如何在不中断当前主业务流程的前提下，进行有效的情绪干预和安抚？",
+    "question_text": "当用户在与 Agent 交互过程中表现出异常情绪（例如投诉或愤怒）时，Agent 应该如何在不中断当前主业务流程的前提下，进行有效的情绪干预和安抚？",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "ba749735-8b8d-4882-024d-609a7a097e89",
+    "context": "公司：影石创新科技股份有限公司 | 岗位：AI开发工程师 | 类型：knowledge | 考点：MCP,大模型 | 题目：当提到MCP可以决定调用哪个方法时，这里的“决定”主体是指大语言模型本身吗？",
+    "question_text": "当提到MCP可以决定调用哪个方法时，这里的“决定”主体是指大语言模型本身吗？",
+    "company": "影石创新科技股份有限公司",
+    "position": "AI开发工程师"
+  },
+  {
+    "question_id": "dac9139e-6df9-e267-3ef6-bff80a30b5b4",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：多轮对话,Attention,信息衰减 | 题目：在多轮对话过程中，Attention 机制是如何导致历史信息衰减的？其数学或逻辑原因是什么？",
+    "question_text": "在多轮对话过程中，Attention 机制是如何导致历史信息衰减的？其数学或逻辑原因是什么？",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "d4ca8f6f-2398-09e9-656b-4b95241505ac",
+    "context": "公司：阿里巴巴 | 岗位：后端开发 | 类型：knowledge | 考点：消息队列性能,Kafka,性能对比 | 题目：为什么其他消息队列技术没有Kafka处理速度快？",
+    "question_text": "为什么其他消息队列技术没有Kafka处理速度快？",
+    "company": "阿里巴巴",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "e27793c4-4824-d493-86b7-50e58a86e9fc",
+    "context": "公司：蚂蚁集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：Agent,ReAct,Thought,Action,Observation | 题目：在Agent执行任务时，Thought（思考）、Action（行动）和Observation（观察）三者是如何循环交互的？",
+    "question_text": "在Agent执行任务时，Thought（思考）、Action（行动）和Observation（观察）三者是如何循环交互的？",
+    "company": "蚂蚁集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "88530529-ff01-f595-7052-25f0a04774ad",
+    "context": "公司：影石创新科技股份有限公司 | 岗位：AI开发工程师 | 类型：knowledge | 考点：GPT | 题目：截至当前，GPT模型的最新版本号是多少？",
+    "question_text": "截至当前，GPT模型的最新版本号是多少？",
+    "company": "影石创新科技股份有限公司",
+    "position": "AI开发工程师"
+  },
+  {
+    "question_id": "3feedaf4-c0e0-cc5b-0869-a5a66be9eedb",
+    "context": "公司：蚂蚁集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：模型选型,参数量,行业应用 | 题目：针对不同细分领域，你对现有主流模型厂商的参数量选型策略有哪些了解？",
+    "question_text": "针对不同细分领域，你对现有主流模型厂商的参数量选型策略有哪些了解？",
+    "company": "蚂蚁集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "1d8dbefb-00a1-9f12-170f-b9faff57b3f7",
+    "context": "公司：阿里巴巴 | 岗位：大模型算法工程师 | 类型：knowledge | 考点：Agent Evaluation,Task Completion Rate,Hallucination Rate,Robustness | 题目：构建一个完善的 Agent 评估体系需要包含哪些核心维度？为什么不能仅看对话流畅度？",
+    "question_text": "构建一个完善的 Agent 评估体系需要包含哪些核心维度？为什么不能仅看对话流畅度？",
+    "company": "阿里巴巴",
+    "position": "大模型算法工程师"
+  },
+  {
+    "question_id": "97fa78ee-6839-cf2d-b02f-feb91c13327f",
+    "context": "公司：字节跳动 | 岗位：后端开发 | 类型：knowledge | 考点：动态线程池,核心线程数 | 题目：在配置动态线程池时，需要关注哪些关键参数？对于当前项目场景，你大概会如何配置核心线程数？",
+    "question_text": "在配置动态线程池时，需要关注哪些关键参数？对于当前项目场景，你大概会如何配置核心线程数？",
+    "company": "字节跳动",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "eeb13fe6-6dee-9ff1-7e0a-74a4df736bc8",
+    "context": "公司：字节跳动 | 岗位：AI Agent开发 | 类型：knowledge | 考点：PDF解析,版面理解,结构还原 | 题目：在工业级PDF解析中，面对多栏、表格、图文混排等复杂版面，应该如何进行版面理解并还原其原始结构？",
+    "question_text": "在工业级PDF解析中，面对多栏、表格、图文混排等复杂版面，应该如何进行版面理解并还原其原始结构？",
+    "company": "字节跳动",
+    "position": "AI Agent开发"
+  },
+  {
+    "question_id": "a1f9b3ab-8615-6b46-4229-c49efa62975c",
+    "context": "公司：蚂蚁集团 | 岗位：后端开发 | 类型：project | 考点：项目背景,业务 | 题目：请介绍一下你实习期间所负责项目的上下游业务背景是什么？",
+    "question_text": "请介绍一下你实习期间所负责项目的上下游业务背景是什么？",
+    "company": "蚂蚁集团",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "700fcccf-fbe7-86ed-6ab9-3fb23dc4f878",
+    "context": "公司：京东 | 岗位：AI Agent 实习 | 类型：knowledge | 考点：Agent,工作流 | 题目：AI Agent 与传统的预定义工作流（Workflow）相比，在自主性、动态决策和工具调用能力上有什么本质区别？",
+    "question_text": "AI Agent 与传统的预定义工作流（Workflow）相比，在自主性、动态决策和工具调用能力上有什么本质区别？",
+    "company": "京东",
+    "position": "AI Agent 实习"
+  },
+  {
+    "question_id": "a71233a6-6fa0-2dda-6215-a90928f486ca",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：Attention,向量空间变换,原理 | 题目：从向量空间变换的角度，请解释 Attention 机制的本质及其工作原理。",
+    "question_text": "从向量空间变换的角度，请解释 Attention 机制的本质及其工作原理。",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "0e881124-bf2d-5099-0368-021558d516ba",
+    "context": "公司：淘天集团 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：AI Agent,置信度,兜底策略,转人工 | 题目：在设计一个处理用户退货咨询的AI Agent时，关于兜底策略，当模型输出的置信度低于多少时你会强制转人工？这个阈值你打算如何测算？",
+    "question_text": "在设计一个处理用户退货咨询的AI Agent时，关于兜底策略，当模型输出的置信度低于多少时你会强制转人工？这个阈值你打算如何测算？",
+    "company": "淘天集团",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "3af2ae68-c4f0-7777-487d-b6f1bfd807ac",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：knowledge | 考点：智能体Agent,行业竞品 | 题目：你了解市面上有哪些知名的智能体（Agent）产品或框架？",
+    "question_text": "你了解市面上有哪些知名的智能体（Agent）产品或框架？",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "917ff436-fea5-8dc5-9c8a-326b47ec9086",
+    "context": "公司：百度 | 岗位：Agent开发 | 类型：knowledge | 考点：ReAct,Thought-Action-Observation,Agent推理 | 题目：请详细阐述ReAct（Reasoning and Acting）框架的循环实现机制，特别是Thought、Action和Observation三个步骤是如何协同工作的？",
+    "question_text": "请详细阐述ReAct（Reasoning and Acting）框架的循环实现机制，特别是Thought、Action和Observation三个步骤是如何协同工作的？",
+    "company": "百度",
+    "position": "Agent开发"
+  },
+  {
+    "question_id": "ec3740c6-27a7-0118-8198-aef8684a215b",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：RAG,系统设计 | 题目：请阐述 RAG 系统的整体设计思路，包括检索、生成及后处理等关键环节。",
+    "question_text": "请阐述 RAG 系统的整体设计思路，包括检索、生成及后处理等关键环节。",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "618340f3-dd1e-032f-5b6c-bc8c466fd283",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：操作系统,启动流程,Bootloader | 题目：请描述计算机操作系统从按下电源键到完全启动并进入用户界面的整个过程。",
+    "question_text": "请描述计算机操作系统从按下电源键到完全启动并进入用户界面的整个过程。",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "1d40b40d-54b8-57a2-43ec-789daecb7ba7",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：behavioral | 考点：问题解决能力,项目经验 | 题目：请举例说明你在项目中遇到的一个棘手问题，你是如何分析并解决它的？",
+    "question_text": "请举例说明你在项目中遇到的一个棘手问题，你是如何分析并解决它的？",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "95e03833-15eb-5e72-12db-a0a13f4807c8",
+    "context": "公司：未知 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：LangGraph,状态机,状态流转 | 题目：请解释LangGraph中状态机的概念，以及状态之间是如何流转的？",
+    "question_text": "请解释LangGraph中状态机的概念，以及状态之间是如何流转的？",
+    "company": "未知",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "bc12c00b-6e4e-52b6-4b07-8a4b3ea15a4d",
+    "context": "公司：阿里巴巴 | 岗位：后端开发 | 类型：behavioral | 考点：AI编程,代码生成,AI辅助开发 | 题目：在日常编程工作中，你更倾向于使用AI来补全代码片段，还是让AI来生成整个工程项目？",
+    "question_text": "在日常编程工作中，你更倾向于使用AI来补全代码片段，还是让AI来生成整个工程项目？",
+    "company": "阿里巴巴",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "f42fbe1f-0f87-a0e7-c84d-564cb7661adb",
+    "context": "公司：未知 | 岗位：后端开发 | 类型：knowledge | 考点：InnoDB,binlog,redo log | 题目：InnoDB 存储引擎为什么要同时使用 binlog 和 redo log 两种日志？",
+    "question_text": "InnoDB 存储引擎为什么要同时使用 binlog 和 redo log 两种日志？",
+    "company": "未知",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "c606eb7f-1a98-12f3-3e73-97cac1cea8d7",
+    "context": "公司：蚂蚁集团 | 岗位：后端开发 | 类型：project | 考点：模型微调,LLM | 题目：你的项目中是否涉及到了大语言模型的微调（Fine-tuning）工作？",
+    "question_text": "你的项目中是否涉及到了大语言模型的微调（Fine-tuning）工作？",
+    "company": "蚂蚁集团",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "de66ebac-12ab-5a5a-f627-45a2f7e06d35",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：knowledge | 考点：A2A,MCP | 题目：A2A 协议与 MCP 协议的核心区别是什么？",
+    "question_text": "A2A 协议与 MCP 协议的核心区别是什么？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "feec58a7-fd54-a3d6-3fe5-161d6f8d516f",
+    "context": "公司：蚂蚁集团 | 岗位：后端开发 | 类型：scenario | 考点：结算,性能排查 | 题目：在整个结算流程中，如果出现了卡顿现象，你会如何进行排查和定位？",
+    "question_text": "在整个结算流程中，如果出现了卡顿现象，你会如何进行排查和定位？",
+    "company": "蚂蚁集团",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "4340cffb-7a45-cd19-d703-5b01ee632b47",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：HyDE,模糊Query,召回效果 | 题目：HyDE（Hypothetical Document Embeddings）技术在用户查询（query）本身比较模糊的情况下，是如何通过生成假设性文档来提升最终的召回效果的？",
+    "question_text": "HyDE（Hypothetical Document Embeddings）技术在用户查询（query）本身比较模糊的情况下，是如何通过生成假设性文档来提升最终的召回效果的？",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "226d1023-2c20-0a61-7372-8026aa6b4ef8",
+    "context": "公司：阿里巴巴 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：Agent系统,评估指标,生成质量,多维度 | 题目：除了生成质量，在评估Agent系统时还应该关注哪些维度的指标？",
+    "question_text": "除了生成质量，在评估Agent系统时还应该关注哪些维度的指标？",
+    "company": "阿里巴巴",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "9737b319-8e59-336a-6fd8-089b59ebae72",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：knowledge | 考点：Agent,skills | 题目：Agent 的 skills 通常包含哪些类型？如何对其进行管理？",
+    "question_text": "Agent 的 skills 通常包含哪些类型？如何对其进行管理？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "a6ada824-a588-721d-1751-f56c12e4c21e",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：project | 考点：RAG,chunk size,top_k,参数调优 | 题目：针对 RAG 的 chunk size 和 top_k 参数，你们是如何设计并执行实验的？",
+    "question_text": "针对 RAG 的 chunk size 和 top_k 参数，你们是如何设计并执行实验的？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "a29aa6b4-548c-4177-637f-c06c089036ba",
+    "context": "公司：字节跳动 | 岗位：后端开发 | 类型：knowledge | 考点：SQL,联合索引 | 题目：对于 SQL 语句 `Select * from table where a>1 and b=2`，应该如何建立联合索引来优化查询性能？",
+    "question_text": "对于 SQL 语句 `Select * from table where a>1 and b=2`，应该如何建立联合索引来优化查询性能？",
+    "company": "字节跳动",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "f35c2f1a-9e8c-d4e8-bb24-297bd47578df",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：project | 考点：联网搜索,主导开发 | 题目：联网搜索功能是如何实现的？这部分工作是否由你主导开发？",
+    "question_text": "联网搜索功能是如何实现的？这部分工作是否由你主导开发？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "f4b2c3ea-686f-8a11-0ab9-f2020e8ed041",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：project | 考点：系统规模,核心链路,关键优化 | 题目：请做一下自我介绍，并重点讲清楚你所参与系统的规模、你负责的核心链路以及你做过的关键性能或体验优化。",
+    "question_text": "请做一下自我介绍，并重点讲清楚你所参与系统的规模、你负责的核心链路以及你做过的关键性能或体验优化。",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "3a9cf32b-86b6-aa8c-f77a-4d71ae899f08",
+    "context": "公司：阿里巴巴 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：Multi Agent,Router节点,任务分发,子Agent | 题目：在Multi Agent系统中，Router节点是如何决定任务该分发给哪个子Agent的？",
+    "question_text": "在Multi Agent系统中，Router节点是如何决定任务该分发给哪个子Agent的？",
+    "company": "阿里巴巴",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "e0593d14-face-2e98-f43d-85ddd80d9f56",
+    "context": "公司：字节跳动 | 岗位：Agent应用开发 | 类型：knowledge | 考点：离线训练,在线学习 | 题目：如何为 Agent 设计一个结合离线批量训练和在线实时学习（Online Learning）的混合学习机制？",
+    "question_text": "如何为 Agent 设计一个结合离线批量训练和在线实时学习（Online Learning）的混合学习机制？",
+    "company": "字节跳动",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "84d11b6e-b4af-9fba-e5fc-c9a943a61866",
+    "context": "公司：淘天集团 | 岗位：AI Agent 智能体开发 | 类型：knowledge | 考点：向量数据库,Milvus,Pinecone,Chroma,选型 | 题目：请对比 Milvus、Pinecone 和 Chroma 等向量数据库的优劣，并结合淘天业务场景说明选型依据。",
+    "question_text": "请对比 Milvus、Pinecone 和 Chroma 等向量数据库的优劣，并结合淘天业务场景说明选型依据。",
+    "company": "淘天集团",
+    "position": "AI Agent 智能体开发"
+  },
+  {
+    "question_id": "2812886b-20a9-d30b-4613-26beb5530b96",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：project | 考点：项目流程,软件开发生命周期 | 题目：请完整阐述一下你所负责项目的整个开发流程，从需求分析到上线部署。",
+    "question_text": "请完整阐述一下你所负责项目的整个开发流程，从需求分析到上线部署。",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "b261fa90-3286-7ce6-0c51-9a73335a8af7",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：scenario | 考点：数据一致性,存储问题,冲突解决 | 题目：在存储过程中，如果出现前后数据不一致的情况，通常如何解决？",
+    "question_text": "在存储过程中，如果出现前后数据不一致的情况，通常如何解决？",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "10bd999f-85af-4568-b6e7-13da33839301",
+    "context": "公司：淘天集团 | 岗位：AI应用开发 | 类型：project | 考点：实习项目,上线状态,日访问量 | 题目：请介绍一下你的实习项目是否已经上线，以及目前的日均访问量是多少？",
+    "question_text": "请介绍一下你的实习项目是否已经上线，以及目前的日均访问量是多少？",
+    "company": "淘天集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "5fa3978c-18a0-60cf-10b5-a62533feb6be",
+    "context": "公司：百度 | 岗位：Agent开发 | 类型：scenario | 考点：Markdown切块,文本分块,语义完整性 | 题目：在处理Markdown文档切块（Chunking）时，如果遇到“详见上一章”等跨段落引用情况，如何保证语义的完整性？",
+    "question_text": "在处理Markdown文档切块（Chunking）时，如果遇到“详见上一章”等跨段落引用情况，如何保证语义的完整性？",
+    "company": "百度",
+    "position": "Agent开发"
+  },
+  {
+    "question_id": "d9574c10-43d1-8fec-615d-edc73e214c6f",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：A2A,MCP,协议对比 | 题目：请对比分析 A2A 协议与 MCP 协议的核心区别。",
+    "question_text": "请对比分析 A2A 协议与 MCP 协议的核心区别。",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "12637791-ecd3-9421-637b-536461e8d47c",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：project | 考点：持续报警,异常日志 | 题目：在持续报警、日志里有很多异常的情况下，怎么确定报警和日志的关系？",
+    "question_text": "在持续报警、日志里有很多异常的情况下，怎么确定报警和日志的关系？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "e07ab268-ab76-fef8-2b66-a9a2de767aff",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：scenario | 考点：NL2SQL,SQL安全 | 题目：在 NL2SQL 场景下，如何设计 SQL 安全防护机制以防止注入攻击？",
+    "question_text": "在 NL2SQL 场景下，如何设计 SQL 安全防护机制以防止注入攻击？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "7a70c475-d0cb-1a3b-ce2f-a558a3663fe1",
+    "context": "公司：蚂蚁集团 | 岗位：Agent应用开发 | 类型：project | 考点：AI Coding,代码质量,Code Review | 题目：在项目上线前，除了Code Review，主要通过什么方式来保证AI生成代码的质量？",
+    "question_text": "在项目上线前，除了Code Review，主要通过什么方式来保证AI生成代码的质量？",
+    "company": "蚂蚁集团",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "2775f0c0-be95-c9cf-66aa-574db0148a6b",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：knowledge | 考点：Function Calling,MCP,RAG,搜索策略 | 题目：在搜索环节的具体实现上，你们采用的是 Function Calling、MCP 还是 RAG 方案？",
+    "question_text": "在搜索环节的具体实现上，你们采用的是 Function Calling、MCP 还是 RAG 方案？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "1a2970eb-af4d-c05c-6423-ad127cfff52c",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：project | 考点：Agent,推理模式 | 题目：你的 Agent 采用了哪种推理模式（如 ReAct, Plan-and-Execute 等）？为什么？",
+    "question_text": "你的 Agent 采用了哪种推理模式（如 ReAct, Plan-and-Execute 等）？为什么？",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "f4b65431-7f9a-1484-22b9-7fcb5206a927",
+    "context": "公司：未知 | 岗位：AI大模型与Agent应用开发 | 类型：behavioral | 考点：AI工具,工作流 | 题目：你平时使用哪些AI相关工具？具体是如何使用的？",
+    "question_text": "你平时使用哪些AI相关工具？具体是如何使用的？",
+    "company": "未知",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "e78f3a44-c02d-f057-80f3-b3bd233fbeb1",
+    "context": "公司：携程 | 岗位：Java开发 | 类型：scenario | 考点：数据库设计,表结构审核 | 题目：假如你负责审核团队成员提交的数据库表结构创建申请，你会从哪些维度（如范式、索引、字段类型、扩展性等）来判断这张表的设计是否合理？",
+    "question_text": "假如你负责审核团队成员提交的数据库表结构创建申请，你会从哪些维度（如范式、索引、字段类型、扩展性等）来判断这张表的设计是否合理？",
+    "company": "携程",
+    "position": "Java开发"
+  },
+  {
+    "question_id": "458b6f34-bb63-3640-c79f-7fac088a4fc5",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：Java,Python,C语言,性能 | 题目：在执行速度上，Java 和 Python 哪个更快？既然追求速度，为什么不直接使用 C 语言进行开发？",
+    "question_text": "在执行速度上，Java 和 Python 哪个更快？既然追求速度，为什么不直接使用 C 语言进行开发？",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "dd4e039b-2a33-7205-22ac-e53d25f28e2d",
+    "context": "公司：蚂蚁集团 | 岗位：AI应用开发 | 类型：knowledge | 考点：Transformer,RNN,CNN,深度学习架构 | 题目：请详细介绍一下Transformer架构，并说明它解决了RNN和CNN哪些无法解决的问题？",
+    "question_text": "请详细介绍一下Transformer架构，并说明它解决了RNN和CNN哪些无法解决的问题？",
+    "company": "蚂蚁集团",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "79e0e6f1-67ca-9df5-ec1b-7de5448520bb",
+    "context": "公司：蚂蚁集团 | 岗位：后端开发 | 类型：project | 考点：运营成本,指标量化 | 题目：运营成本这个指标在你的项目中是如何定义和量化的？",
+    "question_text": "运营成本这个指标在你的项目中是如何定义和量化的？",
+    "company": "蚂蚁集团",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "6e8fedba-786e-34ef-a4aa-51108c2dffaa",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：OOM,内存排查,top命令 | 题目：当系统发生 OOM（Out of Memory）错误时，常规的 top 命令可能无法使用，你会采取哪些替代方案来进行问题排查和解决？",
+    "question_text": "当系统发生 OOM（Out of Memory）错误时，常规的 top 命令可能无法使用，你会采取哪些替代方案来进行问题排查和解决？",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "f33ab1ce-27c4-62b0-3788-2df4cd6250a8",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：behavioral | 考点：AI工具,实习经验 | 题目：在实习过程中，你是具体怎么使用AI工具的？",
+    "question_text": "在实习过程中，你是具体怎么使用AI工具的？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "72f0d3a6-fbf7-60da-3e3d-1f62bc8b02f5",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：错误追踪,Agent知识库,跨模块 | 题目：为了实现跨模块的错误追踪，你会如何构建一个专用的 Agent 知识库？",
+    "question_text": "为了实现跨模块的错误追踪，你会如何构建一个专用的 Agent 知识库？",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "17e7d582-dd97-49ca-cdf1-abc3b785ad91",
+    "context": "公司：携程 | 岗位：Java开发 | 类型：knowledge | 考点：ThreadLocal,全链路追踪,线程传递 | 题目：在微服务架构中，如何在线程池或异步调用等场景下，将 ThreadLocal 中存储的全链路追踪信息（如 TraceID）传递到子线程中？",
+    "question_text": "在微服务架构中，如何在线程池或异步调用等场景下，将 ThreadLocal 中存储的全链路追踪信息（如 TraceID）传递到子线程中？",
+    "company": "携程",
+    "position": "Java开发"
+  },
+  {
+    "question_id": "9520bee0-40dd-7527-ea2f-7793d71856f7",
+    "context": "公司：字节跳动 | 岗位：Agent开发 | 类型：behavioral | 考点：自我介绍 | 题目：请做一下自我介绍。",
+    "question_text": "请做一下自我介绍。",
+    "company": "字节跳动",
+    "position": "Agent开发"
+  },
+  {
+    "question_id": "60fde002-f981-0dd6-1997-e027ac1a2777",
+    "context": "公司：字节跳动 | 岗位：AI Agent开发 | 类型：knowledge | 考点：Agent,长期记忆,短期记忆 | 题目：在设计Agent的记忆系统时，长短期记忆应如何分别设计？它们各自存储什么类型的信息，以及通过什么机制触发读取？",
+    "question_text": "在设计Agent的记忆系统时，长短期记忆应如何分别设计？它们各自存储什么类型的信息，以及通过什么机制触发读取？",
+    "company": "字节跳动",
+    "position": "AI Agent开发"
+  },
+  {
+    "question_id": "054da316-062c-46c5-e344-32ea0768a182",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：Java,内存泄漏,排查 | 题目：当 Java 应用出现由引用对象导致的内存泄漏时，你会通过哪些工具和方法进行排查？定位到问题后，具体的解决方案是什么？",
+    "question_text": "当 Java 应用出现由引用对象导致的内存泄漏时，你会通过哪些工具和方法进行排查？定位到问题后，具体的解决方案是什么？",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "36230348-c3a3-29ce-bbee-58d6ec5bc3e3",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：余弦相似度,欧氏距离,高维空间 | 题目：余弦相似度和欧氏距离在高维向量空间中的表现和差异是什么？在实际的向量检索项目中，你会根据什么标准来选择使用哪一种？",
+    "question_text": "余弦相似度和欧氏距离在高维向量空间中的表现和差异是什么？在实际的向量检索项目中，你会根据什么标准来选择使用哪一种？",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "1b1050ae-c312-fb21-ee78-3f92cd974869",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：project | 考点：定位流程,工具调用 | 题目：怎么保证定位过程按思路一步步进行？怎么保证模型正确调用工具？",
+    "question_text": "怎么保证定位过程按思路一步步进行？怎么保证模型正确调用工具？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "97a4560a-b192-82bc-2e06-5039c2c6ba6e",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发工程师（Agent岗） | 类型：project | 考点：多Agent,主从架构,主子Agent | 题目：你的多Agent项目是主从式（主子Agent）架构吗？",
+    "question_text": "你的多Agent项目是主从式（主子Agent）架构吗？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发工程师（Agent岗）"
+  },
+  {
+    "question_id": "6b0b5d33-1d5e-4803-468b-6c9f4fab5417",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：scenario | 考点：增量索引,文档更新,索引重建 | 题目：当索引中的文档发生局部内容更新时，如何设计一个高效的增量索引更新机制，以避免成本高昂的全量索引重建？",
+    "question_text": "当索引中的文档发生局部内容更新时，如何设计一个高效的增量索引更新机制，以避免成本高昂的全量索引重建？",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "7c563c82-20cb-6f17-2a12-46297944b21c",
+    "context": "公司：百度 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：向量检索,Top-K,召回效果 | 题目：在向量检索中，Top-K 参数设置得过大或过小，分别会带来哪些性能、成本或效果上的问题？",
+    "question_text": "在向量检索中，Top-K 参数设置得过大或过小，分别会带来哪些性能、成本或效果上的问题？",
+    "company": "百度",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "6c64d3e0-5b88-418b-16b0-b192429d0f6d",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：project | 考点：Agent,Chatbot,自主思考 | 题目：你所开发的 Agent 项目与传统的聊天机器人（Chatbot）有哪些核心区别？它是如何实现所谓的‘自主思考’能力的？",
+    "question_text": "你所开发的 Agent 项目与传统的聊天机器人（Chatbot）有哪些核心区别？它是如何实现所谓的‘自主思考’能力的？",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "ee79fe69-21be-c65e-95c3-6a07bbacf334",
+    "context": "公司：淘天集团 | 岗位：AI Agent 智能体开发 | 类型：scenario | 考点：高并发,弹性伸缩,服务架构,负载均衡 | 题目：在高并发场景下，如何设计 Agent 服务的弹性伸缩策略以应对流量波动？",
+    "question_text": "在高并发场景下，如何设计 Agent 服务的弹性伸缩策略以应对流量波动？",
+    "company": "淘天集团",
+    "position": "AI Agent 智能体开发"
+  },
+  {
+    "question_id": "d14edfb1-14fa-fa55-c69c-653629fdf21c",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：knowledge | 考点：Anthropic,Claude,模型版本 | 题目：Anthropic目前最新迭代到哪个版本？",
+    "question_text": "Anthropic目前最新迭代到哪个版本？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "6a9630d0-9c25-d576-558a-04df3545460d",
+    "context": "公司：腾讯 | 岗位：AI大模型与Agent应用开发 | 类型：knowledge | 考点：Java,字节码,JVM | 题目：Java 语言为什么要设计字节码（Bytecode）这一中间层？它带来了哪些好处？",
+    "question_text": "Java 语言为什么要设计字节码（Bytecode）这一中间层？它带来了哪些好处？",
+    "company": "腾讯",
+    "position": "AI大模型与Agent应用开发"
+  },
+  {
+    "question_id": "d09495df-6090-2e6b-a881-e078650e4dd0",
+    "context": "公司：字节跳动 | 岗位：AI Agent开发 | 类型：knowledge | 考点：大规模文档解析,多线程,多进程 | 题目：在执行大规模文档解析任务时，应该如何根据任务特性在多线程和多进程之间做出合理的选择？",
+    "question_text": "在执行大规模文档解析任务时，应该如何根据任务特性在多线程和多进程之间做出合理的选择？",
+    "company": "字节跳动",
+    "position": "AI Agent开发"
+  },
+  {
+    "question_id": "f045b840-7d85-9fec-3cd0-27f8f9d56c9f",
+    "context": "公司：阿里巴巴 | 岗位：大模型算法工程师 | 类型：scenario | 考点：Prompt Optimization,User Intent Mining,Context Awareness,A/B Testing | 题目：在 Agent 开发中，如何实现 Prompt 的自动推荐与优化？请结合用户意图挖掘和上下文感知进行说明。",
+    "question_text": "在 Agent 开发中，如何实现 Prompt 的自动推荐与优化？请结合用户意图挖掘和上下文感知进行说明。",
+    "company": "阿里巴巴",
+    "position": "大模型算法工程师"
+  },
+  {
+    "question_id": "8c89d78d-7e0f-e586-a78a-7f901e9ba484",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：LLM,幻觉,解决方案 | 题目：大语言模型（LLM）产生幻觉的根本原因是什么？有哪些有效的解决方案？",
+    "question_text": "大语言模型（LLM）产生幻觉的根本原因是什么？有哪些有效的解决方案？",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "9a9d4d2f-5b1c-600e-f67b-c5c464d016a9",
+    "context": "公司：未知 | 岗位：Agent应用开发 | 类型：behavioral | 考点：实习经历,团队规模 | 题目：请介绍一下你最近这段实习的开发团队规模是怎样的？",
+    "question_text": "请介绍一下你最近这段实习的开发团队规模是怎样的？",
+    "company": "未知",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "6b0ecf0c-6ced-cb3d-b4a6-2da3331dca7c",
+    "context": "公司：字节跳动 | 岗位：Agent应用开发 | 类型：behavioral | 考点：项目进度,团队管理 | 题目：当团队整体开发进度落后于计划时，作为核心开发者，你会采取哪些行动来追赶进度？",
+    "question_text": "当团队整体开发进度落后于计划时，作为核心开发者，你会采取哪些行动来追赶进度？",
+    "company": "字节跳动",
+    "position": "Agent应用开发"
+  },
+  {
+    "question_id": "99d57c27-f179-44c3-b4bc-77c1fd90bf32",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：scenario | 考点：测试场景,微信换头像 | 题目：针对微信换头像这一场景，你会设计哪些测试用例来覆盖其功能和异常情况？",
+    "question_text": "针对微信换头像这一场景，你会设计哪些测试用例来覆盖其功能和异常情况？",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "b03161a3-9cc1-1bd4-bd39-63136ef3acaf",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：project | 考点：OCR,识别准确率 | 题目：OCR识别的准确率是什么情况？在识别过程中有遇到什么问题吗？",
+    "question_text": "OCR识别的准确率是什么情况？在识别过程中有遇到什么问题吗？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "e3331c67-668d-8dfa-463b-b8f6910741c8",
+    "context": "公司：蚂蚁集团 | 岗位：后端开发 | 类型：scenario | 考点：Redis,灾备,数据重建 | 题目：假设点赞系统的 Redis 缓存突然宕机，你会如何设计一个方案来重建缓存数据，以保证服务的可用性和数据的正确性？",
+    "question_text": "假设点赞系统的 Redis 缓存突然宕机，你会如何设计一个方案来重建缓存数据，以保证服务的可用性和数据的正确性？",
+    "company": "蚂蚁集团",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "c82d5924-5a5f-d9a4-d051-72c54dc12d37",
+    "context": "公司：字节跳动 | 岗位：AI评测工程师（测开方向） | 类型：scenario | 考点：RAG评估,评估方案 | 题目：请阐述你的RAG评估方案，包括评估维度和具体方法。",
+    "question_text": "请阐述你的RAG评估方案，包括评估维度和具体方法。",
+    "company": "字节跳动",
+    "position": "AI评测工程师（测开方向）"
+  },
+  {
+    "question_id": "897395b0-48bc-b9ba-6659-f2f46516401b",
+    "context": "公司：字节跳动 | 岗位：AI Agent应用开发 | 类型：knowledge | 考点：AI大模型,LLM | 题目：请介绍一些你熟悉的大语言模型（LLM）。",
+    "question_text": "请介绍一些你熟悉的大语言模型（LLM）。",
+    "company": "字节跳动",
+    "position": "AI Agent应用开发"
+  },
+  {
+    "question_id": "3d0d93c7-e2a5-84a6-1790-c981538ee841",
+    "context": "公司：阿里巴巴 | 岗位：AI应用开发 | 类型：project | 考点：MySQL,性能优化,实践经验 | 题目：你有没有实际做过MySQL性能优化？效果如何？",
+    "question_text": "你有没有实际做过MySQL性能优化？效果如何？",
+    "company": "阿里巴巴",
+    "position": "AI应用开发"
+  },
+  {
+    "question_id": "cf0e6cf5-8862-e0b6-20be-522117ea1b41",
+    "context": "公司：未知 | 岗位：后端开发 | 类型：scenario | 考点：Redis,集群,脑裂 | 题目：在 Redis 集群中发生脑裂现象时，应该如何解决？",
+    "question_text": "在 Redis 集群中发生脑裂现象时，应该如何解决？",
+    "company": "未知",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "1a597b64-9f81-654d-a9eb-d679ed2ac71a",
+    "context": "公司：未知 | 岗位：后端开发 | 类型：algorithm | 考点：二叉搜索树,第n大节点 | 题目：请手写代码，在二叉搜索树中找到第 n 大的节点。",
+    "question_text": "请手写代码，在二叉搜索树中找到第 n 大的节点。",
+    "company": "未知",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "d1df265f-0f4f-f985-47cc-412903272226",
+    "context": "公司：阿里巴巴 | 岗位：后端开发 | 类型：algorithm | 考点：算法,字符串,最长子串,无重复字符 | 题目：请编写一个算法，找出给定字符串中不包含重复字符的最长子串的长度。",
+    "question_text": "请编写一个算法，找出给定字符串中不包含重复字符的最长子串的长度。",
+    "company": "阿里巴巴",
+    "position": "后端开发"
+  },
+  {
+    "question_id": "c8d2dc15-3121-0632-8709-e1359af4d8cf",
+    "context": "公司：美团 | 岗位：AI Agent开发 | 类型：knowledge | 考点：MySQL,索引优化 | 题目：在数据库优化方面，请谈谈有哪些常见的 MySQL 索引优化策略？",
+    "question_text": "在数据库优化方面，请谈谈有哪些常见的 MySQL 索引优化策略？",
+    "company": "美团",
+    "position": "AI Agent开发"
+  }
+]

@@ -7,7 +7,7 @@ from typing import Any, Generic, Optional, TypeVar
 
 from langchain_openai import ChatOpenAI
 
-from app.llm import create_llm
+from app.infrastructure.adapters.llm_adapter import create_llm
 from app.utils.logger import logger
 from app.utils.retry import retry
 from app.agents.prompts import build_prompt

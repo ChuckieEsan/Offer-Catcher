@@ -20,7 +20,7 @@ Agent 拥有自己的 tools，自主完成记忆更新。
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
-from app.llm import get_llm
+from app.infrastructure.adapters.llm_adapter import get_llm
 from app.memory.cursor import (
     get_cursor,
     get_messages_since_cursor,

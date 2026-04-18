@@ -83,7 +83,7 @@ def warmup() -> None:
 
     # 6. LLM 实例
     try:
-        from app.llm import get_llm
+        from app.infrastructure.adapters.llm_adapter import get_llm
         get_llm("deepseek", "chat")
         logger.info("[Warmup] LLM instance created")
     except Exception as e:
@@ -133,16 +133,16 @@ def warmup() -> None:
 
     # 12. Ingestion Pipeline
     try:
-        from app.pipelines.ingestion import get_ingestion_pipeline
-        get_ingestion_pipeline()
+        from app.application.services.ingestion_service import get_ingestion_service
+        get_ingestion_service()
         logger.info("[Warmup] Ingestion Pipeline initialized")
     except Exception as e:
         logger.warning(f"[Warmup] Ingestion Pipeline init failed: {e}")
 
     # 13. Retrieval Pipeline
     try:
-        from app.pipelines.retrieval import get_retrieval_pipeline
-        get_retrieval_pipeline()
+        from app.application.services.retrieval_service import get_retrieval_service
+        get_retrieval_service()
         logger.info("[Warmup] Retrieval Pipeline initialized")
     except Exception as e:
         logger.warning(f"[Warmup] Retrieval Pipeline init failed: {e}")

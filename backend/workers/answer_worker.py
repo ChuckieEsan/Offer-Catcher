@@ -17,11 +17,11 @@ import signal
 import sys
 
 from app.agents.answer_specialist import get_answer_specialist
-from app.db import get_qdrant_manager
-from app.mq import get_thread_pool_consumer
+from app.infrastructure.persistence.qdrant.question_repository import get_question_repository
+from app.infrastructure.messaging import get_thread_pool_consumer
 from app.models import MQTaskMessage
 from app.models import QuestionItem, QuestionType, MasteryLevel
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 def process_answer_task(task: MQTaskMessage) -> bool:
@@ -34,10 +34,12 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         是否成功
     """
     try:
+        # 使用 QuestionRepository
+        question_repo = get_question_repository()
+
         # 0. 幂等性检查：先判断答案是否已存在
-        qdrant = get_qdrant_manager()
-        existing = qdrant.get_question(task.question_id)
-        if existing and existing.question_answer:
+        existing = question_repo.find_by_id(task.question_id)
+        if existing and existing.answer:
             logger.info(f"Answer already exists for: {task.question_id}, skipping")
             return True
 
@@ -58,7 +60,7 @@ def process_answer_task(task: MQTaskMessage) -> bool:
         answer = agent.generate_answer(question)
 
         # 3. 写入 Qdrant
-        qdrant.update_question(task.question_id, question_answer=answer)
+        question_repo.update_answer(task.question_id, answer)
 
         logger.info(f"Answer generated and saved for: {task.question_id}")
         return True

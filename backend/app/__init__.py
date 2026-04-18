@@ -10,9 +10,9 @@ from app.models import (
     SearchFilter,
     SearchResult,
 )
-from app.config import Settings, get_settings
-from app.db import QdrantManager, get_qdrant_manager
-from app.utils import generate_question_id, logger
+from app.infrastructure.config.settings import Settings, get_settings
+from app.infrastructure.persistence.qdrant import QdrantManager, get_qdrant_manager
+from app.infrastructure.common.logger import logger
 
 __all__ = [
     # Models

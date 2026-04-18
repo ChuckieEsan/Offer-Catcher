@@ -7,7 +7,7 @@
 from langchain_core.tools import tool
 
 from app.infrastructure.persistence.neo4j import get_graph_client
-from app.services.cache_service import get_cache_service, CacheKeys
+from app.application.services.cache_service import get_cache_service, CacheKeys
 from app.utils.logger import logger
 from app.utils.telemetry import traced
 

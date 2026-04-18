@@ -103,7 +103,7 @@ __all__ = [
 
 from langchain_core.tools import tool
 from app.utils.telemetry import traced
-from app.services.cache_service import get_cache_service, CacheKeys
+from app.application.services.cache_service import get_cache_service, CacheKeys
 
 
 def _do_web_search(query: str, max_results: int) -> str:

@@ -6,7 +6,7 @@
 from typing import Optional
 
 from app.agents.base import BaseAgent
-from app.llm import create_llm
+from app.infrastructure.adapters.llm_adapter import create_llm
 from app.infrastructure.persistence.qdrant import get_qdrant_manager
 from app.models.question import MasteryLevel
 from app.models import ScoreResult

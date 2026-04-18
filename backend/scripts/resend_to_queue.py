@@ -26,14 +26,14 @@ async def resend_unanswered_questions(dry_run: bool = True):
     """
     question_service = get_question_service()
 
-    # 获取所有题目
+    # 直接获取所有题目（不通过分页）
     logger.info("正在获取所有题目...")
-    questions, total = question_service.list_questions()
+    all_questions = question_service._question_repo.find_all()
 
     # 过滤出没有答案的题目，且只处理 knowledge、scenario 和 algorithm 类型
     async_types = (QuestionType.KNOWLEDGE, QuestionType.SCENARIO, QuestionType.ALGORITHM)
     unanswered = [
-        q for q in questions
+        q for q in all_questions
         if not q.answer and q.question_type in async_types
     ]
 

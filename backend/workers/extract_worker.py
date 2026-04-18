@@ -18,9 +18,9 @@ import json
 
 from app.agents.vision_extractor import get_vision_extractor
 from app.domain.question import ExtractTaskStatus
-from app.db import get_postgres_client
+from app.infrastructure.persistence.postgres import get_postgres_client
 from app.models import ExtractTaskCreate
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 
 async def process_extract_task(task_id: str) -> bool:

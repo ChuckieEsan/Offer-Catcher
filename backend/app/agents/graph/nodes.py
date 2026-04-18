@@ -12,7 +12,7 @@ from app.agents.graph.state import AgentState
 from app.agents.vision_extractor import get_vision_extractor
 from app.utils.logger import logger
 from app.utils.telemetry import traced_async
-from app.llm import get_llm
+from app.infrastructure.adapters.llm_adapter import get_llm
 from app.utils.cache import singleton
 from app.agents.prompts import load_prompt_template
 from app.tools.search_question_tool import search_questions

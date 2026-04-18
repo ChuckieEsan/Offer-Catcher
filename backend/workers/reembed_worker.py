@@ -7,11 +7,11 @@
 """
 
 import asyncio
-from app.pipelines.ingestion import get_ingestion_pipeline
-from app.db import get_qdrant_manager
-from app.models import QdrantQuestionPayload
-from app.tools.embedding_tool import get_embedding_tool
-from app.utils.logger import logger
+from qdrant_client import models
+
+from app.infrastructure.persistence.qdrant import get_qdrant_client
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
+from app.infrastructure.common.logger import logger
 
 
 async def reembed_all():
@@ -20,13 +20,23 @@ async def reembed_all():
     print("批量重新嵌入脚本")
     print("=" * 60)
 
-    qdrant_manager = get_qdrant_manager()
-    embedding_tool = get_embedding_tool()
-    ingestion_pipeline = get_ingestion_pipeline()
+    qdrant_client = get_qdrant_client()
+    embedding_adapter = get_embedding_adapter()
 
-    # 1. 获取所有题目
+    # 1. 遍历获取所有题目
     print("\n[Step 1] 获取所有题目...")
-    all_questions = qdrant_manager.scroll_all()
+    all_questions = []
+    offset = None
+
+    while True:
+        batch, offset = qdrant_client.scroll(limit=100, offset=offset)
+        if not batch:
+            break
+        all_questions.extend(batch)
+        print(f"  已获取 {len(all_questions)} 道题目...")
+        if offset is None:
+            break
+
     if not all_questions:
         print("没有找到任何题目")
         return
@@ -45,66 +55,41 @@ async def reembed_all():
         print(f"\n处理批次 {i // BATCH_SIZE + 1}/{(len(all_questions) + BATCH_SIZE - 1) // BATCH_SIZE}: "
               f"题目 {i + 1}-{min(i + BATCH_SIZE, len(all_questions))}")
 
-        payloads = []
+        ids = []
         vectors = []
 
-        for question in batch:
+        for record in batch:
             try:
+                payload = record.payload
+
                 # 使用新的上下文格式
-                entities = question.core_entities or []
+                entities = payload.get("core_entities", [])
                 entities_str = ",".join(entities) if entities else "综合"
 
-                # question_type 和 mastery_level 可能已经是字符串或 int 了
-                q_type = question.question_type
-                if hasattr(q_type, 'value'):
-                    q_type = q_type.value
-                else:
-                    q_type = str(q_type)
-
-                mastery = question.mastery_level
-                if hasattr(mastery, 'value'):
-                    mastery = mastery.value
-                else:
-                    mastery = int(mastery)
-
                 context = (
-                    f"公司：{question.company} | "
-                    f"岗位：{question.position} | "
-                    f"类型：{q_type} | "
+                    f"公司：{payload.get('company', '')} | "
+                    f"岗位：{payload.get('position', '')} | "
+                    f"类型：{payload.get('question_type', 'knowledge')} | "
                     f"考点：{entities_str} | "
-                    f"题目：{question.question_text}"
+                    f"题目：{payload.get('question_text', '')}"
                 )
 
                 # 计算新向量
-                vector = embedding_tool.embed_text(context)
+                vector = embedding_adapter.embed(context)
 
-                # 构建 payload
-                payload = QdrantQuestionPayload(
-                    question_id=question.question_id,
-                    question_text=question.question_text,
-                    company=question.company,
-                    position=question.position,
-                    mastery_level=mastery,
-                    question_type=q_type,
-                    core_entities=question.core_entities,
-                    metadata=question.metadata,
-                    cluster_ids=question.cluster_ids,
-                    question_answer=question.question_answer if hasattr(question, 'question_answer') else None,
-                )
-
-                payloads.append(payload)
+                ids.append(record.id)
                 vectors.append(vector)
                 total_reembedded += 1
 
             except Exception as e:
-                print(f"  失败：{question.question_id} - {e}")
+                print(f"  失败：{record.id} - {e}")
                 total_failed += 1
 
-        # 批量更新
-        if payloads:
+        # 批量更新向量
+        if ids:
             try:
-                qdrant_manager.upsert_questions(payloads, vectors)
-                print(f"  批次完成：{len(payloads)} 道题目")
+                qdrant_client.update_vectors(ids, vectors)
+                print(f"  批次完成：{len(ids)} 道题目")
             except Exception as e:
                 print(f"  批次失败：{e}")
 
