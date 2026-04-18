@@ -23,6 +23,10 @@ from app.infrastructure.persistence.postgres.conversation_repository import (
     PostgresConversationRepository,
     get_conversation_repository,
 )
+from app.infrastructure.persistence.postgres.favorite_repository import (
+    PostgresFavoriteRepository,
+    get_favorite_repository,
+)
 
 __all__ = [
     "PostgresClient",
@@ -35,4 +39,6 @@ __all__ = [
     "get_interview_session_repository",
     "PostgresConversationRepository",
     "get_conversation_repository",
+    "PostgresFavoriteRepository",
+    "get_favorite_repository",
 ]

@@ -4,37 +4,21 @@
 """
 
 from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import List, Optional
 
 from app.application.services.retrieval_service import get_retrieval_service
-from app.models import SearchResult
+from app.api.dto.search_dto import (
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
+    to_search_result_item,
+)
 from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-# ========== Request/Response Models ==========
-
-class SearchRequest(BaseModel):
-    """搜索请求"""
-    query: str
-    company: Optional[str] = None
-    position: Optional[str] = None
-    mastery_level: Optional[int] = None
-    question_type: Optional[str] = None
-    core_entities: Optional[List[str]] = None
-    cluster_ids: Optional[List[str]] = None
-    k: int = 10
-    score_threshold: Optional[float] = None
-
-
-class SearchResponse(BaseModel):
-    """搜索响应"""
-    results: List[SearchResult]
-
-
 # ========== API Endpoints ==========
+
 
 @router.post("", response_model=SearchResponse)
 async def search(request: SearchRequest):
@@ -58,7 +42,10 @@ async def search(request: SearchRequest):
         score_threshold=request.score_threshold,
     )
 
-    return SearchResponse(results=results)
+    # 转换为 DTO
+    items = [to_search_result_item(r) for r in results]
+
+    return SearchResponse(results=items)
 
 
 __all__ = ["router"]
