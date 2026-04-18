@@ -19,6 +19,10 @@ from app.infrastructure.persistence.postgres.interview_session_repository import
     PostgresInterviewSessionRepository,
     get_interview_session_repository,
 )
+from app.infrastructure.persistence.postgres.conversation_repository import (
+    PostgresConversationRepository,
+    get_conversation_repository,
+)
 
 __all__ = [
     "PostgresClient",
@@ -29,4 +33,6 @@ __all__ = [
     "get_extract_task_repository",
     "PostgresInterviewSessionRepository",
     "get_interview_session_repository",
+    "PostgresConversationRepository",
+    "get_conversation_repository",
 ]

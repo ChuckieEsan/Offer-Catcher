@@ -3,10 +3,9 @@
 负责根据对话内容生成简洁、准确的会话标题。
 """
 
-from typing import List, Optional
+from typing import List
 
 from app.agents.base import BaseAgent
-from app.models.chat_session import Message
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.cache import singleton
 
@@ -22,11 +21,11 @@ class TitleGeneratorAgent(BaseAgent[str]):
     def __init__(self, provider: str = "deepseek") -> None:
         super().__init__(provider)
 
-    def generate_title(self, messages: List[Message]) -> str:
+    def generate_title(self, messages: List) -> str:
         """生成会话标题
 
         Args:
-            messages: 对话消息列表
+            messages: 对话消息列表（支持 Domain Message 实体或 dict）
 
         Returns:
             生成的标题（不超过 20 个字符）
@@ -52,20 +51,29 @@ class TitleGeneratorAgent(BaseAgent[str]):
             logger.error(f"Title generation failed: {e}")
             return "新对话"
 
-    def _build_conversation_content(self, messages: List[Message]) -> str:
+    def _build_conversation_content(self, messages: List) -> str:
         """构建对话内容文本
 
         Args:
-            messages: 消息列表
+            messages: 消息列表（支持 Domain Message 实体或 dict）
 
         Returns:
             格式化的对话内容
         """
         lines = []
         for msg in messages:
-            role_label = "用户" if msg.role == "user" else "AI"
+            # 支持 Domain Message 实体和 dict
+            if isinstance(msg, dict):
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+            else:
+                # Domain Message 实体
+                role = msg.role.value if hasattr(msg.role, "value") else msg.role
+                content = msg.content
+
+            role_label = "用户" if role == "user" else "AI"
             # 截断过长的消息（标题生成只需要关键信息）
-            content = msg.content[:200] if len(msg.content) > 200 else msg.content
+            content = content[:200] if len(content) > 200 else content
             lines.append(f"{role_label}: {content}")
         return "\n".join(lines)
 
