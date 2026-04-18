@@ -9,7 +9,7 @@ from typing import List
 
 from app.agents.scorer import get_scorer_agent
 from app.models import ScoreResult
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/score", tags=["score"])
 

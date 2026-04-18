@@ -5,7 +5,7 @@
 
 import pytest
 
-from app.db.graph_client import Neo4jGraphClient, get_graph_client
+from app.db import Neo4jGraphClient, get_graph_client
 
 
 class TestNeo4jGraphClient:

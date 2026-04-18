@@ -16,8 +16,8 @@ import uuid
 from typing import List, Tuple
 import pytest
 
-from app.db.qdrant_client import QdrantManager
-from app.services.cache_service import get_cache_service
+from app.db import QdrantManager
+from app.services import get_cache_service
 from app.tools.embedding_tool import get_embedding_tool
 from app.models import QdrantQuestionPayload
 

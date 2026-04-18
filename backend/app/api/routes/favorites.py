@@ -9,7 +9,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.infrastructure.persistence.postgres import get_postgres_client
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 

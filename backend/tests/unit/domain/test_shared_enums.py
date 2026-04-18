@@ -5,7 +5,7 @@
 
 import pytest
 
-from domain.shared.enums import (
+from app.domain.shared.enums import (
     ConversationStatus,
     DifficultyLevel,
     MasteryLevel,

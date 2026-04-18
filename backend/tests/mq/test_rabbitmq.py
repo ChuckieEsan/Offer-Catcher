@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from app.config.settings import get_settings
+from app.infrastructure.config.settings import get_settings
 from app.utils.hasher import generate_question_id
 from app.models import MQTaskMessage
 from app.mq.producer import AsyncRabbitMQProducer

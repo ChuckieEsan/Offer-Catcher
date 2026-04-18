@@ -1,15 +1,15 @@
 """Search API - 向量检索接口
 
-提供语义搜索能力。
+提供语义搜索能力，使用 DDD 架构。
 """
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
 
-from app.pipelines.retrieval import get_retrieval_pipeline
+from app.application.services.retrieval_service import get_retrieval_service
 from app.models import SearchResult
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -40,12 +40,13 @@ class SearchResponse(BaseModel):
 async def search(request: SearchRequest):
     """语义搜索
 
-    基于向量相似度搜索题目。
+    使用 RetrievalApplicationService 执行向量检索。
+    Payload 预过滤 + 向量计算。
     """
     logger.info(f"Search: query={request.query}, k={request.k}")
 
-    pipeline = get_retrieval_pipeline()
-    results = pipeline.search(
+    service = get_retrieval_service()
+    results = service.search(
         query=request.query,
         company=request.company,
         position=request.position,
@@ -58,3 +59,6 @@ async def search(request: SearchRequest):
     )
 
     return SearchResponse(results=results)
+
+
+__all__ = ["router"]

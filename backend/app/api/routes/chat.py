@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.agents.chat_agent import get_chat_agent
 from app.infrastructure.persistence.postgres import get_postgres_client
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

@@ -6,18 +6,18 @@
 import pytest
 from datetime import datetime
 
-from domain.question.aggregates import (
+from app.domain.question.aggregates import (
     Cluster,
     ExtractTask,
     ExtractTaskStatus,
     Question,
 )
-from domain.question.utils import (
+from app.domain.question.utils import (
     generate_question_id,
     generate_short_id,
     verify_question_id,
 )
-from domain.shared.enums import MasteryLevel, QuestionType
+from app.domain.shared.enums import MasteryLevel, QuestionType
 
 
 class TestQuestionUtils:

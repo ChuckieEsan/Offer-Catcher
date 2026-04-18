@@ -15,7 +15,7 @@ from app.application.services.stats_service import (
     EntityStats,
     ClusterStats,
 )
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

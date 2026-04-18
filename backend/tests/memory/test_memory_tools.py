@@ -36,7 +36,7 @@ from app.memory.templates import (
     get_behaviors_template,
 )
 from app.memory.store import get_memory_store
-from app.db.postgres_client import get_postgres_client
+from app.db import get_postgres_client
 from app.utils.logger import logger
 
 

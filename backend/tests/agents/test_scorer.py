@@ -63,7 +63,7 @@ class TestScorerAgent:
     async def test_score_with_real_data(self, agent):
         """测试真实评分（需要 Qdrant 中有数据）"""
         # 尝试获取一个已有答案的题目
-        from app.db.qdrant_client import get_qdrant_manager
+        from app.db import get_qdrant_manager
         qdrant_manager = get_qdrant_manager()
 
         # 搜索有答案的题目

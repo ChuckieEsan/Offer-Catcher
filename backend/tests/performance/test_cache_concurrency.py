@@ -14,7 +14,7 @@ import threading
 
 import pytest
 
-from app.services.cache_service import CacheService, CacheKeys, get_cache_service
+from app.services import CacheService, CacheKeys, get_cache_service
 
 
 class TestConcurrencyLockTimeout:

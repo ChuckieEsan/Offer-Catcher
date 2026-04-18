@@ -1,10 +1,11 @@
 """面试 API - AI 模拟面试官接口
 
 提供模拟面试的创建、进行、结束等功能。
+
+注意：当前使用 InterviewManager（内存会话），后续将迁移到 InterviewApplicationService（PostgreSQL 持久化）。
 """
 
 from typing import Optional
-from datetime import datetime
 from fastapi import APIRouter, Header, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -16,7 +17,17 @@ from app.models.interview_session import (
     AnswerSubmit,
     InterviewReport,
 )
-from app.utils.logger import logger
+from app.api.dto.interview_dto import (
+    InterviewSessionResponse,
+    InterviewSessionListResponse,
+    InterviewReportResponse,
+    InterviewSessionCreateRequest,
+    AnswerSubmitRequest,
+    AnswerResponse,
+    HintResponse,
+    InterviewQuestionResponse,
+)
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/interview", tags=["interview"])
 
@@ -26,37 +37,64 @@ def get_user_id(x_user_id: Optional[str] = Header(default="default_user")) -> st
     return x_user_id or "default_user"
 
 
-# ==================== Request/Response Models ====================
-
-class SessionResponse(BaseModel):
-    """会话响应"""
-    session_id: str
-    company: str
-    position: str
-    status: str
-    total_questions: int
-    current_question_idx: int
-    current_question: Optional[str] = None
+# ==================== 内部转换函数 ====================
 
 
-class AnswerResponse(BaseModel):
-    """回答响应"""
-    type: str  # follow_up / next_question / completed
-    message: str
-    question_idx: Optional[int] = None
-    question: Optional[str] = None
+def _session_to_response(session: InterviewSession) -> InterviewSessionResponse:
+    """将 InterviewSession 模型转换为响应 DTO"""
+    current_question = session.get_current_question()
+    return InterviewSessionResponse(
+        session_id=session.session_id,
+        company=session.company,
+        position=session.position,
+        difficulty=session.difficulty,
+        total_questions=session.total_questions,
+        status=session.status,
+        current_question_idx=session.current_question_idx,
+        correct_count=session.correct_count,
+        total_score=session.total_score,
+        started_at=session.started_at,
+        ended_at=session.ended_at,
+        current_question=InterviewQuestionResponse(
+            question_id=current_question.question_id,
+            question_text=current_question.question_text,
+            question_type=current_question.question_type,
+            difficulty=current_question.difficulty,
+            knowledge_points=current_question.knowledge_points,
+            user_answer=current_question.user_answer,
+            score=current_question.score,
+            feedback=current_question.feedback,
+            status=current_question.status,
+        ) if current_question else None,
+    )
 
 
-class HintResponse(BaseModel):
-    """提示响应"""
-    hint: str
+def _report_to_response(report: InterviewReport) -> InterviewReportResponse:
+    """将 InterviewReport 模型转换为响应 DTO"""
+    return InterviewReportResponse(
+        session_id=report.session_id,
+        company=report.company,
+        position=report.position,
+        total_questions=report.total_questions,
+        answered_questions=report.answered_questions,
+        correct_count=report.correct_count,
+        average_score=report.average_score,
+        duration_minutes=report.duration_minutes,
+        overall_evaluation=report.overall_evaluation,
+        strengths=report.strengths,
+        weaknesses=report.weaknesses,
+        knowledge_gaps=report.knowledge_gaps,
+        recommendations=report.recommendations,
+        question_details=report.question_details,
+    )
 
 
-# ==================== API Endpoints ====================
+# ==================== API 端点 ====================
 
-@router.post("/sessions", response_model=SessionResponse)
+
+@router.post("/sessions", response_model=InterviewSessionResponse)
 async def create_interview_session(
-    request: InterviewSessionCreate,
+    request: InterviewSessionCreateRequest,
     user_id: str = Depends(get_user_id),
 ):
     """创建面试会话
@@ -69,25 +107,26 @@ async def create_interview_session(
     Returns:
         会话信息，包含第一道题目
     """
-    logger.info(f"Creating interview session: user={user_id}, company={request.company}, position={request.position}")
-
-    manager = get_interview_manager()
-    session = manager.create_session(user_id, request)
-
-    current_question = session.get_current_question()
-
-    return SessionResponse(
-        session_id=session.session_id,
-        company=session.company,
-        position=session.position,
-        status=session.status,
-        total_questions=session.total_questions,
-        current_question_idx=session.current_question_idx,
-        current_question=current_question.question_text if current_question else None,
+    logger.info(
+        f"Creating interview session: user={user_id}, "
+        f"company={request.company}, position={request.position}"
     )
 
+    # 转换 DTO 到模型（兼容 InterviewManager）
+    create_request = InterviewSessionCreate(
+        company=request.company,
+        position=request.position,
+        difficulty=request.difficulty,
+        total_questions=request.total_questions,
+    )
 
-@router.get("/sessions/{session_id}", response_model=SessionResponse)
+    manager = get_interview_manager()
+    session = manager.create_session(user_id, create_request)
+
+    return _session_to_response(session)
+
+
+@router.get("/sessions/{session_id}", response_model=InterviewSessionResponse)
 async def get_interview_session(
     session_id: str,
     user_id: str = Depends(get_user_id),
@@ -100,29 +139,21 @@ async def get_interview_session(
     Returns:
         会话详情
     """
+    logger.info(f"Get interview session: session={session_id}, user={user_id}")
+
     manager = get_interview_manager()
     session = manager.get_session(session_id)
 
     if not session:
         return {"error": "Session not found"}
 
-    current_question = session.get_current_question()
-
-    return SessionResponse(
-        session_id=session.session_id,
-        company=session.company,
-        position=session.position,
-        status=session.status,
-        total_questions=session.total_questions,
-        current_question_idx=session.current_question_idx,
-        current_question=current_question.question_text if current_question else None,
-    )
+    return _session_to_response(session)
 
 
 @router.post("/sessions/{session_id}/answer")
 async def submit_answer(
     session_id: str,
-    request: AnswerSubmit,
+    request: AnswerSubmitRequest,
     user_id: str = Depends(get_user_id),
 ):
     """提交回答（流式响应）
@@ -157,7 +188,7 @@ async def submit_answer(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -197,7 +228,7 @@ async def request_hint(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -251,7 +282,7 @@ async def end_interview(
 
     if session:
         session.status = "completed"
-        session.ended_at = datetime.now()
+        session.ended_at = __import__("datetime").datetime.now()
 
     return {
         "message": "面试已结束",
@@ -259,7 +290,7 @@ async def end_interview(
     }
 
 
-@router.get("/sessions/{session_id}/report", response_model=InterviewReport)
+@router.get("/sessions/{session_id}/report", response_model=InterviewReportResponse)
 async def get_interview_report(
     session_id: str,
     user_id: str = Depends(get_user_id),
@@ -282,7 +313,7 @@ async def get_interview_report(
     if not report:
         return {"error": "Report not available"}
 
-    return report
+    return _report_to_response(report)
 
 
 __all__ = ["router"]

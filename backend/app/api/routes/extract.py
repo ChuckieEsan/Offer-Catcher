@@ -2,6 +2,10 @@
 
 从文本或图片中提取面经题目。
 支持同步模式和异步任务模式。
+
+架构：
+- 提取：使用 Vision Extractor Agent（暂未重构）
+- 入库：使用 IngestionApplicationService（DDD）
 """
 
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Header
@@ -12,7 +16,7 @@ import uuid
 import os
 
 from app.agents.vision_extractor import get_vision_extractor
-from app.pipelines.ingestion import get_ingestion_pipeline
+from app.application.services.ingestion_service import get_ingestion_service
 from app.models import (
     ExtractedInterview,
     QuestionItem,
@@ -23,7 +27,7 @@ from app.models import (
     ExtractTaskStatus,
 )
 from app.infrastructure.persistence.postgres import get_postgres_client
-from app.utils.logger import logger
+from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
@@ -111,7 +115,6 @@ async def submit_extract_task(
     task = pg.create_extract_task(user_id, request)
 
     # Extract Worker 通过轮询 PostgreSQL 获取任务，不需要发送 MQ 消息
-    # 如果需要 MQ 通知，应该使用单独的队列（如 extract_tasks），避免与 answer_tasks 混淆
     logger.info(f"Extract task created: {task.task_id}, waiting for worker to poll")
 
     return TaskSubmitResponse(
@@ -216,7 +219,7 @@ async def confirm_extract_task(
 ):
     """确认入库
 
-    确认任务解析结果并入库到 Qdrant。
+    使用 IngestionApplicationService 入库到 Qdrant。
     """
     user_id = get_user_id(x_user_id)
     logger.info(f"Confirm extract task: task_id={task_id}")
@@ -233,9 +236,9 @@ async def confirm_extract_task(
     if not task.result:
         raise HTTPException(status_code=400, detail="任务无解析结果")
 
-    # 入库
-    pipeline = get_ingestion_pipeline()
-    result = await pipeline.process(task.result)
+    # 使用 IngestionApplicationService 入库
+    service = get_ingestion_service()
+    result = await service.ingest_from_task(task_id)
 
     # 更新任务状态
     pg.update_extract_task_status(task_id, ExtractTaskStatus.CONFIRMED)
@@ -372,18 +375,22 @@ async def extract_image_base64(request: ImageExtractRequest):
 async def confirm_ingest(request: ConfirmRequest):
     """确认入库
 
-    确认提取的面经数据并入库。
+    使用 IngestionApplicationService 入库。
     """
     logger.info(f"Confirm ingest: company={request.interview.company}, questions={len(request.interview.questions)}")
 
     if not request.confirmed:
         return ConfirmResponse(processed=0, async_tasks=0, question_ids=[])
 
-    pipeline = get_ingestion_pipeline()
-    result = await pipeline.process(request.interview)
+    # 使用 IngestionApplicationService 入库
+    service = get_ingestion_service()
+    result = await service.ingest_interview(request.interview)
 
     return ConfirmResponse(
         processed=result.processed,
         async_tasks=result.async_tasks,
         question_ids=result.question_ids
     )
+
+
+__all__ = ["router"]

@@ -9,8 +9,8 @@ from typing import List
 
 import pytest
 
-from app.config.settings import get_settings
-from app.db.qdrant_client import QdrantManager
+from app.infrastructure.config.settings import get_settings
+from app.db import QdrantManager
 from app.models import QdrantQuestionPayload, SearchFilter
 from app.utils.hasher import generate_question_id
 

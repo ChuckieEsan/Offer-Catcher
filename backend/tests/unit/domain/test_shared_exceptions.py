@@ -5,7 +5,7 @@
 
 import pytest
 
-from domain.shared.exceptions import (
+from app.domain.shared.exceptions import (
     ChatDomainException,
     ClusterNotFoundError,
     ConversationNotFoundError,
