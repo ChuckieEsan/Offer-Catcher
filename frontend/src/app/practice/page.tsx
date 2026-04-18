@@ -23,16 +23,16 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { search, scoreAnswer, getCompanyStats, getEntityStats } from "@/lib/api";
-import type { SearchResult, ScoreResult, CompanyStats, EntityStats } from "@/types";
+import { getQuestions, scoreAnswer, getCompanyStats, getEntityStats } from "@/lib/api";
+import type { Question, ScoreResult, CompanyStats, EntityStats } from "@/types";
 
 const { TextArea } = Input;
 const { Title, Paragraph } = Typography;
 
 export default function PracticePage() {
   const [loading, setLoading] = useState(false);
-  const [questions, setQuestions] = useState<SearchResult[]>([]);
-  const [selectedQuestion, setSelectedQuestion] = useState<SearchResult | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
   const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null);
   const [scoring, setScoring] = useState(false);
@@ -49,7 +49,7 @@ export default function PracticePage() {
   const [entities, setEntities] = useState<EntityStats[]>([]);
 
   // 查看答案 Drawer
-  const [answerDrawer, setAnswerDrawer] = useState<{ visible: boolean; question: SearchResult | null }>({
+  const [answerDrawer, setAnswerDrawer] = useState<{ visible: boolean; question: Question | null }>({
     visible: false,
     question: null,
   });
@@ -72,8 +72,9 @@ export default function PracticePage() {
   const loadRandomQuestions = async () => {
     setLoading(true);
     try {
-      const res = await search({ query: "", k: 200 });
-      const withAnswer = res.results.filter((r) => r.question_answer);
+      // 使用 getQuestions API 获取所有题目（带答案）
+      const res = await getQuestions({ page: 1, page_size: 1000 });
+      const withAnswer = res.items.filter((q) => q.question_answer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("加载失败");
@@ -85,12 +86,26 @@ export default function PracticePage() {
   const handleSearch = async () => {
     setLoading(true);
     try {
+      // 语义搜索仍使用 search API
+      const { search } = await import("@/lib/api");
       const res = await search({
         query: searchQuery,
         k: 50,
       });
       const withAnswer = res.results.filter((r) => r.question_answer);
-      setQuestions(withAnswer);
+      // 转换为 Question 类型
+      setQuestions(withAnswer.map((r) => ({
+        question_id: r.question_id,
+        question_text: r.question_text,
+        company: r.company,
+        position: r.position,
+        question_type: r.question_type,
+        mastery_level: r.mastery_level,
+        core_entities: r.core_entities,
+        question_answer: r.question_answer,
+        cluster_ids: r.cluster_ids,
+        metadata: r.metadata,
+      })));
     } catch (error) {
       console.error("搜索失败");
     } finally {
@@ -99,14 +114,10 @@ export default function PracticePage() {
   };
 
   const handleFilterByCompany = async () => {
-    if (!selectedCompany) {
-      loadRandomQuestions();
-      return;
-    }
     setLoading(true);
     try {
-      const res = await search({ query: "", company: selectedCompany, k: 50 });
-      const withAnswer = res.results.filter((r) => r.question_answer);
+      const res = await getQuestions({ company: selectedCompany, page: 1, page_size: 500 });
+      const withAnswer = res.items.filter((q) => q.question_answer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("搜索失败");
@@ -116,15 +127,24 @@ export default function PracticePage() {
   };
 
   const handleFilterByEntity = async () => {
-    if (!selectedEntity) {
-      loadRandomQuestions();
-      return;
-    }
     setLoading(true);
     try {
-      const res = await search({ query: "", core_entities: [selectedEntity], k: 50 });
+      // 知识点过滤仍需要语义搜索
+      const { search } = await import("@/lib/api");
+      const res = await search({ query: selectedEntity || "", k: 100 });
       const withAnswer = res.results.filter((r) => r.question_answer);
-      setQuestions(withAnswer);
+      setQuestions(withAnswer.map((r) => ({
+        question_id: r.question_id,
+        question_text: r.question_text,
+        company: r.company,
+        position: r.position,
+        question_type: r.question_type,
+        mastery_level: r.mastery_level,
+        core_entities: r.core_entities,
+        question_answer: r.question_answer,
+        cluster_ids: r.cluster_ids,
+        metadata: r.metadata,
+      })));
     } catch (error) {
       console.error("搜索失败");
     } finally {
@@ -135,8 +155,8 @@ export default function PracticePage() {
   const handleFilterByMastery = async () => {
     setLoading(true);
     try {
-      const res = await search({ query: "", mastery_level: selectedMastery ?? 0, k: 50 });
-      const withAnswer = res.results.filter((r) => r.question_answer);
+      const res = await getQuestions({ mastery_level: selectedMastery ?? 0, page: 1, page_size: 500 });
+      const withAnswer = res.items.filter((q) => q.question_answer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("搜索失败");
@@ -173,7 +193,7 @@ export default function PracticePage() {
     }
   };
 
-  const handleSelectQuestion = (q: SearchResult) => {
+  const handleSelectQuestion = (q: Question) => {
     setSelectedQuestion(q);
     setUserAnswer("");
     setScoreResult(null);
@@ -304,8 +324,20 @@ export default function PracticePage() {
                 if (!searchQuery.trim()) return;
                 setLoading(true);
                 try {
+                  const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
-                  setQuestions(res.results);
+                  setQuestions(res.results.map((r) => ({
+                    question_id: r.question_id,
+                    question_text: r.question_text,
+                    company: r.company,
+                    position: r.position,
+                    question_type: r.question_type,
+                    mastery_level: r.mastery_level,
+                    core_entities: r.core_entities,
+                    question_answer: r.question_answer,
+                    cluster_ids: r.cluster_ids,
+                    metadata: r.metadata,
+                  })));
                 } catch (error) {
                   console.error("搜索失败");
                 } finally {
@@ -320,8 +352,20 @@ export default function PracticePage() {
                 if (!searchQuery.trim()) return;
                 setLoading(true);
                 try {
+                  const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
-                  setQuestions(res.results);
+                  setQuestions(res.results.map((r) => ({
+                    question_id: r.question_id,
+                    question_text: r.question_text,
+                    company: r.company,
+                    position: r.position,
+                    question_type: r.question_type,
+                    mastery_level: r.mastery_level,
+                    core_entities: r.core_entities,
+                    question_answer: r.question_answer,
+                    cluster_ids: r.cluster_ids,
+                    metadata: r.metadata,
+                  })));
                 } catch (error) {
                   console.error("搜索失败");
                 } finally {
@@ -424,6 +468,13 @@ export default function PracticePage() {
               disabled={!userAnswer.trim()}
             >
               提交评分
+            </Button>
+            <Button
+              icon={<EyeOutlined />}
+              style={{ marginTop: 16, marginLeft: 8 }}
+              onClick={() => setAnswerDrawer({ visible: true, question: selectedQuestion })}
+            >
+              查看答案
             </Button>
           </Card>
 

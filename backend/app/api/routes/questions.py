@@ -74,7 +74,7 @@ async def list_questions(
     cluster_id: Optional[str] = Query(None, description="聚类过滤"),
     keyword: Optional[str] = Query(None, description="关键词搜索"),
     page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    page_size: int = Query(20, ge=1, le=1000, description="每页数量"),
 ):
     """获取题目列表
 
