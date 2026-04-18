@@ -5,7 +5,8 @@
 
 架构：
 - 提取：使用 Vision Extractor Agent（暂未重构）
-- 入库：使用 IngestionApplicationService（DDD）
+- 任务管理：使用 ExtractTaskApplicationService（DDD）
+- 入库：由 ExtractTaskApplicationService.confirm() 编排 IngestionService
 """
 
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Header
@@ -16,17 +17,16 @@ import uuid
 import os
 
 from app.agents.vision_extractor import get_vision_extractor
+from app.application.services.extract_task_service import get_extract_task_service
 from app.application.services.ingestion_service import get_ingestion_service
 from app.models import (
     ExtractedInterview,
     QuestionItem,
-    ExtractTask,
     ExtractTaskCreate,
     ExtractTaskUpdate,
     ExtractTaskListItem,
     ExtractTaskStatus,
 )
-from app.infrastructure.persistence.postgres import get_postgres_client
 from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/extract", tags=["extract"])
@@ -110,9 +110,14 @@ async def submit_extract_task(
     user_id = get_user_id(x_user_id)
     logger.info(f"Submit extract task: user={user_id}, type={request.source_type}")
 
-    # 创建任务
-    pg = get_postgres_client()
-    task = pg.create_extract_task(user_id, request)
+    # 使用 ExtractTaskApplicationService 创建任务
+    service = get_extract_task_service()
+    task = service.submit(
+        user_id=user_id,
+        source_type=request.source_type,
+        source_content=request.source_content,
+        source_images=request.source_images,
+    )
 
     # Extract Worker 通过轮询 PostgreSQL 获取任务，不需要发送 MQ 消息
     logger.info(f"Extract task created: {task.task_id}, waiting for worker to poll")
@@ -137,17 +142,14 @@ async def list_extract_tasks(
     user_id = get_user_id(x_user_id)
     logger.info(f"List extract tasks: user={user_id}, status={status}")
 
-    pg = get_postgres_client()
-
-    # 验证状态值
-    valid_statuses = [None, ExtractTaskStatus.PENDING, ExtractTaskStatus.PROCESSING,
-                      ExtractTaskStatus.COMPLETED, ExtractTaskStatus.FAILED, ExtractTaskStatus.CONFIRMED]
-    if status and status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-
-    offset = (page - 1) * page_size
-    items = pg.get_extract_tasks(user_id, status, page_size, offset)
-    total = pg.count_extract_tasks(user_id, status)
+    # 使用 ExtractTaskApplicationService
+    service = get_extract_task_service()
+    items, total = service.list(
+        user_id=user_id,
+        status=status,
+        page=page,
+        page_size=page_size,
+    )
 
     return TaskListResponse(
         items=items,
@@ -157,7 +159,7 @@ async def list_extract_tasks(
     )
 
 
-@router.get("/tasks/{task_id}", response_model=ExtractTask)
+@router.get("/tasks/{task_id}")
 async def get_extract_task(
     task_id: str,
     x_user_id: Optional[str] = Header(None),
@@ -169,8 +171,9 @@ async def get_extract_task(
     user_id = get_user_id(x_user_id)
     logger.info(f"Get extract task: task_id={task_id}, user={user_id}")
 
-    pg = get_postgres_client()
-    task = pg.get_extract_task(task_id, user_id)
+    # 使用 ExtractTaskApplicationService
+    service = get_extract_task_service()
+    task = service.get(task_id, user_id)
 
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -178,7 +181,7 @@ async def get_extract_task(
     return task
 
 
-@router.put("/tasks/{task_id}", response_model=ExtractTask)
+@router.put("/tasks/{task_id}")
 async def update_extract_task(
     task_id: str,
     request: ExtractTaskUpdate,
@@ -192,22 +195,18 @@ async def update_extract_task(
     user_id = get_user_id(x_user_id)
     logger.info(f"Update extract task: task_id={task_id}")
 
-    pg = get_postgres_client()
-    task = pg.get_extract_task(task_id, user_id)
-
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-
-    if task.status != ExtractTaskStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="仅可编辑已完成的任务")
-
-    updated_task = pg.update_extract_task_edit(
+    # 使用 ExtractTaskApplicationService
+    service = get_extract_task_service()
+    updated_task = service.edit(
         task_id=task_id,
         user_id=user_id,
         company=request.company,
         position=request.position,
         questions=request.questions,
     )
+
+    if not updated_task:
+        raise HTTPException(status_code=404, detail="任务不存在或无法编辑")
 
     return updated_task
 
@@ -219,34 +218,22 @@ async def confirm_extract_task(
 ):
     """确认入库
 
-    使用 IngestionApplicationService 入库到 Qdrant。
+    使用 ExtractTaskApplicationService.confirm() 编排入库。
     """
     user_id = get_user_id(x_user_id)
     logger.info(f"Confirm extract task: task_id={task_id}")
 
-    pg = get_postgres_client()
-    task = pg.get_extract_task(task_id, user_id)
-
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-
-    if task.status != ExtractTaskStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="仅可确认已完成的任务")
-
-    if not task.result:
-        raise HTTPException(status_code=400, detail="任务无解析结果")
-
-    # 使用 IngestionApplicationService 入库
-    service = get_ingestion_service()
-    result = await service.ingest_from_task(task_id)
-
-    # 更新任务状态
-    pg.update_extract_task_status(task_id, ExtractTaskStatus.CONFIRMED)
+    # 使用 ExtractTaskApplicationService.confirm()
+    service = get_extract_task_service()
+    try:
+        result = await service.confirm(task_id, user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return ConfirmResponse(
-        processed=result.processed,
-        async_tasks=result.async_tasks,
-        question_ids=result.question_ids
+        processed=result["processed"],
+        async_tasks=result["async_tasks"],
+        question_ids=result["question_ids"]
     )
 
 
@@ -259,8 +246,9 @@ async def delete_extract_task(
     user_id = get_user_id(x_user_id)
     logger.info(f"Delete extract task: task_id={task_id}")
 
-    pg = get_postgres_client()
-    deleted = pg.delete_extract_task(task_id, user_id)
+    # 使用 ExtractTaskApplicationService
+    service = get_extract_task_service()
+    deleted = service.delete(task_id, user_id)
 
     if not deleted:
         raise HTTPException(status_code=404, detail="任务不存在")

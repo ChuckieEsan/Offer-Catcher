@@ -186,6 +186,26 @@ class ExtractTaskRepository(Protocol):
     定义提取任务聚合的持久化接口。
     """
 
+    def create(
+        self,
+        user_id: str,
+        source_type: str,
+        source_content: str | None = None,
+        source_images: list[str] | None = None,
+    ) -> ExtractTask:
+        """创建提取任务
+
+        Args:
+            user_id: 用户 ID
+            source_type: 来源类型（text/image）
+            source_content: 文本内容
+            source_images: 图片列表
+
+        Returns:
+            新创建的 ExtractTask 聚合
+        """
+        ...
+
     def find_by_id(self, task_id: str) -> ExtractTask | None:
         """根据 ID 查找提取任务
 
@@ -194,6 +214,26 @@ class ExtractTaskRepository(Protocol):
 
         Returns:
             ExtractTask 实例或 None
+        """
+        ...
+
+    def find_by_user(
+        self,
+        user_id: str,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[ExtractTask]:
+        """查找用户的任务列表
+
+        Args:
+            user_id: 用户 ID
+            status: 状态过滤
+            limit: 返回数量
+            offset: 偏移量
+
+        Returns:
+            ExtractTask 列表
         """
         ...
 
@@ -210,6 +250,40 @@ class ExtractTaskRepository(Protocol):
 
         Args:
             task_id: 任务唯一标识
+        """
+        ...
+
+    def update_status(self, task_id: str, status: str) -> None:
+        """更新任务状态
+
+        Args:
+            task_id: 任务 ID
+            status: 新状态
+        """
+        ...
+
+    def update_result(
+        self,
+        task_id: str,
+        result: dict,
+    ) -> None:
+        """更新任务结果
+
+        Args:
+            task_id: 任务 ID
+            result: 提取结果（ExtractedInterview 字典）
+        """
+        ...
+
+    def count_by_user(self, user_id: str, status: str | None = None) -> int:
+        """统计用户任务数量
+
+        Args:
+            user_id: 用户 ID
+            status: 状态过滤
+
+        Returns:
+            任务数量
         """
         ...
 

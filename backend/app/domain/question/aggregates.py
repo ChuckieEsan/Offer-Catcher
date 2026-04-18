@@ -306,8 +306,10 @@ class ExtractTask(BaseModel):
 
     Attributes:
         task_id: 任务唯一标识
+        user_id: 所属用户 ID
         source_type: 来源类型（image/text）
         source_content: 来源内容（图片 URL 或文本）
+        source_images: 来源图片列表（可选）
         status: 任务状态
         extracted_interview: 提取结果（JSON）
         created_at: 创建时间
@@ -315,12 +317,49 @@ class ExtractTask(BaseModel):
     """
 
     task_id: str = Field(description="任务唯一标识")
+    user_id: str = Field(description="所属用户 ID")
     source_type: str = Field(description="来源类型：image/text")
-    source_content: str = Field(description="来源内容")
+    source_content: str = Field(default="", description="来源内容")
+    source_images: Optional[list[str]] = Field(default=None, description="来源图片列表")
     status: str = Field(default=ExtractTaskStatus.PENDING, description="任务状态")
     extracted_interview: Optional[dict[str, Any]] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+    @classmethod
+    def create(
+        cls,
+        user_id: str,
+        source_type: str,
+        source_content: str | None = None,
+        source_images: list[str] | None = None,
+    ) -> "ExtractTask":
+        """创建提取任务（工厂方法）
+
+        生成唯一 task_id，设置初始状态为 pending。
+
+        Args:
+            user_id: 用户 ID
+            source_type: 来源类型（image/text）
+            source_content: 来源内容
+            source_images: 图片 URL 列表
+
+        Returns:
+            ExtractTask 实例
+        """
+        import uuid
+        task_id = str(uuid.uuid4())
+        now = datetime.now()
+        return cls(
+            task_id=task_id,
+            user_id=user_id,
+            source_type=source_type,
+            source_content=source_content or "",
+            source_images=source_images,
+            status=ExtractTaskStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+        )
 
     def start_processing(self) -> None:
         """开始处理
@@ -371,8 +410,10 @@ class ExtractTask(BaseModel):
         """转换为存储 payload"""
         return {
             "task_id": self.task_id,
+            "user_id": self.user_id,
             "source_type": self.source_type,
             "source_content": self.source_content,
+            "source_images": self.source_images,
             "status": self.status,
             "extracted_interview": self.extracted_interview,
             "created_at": self.created_at.isoformat(),
@@ -384,8 +425,10 @@ class ExtractTask(BaseModel):
         """从 payload 恢复聚合"""
         return cls(
             task_id=payload["task_id"],
+            user_id=payload["user_id"],
             source_type=payload["source_type"],
-            source_content=payload["source_content"],
+            source_content=payload.get("source_content", ""),
+            source_images=payload.get("source_images"),
             status=payload["status"],
             extracted_interview=payload.get("extracted_interview"),
             created_at=datetime.fromisoformat(payload["created_at"]),

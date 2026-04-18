@@ -4,11 +4,15 @@
 复用 PostgresClient 的现有操作，封装为 Repository 模式。
 """
 
-from typing import Optional
+from __future__ import annotations
+
+import gzip
+import json
+from datetime import datetime
+from typing import List, Optional
 
 from app.domain.question.aggregates import ExtractTask, ExtractTaskStatus
 from app.domain.question.repositories import ExtractTaskRepository
-from app.models import ExtractedInterview
 
 from app.infrastructure.persistence.postgres.client import (
     PostgresClient,
@@ -38,6 +42,58 @@ class PostgresExtractTaskRepository:
             client: PostgreSQL 客户端（支持依赖注入）
         """
         self._client = client or get_postgres_client()
+
+    def create(
+        self,
+        user_id: str,
+        source_type: str,
+        source_content: str | None = None,
+        source_images: list[str] | None = None,
+    ) -> ExtractTask:
+        """创建提取任务
+
+        Args:
+            user_id: 用户 ID
+            source_type: 来源类型（text/image）
+            source_content: 文本内容
+            source_images: 图片列表
+
+        Returns:
+            新创建的 ExtractTask 聚合
+        """
+        import uuid
+        task_id = str(uuid.uuid4())
+        now = datetime.now()
+
+        source_images_gz = None
+        if source_images:
+            images_json = json.dumps(source_images)
+            source_images_gz = gzip.compress(images_json.encode())
+
+        with self._client.conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO extract_tasks
+                (task_id, user_id, source_type, source_content, source_images_gz, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (task_id, user_id, source_type, source_content,
+                 source_images_gz, ExtractTaskStatus.PENDING, now, now),
+            )
+            self._client.conn.commit()
+
+        logger.info(f"Created extract task: task_id={task_id}, user={user_id}")
+
+        return ExtractTask(
+            task_id=task_id,
+            user_id=user_id,
+            source_type=source_type,
+            source_content=source_content or "",
+            source_images=source_images,
+            status=ExtractTaskStatus.PENDING,
+            created_at=now,
+            updated_at=now,
+        )
 
     def find_by_id(self, task_id: str) -> ExtractTask | None:
         """根据 ID 查找提取任务
@@ -210,6 +266,122 @@ class PostgresExtractTaskRepository:
             logger.error(f"Failed to find pending extract tasks: {e}")
             raise
 
+    def find_by_user(
+        self,
+        user_id: str,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[ExtractTask]:
+        """查找用户的任务列表
+
+        Args:
+            user_id: 用户 ID
+            status: 状态过滤
+            limit: 返回数量
+            offset: 偏移量
+
+        Returns:
+            ExtractTask 列表
+        """
+        try:
+            tasks = []
+            with self._client.conn.cursor() as cur:
+                if status:
+                    cur.execute(
+                        """
+                        SELECT task_id, user_id, source_type, source_content,
+                               source_images_gz, status, error_message, result,
+                               created_at, updated_at
+                        FROM extract_tasks WHERE user_id = %s AND status = %s
+                        ORDER BY updated_at DESC LIMIT %s OFFSET %s
+                        """,
+                        (user_id, status, limit, offset),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT task_id, user_id, source_type, source_content,
+                               source_images_gz, status, error_message, result,
+                               created_at, updated_at
+                        FROM extract_tasks WHERE user_id = %s
+                        ORDER BY updated_at DESC LIMIT %s OFFSET %s
+                        """,
+                        (user_id, limit, offset),
+                    )
+                rows = cur.fetchall()
+
+            for row in rows:
+                row_dict = {
+                    "task_id": row[0],
+                    "user_id": row[1],
+                    "source_type": row[2],
+                    "source_content": row[3],
+                    "source_images_gz": row[4],
+                    "status": row[5],
+                    "error_message": row[6],
+                    "result": row[7],
+                    "created_at": row[8],
+                    "updated_at": row[9],
+                }
+                tasks.append(self._row_dict_to_domain(row_dict))
+
+            logger.info(f"Found {len(tasks)} tasks for user={user_id}")
+            return tasks
+
+        except Exception as e:
+            logger.error(f"Failed to find tasks by user: {e}")
+            raise
+
+    def update_status(self, task_id: str, status: str) -> None:
+        """更新任务状态
+
+        Args:
+            task_id: 任务 ID
+            status: 新状态
+        """
+        try:
+            self._client.update_extract_task_status(task_id, status)
+            logger.info(f"Updated task status: task_id={task_id}, status={status}")
+        except Exception as e:
+            logger.error(f"Failed to update task status: {e}")
+            raise
+
+    def update_result(self, task_id: str, result: dict) -> None:
+        """更新任务结果
+
+        Args:
+            task_id: 任务 ID
+            result: 提取结果（ExtractedInterview 字典）
+        """
+        try:
+            now = datetime.now()
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE extract_tasks SET result = %s, status = %s, updated_at = %s
+                    WHERE task_id = %s
+                    """,
+                    (json.dumps(result), ExtractTaskStatus.COMPLETED, now, task_id),
+                )
+                self._client.conn.commit()
+            logger.info(f"Updated task result: task_id={task_id}")
+        except Exception as e:
+            logger.error(f"Failed to update task result: {e}")
+            raise
+
+    def count_by_user(self, user_id: str, status: str | None = None) -> int:
+        """统计用户任务数量
+
+        Args:
+            user_id: 用户 ID
+            status: 状态过滤
+
+        Returns:
+            任务数量
+        """
+        return self._client.count_extract_tasks(user_id, status)
+
     def _row_to_domain(self, row: "app.models.ExtractTask") -> ExtractTask:
         """将 PostgresClient 返回的 ExtractTask 模型转换为 domain ExtractTask
 
@@ -219,16 +391,24 @@ class PostgresExtractTaskRepository:
         Returns:
             domain ExtractTask 聚合
         """
-        # row 是 app.models.ExtractTask，有 result 字段
-        # 需要转换为 domain ExtractTask 的 extracted_interview
         extracted_interview = None
         if row.result:
             extracted_interview = row.result.model_dump()
 
+        source_images = None
+        if row.source_images_gz:
+            try:
+                decompressed = gzip.decompress(row.source_images_gz).decode()
+                source_images = json.loads(decompressed)
+            except Exception as e:
+                logger.warning(f"Failed to decompress images: {e}")
+
         return ExtractTask(
             task_id=row.task_id,
+            user_id=row.user_id,
             source_type=row.source_type,
             source_content=row.source_content or "",
+            source_images=source_images,
             status=row.status,
             extracted_interview=extracted_interview,
             created_at=row.created_at,
@@ -244,10 +424,6 @@ class PostgresExtractTaskRepository:
         Returns:
             domain ExtractTask 聚合
         """
-        import gzip
-        import json
-        from datetime import datetime
-
         extracted_interview = None
         result = row_dict.get("result")
         if result:
@@ -259,10 +435,21 @@ class PostgresExtractTaskRepository:
                 except Exception:
                     pass
 
+        source_images = None
+        source_images_gz = row_dict.get("source_images_gz")
+        if source_images_gz:
+            try:
+                decompressed = gzip.decompress(source_images_gz).decode()
+                source_images = json.loads(decompressed)
+            except Exception as e:
+                logger.warning(f"Failed to decompress images: {e}")
+
         return ExtractTask(
             task_id=row_dict["task_id"],
+            user_id=row_dict["user_id"],
             source_type=row_dict["source_type"],
             source_content=row_dict.get("source_content") or "",
+            source_images=source_images,
             status=row_dict["status"],
             extracted_interview=extracted_interview,
             created_at=row_dict["created_at"],

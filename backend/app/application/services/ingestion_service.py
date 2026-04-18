@@ -2,29 +2,27 @@
 
 编排面经入库用例，协调领域层和基础设施层。
 作为应用层，负责：
-- 调用仓库持久化聚合
+- 调用仓库持久化 Question 聚合
 - 分类熔断（判断是否需要异步答案）
 - 发送 MQ 任务
 - 复用答案机制（查重）
+
+职责边界：
+- 只负责题目入库，不涉及 ExtractTask 任务状态管理
+- 任务状态管理由 ExtractTaskService 负责
 """
 
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain.question.aggregates import Question, ExtractTask
-from app.domain.question.repositories import (
-    QuestionRepository,
-    ExtractTaskRepository,
-)
+from app.domain.question.aggregates import Question
+from app.domain.question.repositories import QuestionRepository
 from app.domain.shared.enums import QuestionType
 from app.models import ExtractedInterview, QuestionItem, MQTaskMessage
 
 from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,
-)
-from app.infrastructure.persistence.postgres.extract_task_repository import (
-    get_extract_task_repository,
 )
 from app.infrastructure.adapters.embedding_adapter import (
     EmbeddingAdapter,
@@ -53,11 +51,11 @@ class IngestionResult(BaseModel):
 class IngestionApplicationService:
     """入库应用服务
 
-    编排面经入库用例。通过依赖注入接收仓库实例，便于测试时使用 Mock。
+    编排面经入库用例。只负责题目入库，不涉及任务状态管理。
 
     核心功能：
     1. ingest_interview - 从 ExtractedInterview 入库题目
-    2. ingest_from_task - 从 ExtractTask 入库题目（用户确认后）
+    2. ingest_from_interview_data - 从提取结果数据入库（供 ExtractTaskService 调用）
 
     设计要点：
     - 分类熔断：knowledge/scenario 类型触发 MQ 异步答案生成
@@ -67,18 +65,15 @@ class IngestionApplicationService:
     def __init__(
         self,
         question_repo: Optional[QuestionRepository] = None,
-        extract_task_repo: Optional[ExtractTaskRepository] = None,
         embedding: Optional[EmbeddingAdapter] = None,
     ) -> None:
         """初始化应用服务
 
         Args:
             question_repo: Question 仓库（支持依赖注入）
-            extract_task_repo: ExtractTask 仓库（支持依赖注入）
             embedding: Embedding 适配器（支持依赖注入）
         """
         self._question_repo = question_repo or get_question_repository()
-        self._extract_task_repo = extract_task_repo or get_extract_task_repository()
         self._embedding = embedding or get_embedding_adapter()
         self._mq_producer = None
 
@@ -208,44 +203,23 @@ class IngestionApplicationService:
             result.processed = 0
             raise
 
-    async def ingest_from_task(self, task_id: str) -> IngestionResult:
-        """从 ExtractTask 入库题目
+    async def ingest_from_interview_data(
+        self,
+        extracted_interview: dict,
+    ) -> IngestionResult:
+        """从提取结果数据入库题目
 
-        用户确认后调用，从任务中获取提取结果并入库。
+        纯入库逻辑，不涉及任务状态管理。
+        由 ExtractTaskService 调用。
 
         Args:
-            task_id: 提取任务 ID
+            extracted_interview: 提取结果字典（company, position, questions）
 
         Returns:
             入库结果
         """
-        # 1. 获取任务
-        task = self._extract_task_repo.find_by_id(task_id)
-        if not task:
-            raise ValueError(f"ExtractTask not found: {task_id}")
-
-        # 2. 检查任务状态
-        if not task.is_ready_for_ingestion():
-            raise ValueError(
-                f"ExtractTask {task_id} is not ready for ingestion, "
-                f"status={task.status}"
-            )
-
-        # 3. 解析提取结果
-        if not task.extracted_interview:
-            raise ValueError(f"ExtractTask {task_id} has no extracted_interview")
-
-        interview = ExtractedInterview(**task.extracted_interview)
-
-        # 4. 入库
-        result = await self.ingest_interview(interview)
-
-        # 5. 更新任务状态为 confirmed
-        task.confirm()
-        self._extract_task_repo.save(task)
-
-        logger.info(f"Ingested from task {task_id}, result: {result}")
-        return result
+        interview = ExtractedInterview(**extracted_interview)
+        return await self.ingest_interview(interview)
 
     async def _send_async_tasks(
         self,
