@@ -14,7 +14,7 @@ from app.infrastructure.observability import traced_async
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.cache import singleton
 from app.infrastructure.common.prompt import load_prompt_template
-from app.tools.context import UserContext
+from app.application.agents.chat.runtime import UserContext
 from app.application.agents.chat.prompts import PROMPTS_DIR
 
 

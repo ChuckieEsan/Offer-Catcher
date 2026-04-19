@@ -16,6 +16,7 @@ class UserContext:
     Attributes:
         user_id: 用户唯一标识
     """
+
     user_id: str
 
 
