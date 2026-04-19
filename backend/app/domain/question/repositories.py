@@ -309,6 +309,52 @@ class ExtractTaskRepository(Protocol):
         """
         ...
 
+    def find_by_id_with_user(self, task_id: str, user_id: str) -> ExtractTask | None:
+        """根据 ID 和用户 ID 查找提取任务
+
+        Args:
+            task_id: 任务唯一标识
+            user_id: 用户 ID（用于验证归属）
+
+        Returns:
+            ExtractTask 实例或 None
+        """
+        ...
+
+    def update_edit(
+        self,
+        task_id: str,
+        user_id: str,
+        company: str,
+        position: str,
+        questions: list[dict],
+    ) -> ExtractTask | None:
+        """编辑任务结果
+
+        Args:
+            task_id: 任务 ID
+            user_id: 用户 ID
+            company: 公司名称
+            position: 岗位名称
+            questions: 题目列表
+
+        Returns:
+            更新后的 ExtractTask 或 None
+        """
+        ...
+
+    def delete_with_user(self, task_id: str, user_id: str) -> bool:
+        """删除任务（带用户验证）
+
+        Args:
+            task_id: 任务唯一标识
+            user_id: 用户 ID
+
+        Returns:
+            是否成功删除
+        """
+        ...
+
 
 __all__ = [
     "QuestionRepository",

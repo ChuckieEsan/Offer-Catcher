@@ -19,13 +19,16 @@ import os
 from app.agents.vision_extractor import get_vision_extractor
 from app.application.services.extract_task_service import get_extract_task_service
 from app.application.services.ingestion_service import get_ingestion_service
+from app.api.dto.extract_dto import (
+    extract_task_to_response,
+    extract_tasks_to_list_items,
+)
 from app.models import (
     ExtractedInterview,
     QuestionItem,
     ExtractTaskCreate,
     ExtractTaskUpdate,
     ExtractTaskListItem,
-    ExtractTaskStatus,
 )
 from app.infrastructure.common.logger import logger
 
@@ -144,12 +147,15 @@ async def list_extract_tasks(
 
     # 使用 ExtractTaskApplicationService
     service = get_extract_task_service()
-    items, total = service.list(
+    tasks, total = service.list(
         user_id=user_id,
         status=status,
         page=page,
         page_size=page_size,
     )
+
+    # 转换为 DTO
+    items = extract_tasks_to_list_items(tasks)
 
     return TaskListResponse(
         items=items,
@@ -178,7 +184,8 @@ async def get_extract_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    return task
+    # 转换为 DTO
+    return extract_task_to_response(task)
 
 
 @router.put("/tasks/{task_id}")
@@ -197,18 +204,19 @@ async def update_extract_task(
 
     # 使用 ExtractTaskApplicationService
     service = get_extract_task_service()
-    updated_task = service.edit(
-        task_id=task_id,
-        user_id=user_id,
-        company=request.company,
-        position=request.position,
-        questions=request.questions,
-    )
+    try:
+        updated_task = service.edit(
+            task_id=task_id,
+            user_id=user_id,
+            company=request.company,
+            position=request.position,
+            questions=request.questions,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    if not updated_task:
-        raise HTTPException(status_code=404, detail="任务不存在或无法编辑")
-
-    return updated_task
+    # 转换为 DTO
+    return extract_task_to_response(updated_task)
 
 
 @router.post("/tasks/{task_id}/confirm", response_model=ConfirmResponse)

@@ -25,11 +25,8 @@ from app.infrastructure.config.settings import get_settings
 from app.infrastructure.common.logger import logger
 from app.models import (
     ExtractTask,
-    ExtractTaskCreate,
-    ExtractTaskListItem,
     ExtractTaskStatus,
     ExtractedInterview,
-    QuestionItem,
 )
 from app.models.chat_session import (
     Conversation,
@@ -218,44 +215,13 @@ class PostgresClient:
             self.conn.commit()
             logger.info("PostgreSQL tables initialized")
 
-    # ========== 对话操作 ==========
-
-    def create_conversation(self, user_id: str, title: str = "新对话") -> Conversation:
-        """创建新对话"""
-        conv_id = str(uuid.uuid4())
-        now = datetime.now()
-
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO conversations (id, user_id, title, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id, user_id, title, created_at, updated_at
-                """,
-                (conv_id, user_id, title, now, now),
-            )
-            self.conn.commit()
-
-        return Conversation(
-            id=conv_id, user_id=user_id, title=title, created_at=now, updated_at=now
-        )
-
-    def get_conversations(self, user_id: str, limit: int = 50) -> List[Conversation]:
-        """获取用户的所有对话"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT id, user_id, title, created_at, updated_at
-                FROM conversations WHERE user_id = %s
-                ORDER BY updated_at DESC LIMIT %s
-                """,
-                (user_id, limit),
-            )
-            rows = cur.fetchall()
-        return [Conversation(**row) for row in rows]
+    # ========== 对话操作（Memory/Chat 模块使用） ==========
 
     def get_conversation(self, user_id: str, conversation_id: str) -> Optional[Conversation]:
-        """获取指定对话"""
+        """获取指定对话（Memory 模块使用）
+
+        注意：应用层应使用 ConversationRepository.find_by_id()
+        """
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -267,33 +233,13 @@ class PostgresClient:
             row = cur.fetchone()
         return Conversation(**row) if row else None
 
-    def update_conversation_title(self, user_id: str, conversation_id: str, title: str) -> bool:
-        """更新对话标题"""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE conversations SET title = %s, updated_at = %s
-                WHERE id = %s AND user_id = %s
-                """,
-                (title, datetime.now(), conversation_id, user_id),
-            )
-            self.conn.commit()
-            return cur.rowcount > 0
-
-    def delete_conversation(self, user_id: str, conversation_id: str) -> bool:
-        """删除对话"""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM conversations WHERE id = %s AND user_id = %s",
-                (conversation_id, user_id),
-            )
-            self.conn.commit()
-            return cur.rowcount > 0
-
-    # ========== 消息操作 ==========
+    # ========== 消息操作（Chat 模块使用） ==========
 
     def add_message(self, user_id: str, conversation_id: str, role: str, content: str) -> Message:
-        """添加消息"""
+        """添加消息（Chat 模块使用）
+
+        注意：应用层应使用 ConversationRepository.add_message()
+        """
         msg_id = str(uuid.uuid4())
         now = datetime.now()
 
@@ -319,127 +265,30 @@ class PostgresClient:
             role=role, content=content, created_at=now
         )
 
-    def get_messages(self, user_id: str, conversation_id: str) -> List[Message]:
-        """获取对话的所有消息"""
+    # ========== 面经解析任务操作（Worker 使用） ==========
+
+    def get_extract_task(self, task_id: str) -> Optional[ExtractTask]:
+        """获取单个任务详情（Worker 使用）
+
+        注意：应用层应使用 ExtractTaskRepository.find_by_id()
+        """
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, user_id, role, content, created_at
-                FROM messages WHERE conversation_id = %s AND user_id = %s
-                ORDER BY created_at ASC
+                SELECT task_id, user_id, source_type, source_content, source_images_gz,
+                       status, error_message, result, created_at, updated_at
+                FROM extract_tasks WHERE task_id = %s
                 """,
-                (conversation_id, user_id),
+                (task_id,),
             )
-            rows = cur.fetchall()
-        return [Message(**row) for row in rows]
-
-    # ========== 面经解析任务操作 ==========
-
-    def create_extract_task(self, user_id: str, create_req: ExtractTaskCreate) -> ExtractTask:
-        """创建面经解析任务"""
-        task_id = str(uuid.uuid4())
-        now = datetime.now()
-
-        source_images_gz = None
-        if create_req.source_images:
-            images_json = json.dumps(create_req.source_images)
-            source_images_gz = gzip.compress(images_json.encode())
-
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO extract_tasks
-                (task_id, user_id, source_type, source_content, source_images_gz, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (task_id, user_id, create_req.source_type, create_req.source_content,
-                 source_images_gz, ExtractTaskStatus.PENDING, now, now),
-            )
-            self.conn.commit()
-
-        return ExtractTask(
-            task_id=task_id, user_id=user_id, source_type=create_req.source_type,
-            source_content=create_req.source_content, source_images_gz=create_req.source_images,
-            status=ExtractTaskStatus.PENDING, created_at=now, updated_at=now,
-        )
-
-    def get_extract_task(self, task_id: str, user_id: str = None) -> Optional[ExtractTask]:
-        """获取单个任务详情"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            if user_id:
-                cur.execute(
-                    """
-                    SELECT task_id, user_id, source_type, source_content, source_images_gz,
-                           status, error_message, result, created_at, updated_at
-                    FROM extract_tasks WHERE task_id = %s AND user_id = %s
-                    """,
-                    (task_id, user_id),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT task_id, user_id, source_type, source_content, source_images_gz,
-                           status, error_message, result, created_at, updated_at
-                    FROM extract_tasks WHERE task_id = %s
-                    """,
-                    (task_id,),
-                )
             row = cur.fetchone()
         return self._row_to_extract_task(row) if row else None
 
-    def get_extract_tasks(
-        self, user_id: str, status: str = None, limit: int = 20, offset: int = 0
-    ) -> List[ExtractTaskListItem]:
-        """获取任务列表"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            if status:
-                cur.execute(
-                    """
-                    SELECT task_id, status, source_type, result, created_at, updated_at
-                    FROM extract_tasks WHERE user_id = %s AND status = %s
-                    ORDER BY updated_at DESC LIMIT %s OFFSET %s
-                    """,
-                    (user_id, status, limit, offset),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT task_id, status, source_type, result, created_at, updated_at
-                    FROM extract_tasks WHERE user_id = %s
-                    ORDER BY updated_at DESC LIMIT %s OFFSET %s
-                    """,
-                    (user_id, limit, offset),
-                )
-            rows = cur.fetchall()
-
-        items = []
-        for row in rows:
-            result = row.get("result")
-            company = result.get("company", "") if result else ""
-            position = result.get("position", "") if result else ""
-            question_count = len(result.get("questions", [])) if result else 0
-
-            items.append(ExtractTaskListItem(
-                task_id=row["task_id"], status=row["status"], source_type=row["source_type"],
-                company=company, position=position, question_count=question_count,
-                created_at=row["created_at"], updated_at=row["updated_at"],
-            ))
-        return items
-
-    def count_extract_tasks(self, user_id: str, status: str = None) -> int:
-        """统计任务数量"""
-        with self.conn.cursor() as cur:
-            if status:
-                cur.execute(
-                    "SELECT COUNT(*) FROM extract_tasks WHERE user_id = %s AND status = %s",
-                    (user_id, status),
-                )
-            else:
-                cur.execute("SELECT COUNT(*) FROM extract_tasks WHERE user_id = %s", (user_id,))
-            return cur.fetchone()[0]
-
     def update_extract_task_status(self, task_id: str, status: str, error_message: str = None) -> bool:
-        """更新任务状态"""
+        """更新任务状态（Worker 使用）
+
+        注意：应用层应使用 ExtractTaskRepository.update_status()
+        """
         now = datetime.now()
         with self.conn.cursor() as cur:
             cur.execute(
@@ -453,7 +302,10 @@ class PostgresClient:
             return cur.rowcount > 0
 
     def update_extract_task_result(self, task_id: str, result: ExtractedInterview) -> bool:
-        """更新任务解析结果"""
+        """更新任务解析结果（Worker 使用）
+
+        注意：应用层应使用 ExtractTaskRepository.update_result()
+        """
         now = datetime.now()
         with self.conn.cursor() as cur:
             cur.execute(
@@ -466,18 +318,8 @@ class PostgresClient:
             self.conn.commit()
             return cur.rowcount > 0
 
-    def delete_extract_task(self, task_id: str, user_id: str) -> bool:
-        """删除任务"""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM extract_tasks WHERE task_id = %s AND user_id = %s",
-                (task_id, user_id),
-            )
-            self.conn.commit()
-            return cur.rowcount > 0
-
     def _row_to_extract_task(self, row: dict) -> ExtractTask:
-        """将数据库行转换为 ExtractTask 模型"""
+        """将数据库行转换为 ExtractTask 模型（Worker 使用）"""
         source_images_gz = row.get("source_images_gz")
         source_images = None
         if source_images_gz:
@@ -502,77 +344,7 @@ class PostgresClient:
             updated_at=row["updated_at"], result=result,
         )
 
-    # ========== 收藏操作 ==========
-
-    def add_favorite(self, user_id: str, question_id: str) -> str:
-        """添加收藏"""
-        favorite_id = str(uuid.uuid4())
-        now = datetime.now()
-
-        with self.conn.cursor() as cur:
-            try:
-                cur.execute(
-                    """
-                    INSERT INTO favorites (id, user_id, question_id, created_at)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (favorite_id, user_id, question_id, now),
-                )
-                self.conn.commit()
-                logger.info(f"Added favorite: user={user_id}, question={question_id}")
-                return favorite_id
-            except psycopg2.errors.UniqueViolation:
-                self.conn.rollback()
-                raise ValueError(f"题目已收藏: {question_id}")
-
-    def remove_favorite(self, user_id: str, question_id: str) -> bool:
-        """取消收藏"""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM favorites WHERE user_id = %s AND question_id = %s",
-                (user_id, question_id),
-            )
-            self.conn.commit()
-            deleted = cur.rowcount > 0
-            if deleted:
-                logger.info(f"Removed favorite: user={user_id}, question={question_id}")
-            return deleted
-
-    def get_favorites(self, user_id: str, limit: int = 20, offset: int = 0) -> List[dict]:
-        """获取收藏列表"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT id, question_id, created_at FROM favorites
-                WHERE user_id = %s ORDER BY created_at DESC LIMIT %s OFFSET %s
-                """,
-                (user_id, limit, offset),
-            )
-            rows = cur.fetchall()
-        return [{"id": row["id"], "question_id": row["question_id"], "created_at": row["created_at"]} for row in rows]
-
-    def count_favorites(self, user_id: str) -> int:
-        """统计收藏数量"""
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM favorites WHERE user_id = %s", (user_id,))
-            return cur.fetchone()[0]
-
-    def check_favorites(self, user_id: str, question_ids: List[str]) -> dict[str, bool]:
-        """批量检查收藏状态"""
-        if not question_ids:
-            return {}
-        with self.conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT question_id FROM favorites
-                WHERE user_id = %s AND question_id = ANY(%s)
-                """,
-                (user_id, question_ids),
-            )
-            favored_ids = {row[0] for row in cur.fetchall()}
-        return {qid: qid in favored_ids for qid in question_ids}
-
-    # ========== 会话摘要操作 ==========
+    # ========== 会话摘要操作（Memory 模块使用） ==========
 
     def create_session_summary(
         self, conversation_id: str, user_id: str, summary: str,
@@ -598,19 +370,6 @@ class PostgresClient:
 
         logger.info(f"Session summary created: conversation_id={conversation_id}")
         return _row_to_session_summary(row)
-
-    def get_session_summary(self, conversation_id: str, user_id: str) -> Optional[SessionSummary]:
-        """获取会话摘要"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT conversation_id, user_id, summary, embedding, session_type, metadata, created_at
-                FROM session_summaries WHERE conversation_id = %s AND user_id = %s
-                """,
-                (conversation_id, user_id),
-            )
-            row = cur.fetchone()
-        return _row_to_session_summary(row) if row else None
 
     def search_session_summaries(
         self, user_id: str, query_embedding: List[float], top_k: int = 5
@@ -664,44 +423,6 @@ class PostgresClient:
             )
             for row in rows
         ]
-
-    def update_session_summary(
-        self, conversation_id: str, user_id: str, summary: str,
-        embedding: Optional[List[float]] = None, metadata: Optional[dict] = None,
-    ) -> bool:
-        """更新会话摘要"""
-        with self.conn.cursor() as cur:
-            if embedding is not None:
-                cur.execute(
-                    """
-                    UPDATE session_summaries
-                    SET summary = %s, embedding = %s, metadata = %s
-                    WHERE conversation_id = %s AND user_id = %s
-                    """,
-                    (summary, embedding, json.dumps(metadata) if metadata else None,
-                     conversation_id, user_id),
-                )
-            else:
-                cur.execute(
-                    """
-                    UPDATE session_summaries
-                    SET summary = %s, metadata = %s
-                    WHERE conversation_id = %s AND user_id = %s
-                    """,
-                    (summary, json.dumps(metadata) if metadata else None,
-                     conversation_id, user_id),
-                )
-            self.conn.commit()
-            updated = cur.rowcount > 0
-        if updated:
-            logger.info(f"Session summary updated: conversation_id={conversation_id}")
-        return updated
-
-    def count_session_summaries(self, user_id: str) -> int:
-        """统计用户会话摘要数量"""
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM session_summaries WHERE user_id = %s", (user_id,))
-            return cur.fetchone()[0]
 
     def close(self) -> None:
         """关闭连接"""

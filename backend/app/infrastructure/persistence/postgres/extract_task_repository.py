@@ -12,7 +12,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from app.domain.question.aggregates import ExtractTask, ExtractTaskStatus
-from app.domain.question.repositories import ExtractTaskRepository
 
 from app.infrastructure.persistence.postgres.client import (
     PostgresClient,
@@ -105,13 +104,34 @@ class PostgresExtractTaskRepository:
             ExtractTask 实例或 None
         """
         try:
-            # 使用 PostgresClient 的现有方法
-            row = self._client.get_extract_task(task_id)
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT task_id, user_id, source_type, source_content,
+                           source_images_gz, status, error_message, result,
+                           created_at, updated_at
+                    FROM extract_tasks WHERE task_id = %s
+                    """,
+                    (task_id,),
+                )
+                row = cur.fetchone()
+
             if row is None:
                 return None
 
-            # 转换为 domain ExtractTask
-            return self._row_to_domain(row)
+            row_dict = {
+                "task_id": row[0],
+                "user_id": row[1],
+                "source_type": row[2],
+                "source_content": row[3],
+                "source_images_gz": row[4],
+                "status": row[5],
+                "error_message": row[6],
+                "result": row[7],
+                "created_at": row[8],
+                "updated_at": row[9],
+            }
+            return self._row_dict_to_domain(row_dict)
 
         except Exception as e:
             logger.error(f"Failed to find extract task {task_id}: {e}")
@@ -124,28 +144,15 @@ class PostgresExtractTaskRepository:
             task: ExtractTask 实例
         """
         try:
-            # 获取现有任务
-            existing = self._client.get_extract_task(task.task_id)
+            now = datetime.now()
 
-            if existing is None:
-                # 新任务 - 使用 PostgresClient 的创建方法
-                # 注意：PostgresClient.create_extract_task 需要 ExtractTaskCreate
-                # 这里简化处理，直接更新状态
-                logger.warning(
-                    f"ExtractTask {task.task_id} not found in DB, "
-                    "creating new tasks should use create_extract_task API"
-                )
-                return
-
-            # 更新现有任务
-            # 根据状态更新
+            # 更新任务
             if task.extracted_interview is not None:
                 # 有结果，更新 result 和状态
-                extracted = ExtractedInterview(**task.extracted_interview)
-                self._client.update_extract_task_result(task.task_id, extracted)
+                self.update_result(task.task_id, task.extracted_interview)
             else:
                 # 只更新状态
-                self._client.update_extract_task_status(task.task_id, task.status)
+                self.update_status(task.task_id, task.status)
 
             logger.info(f"Saved extract task: {task.task_id}, status={task.status}")
 
@@ -341,7 +348,16 @@ class PostgresExtractTaskRepository:
             status: 新状态
         """
         try:
-            self._client.update_extract_task_status(task_id, status)
+            now = datetime.now()
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE extract_tasks SET status = %s, updated_at = %s
+                    WHERE task_id = %s
+                    """,
+                    (status, now, task_id),
+                )
+                self._client.conn.commit()
             logger.info(f"Updated task status: task_id={task_id}, status={status}")
         except Exception as e:
             logger.error(f"Failed to update task status: {e}")
@@ -380,40 +396,158 @@ class PostgresExtractTaskRepository:
         Returns:
             任务数量
         """
-        return self._client.count_extract_tasks(user_id, status)
+        try:
+            with self._client.conn.cursor() as cur:
+                if status:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM extract_tasks WHERE user_id = %s AND status = %s",
+                        (user_id, status),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM extract_tasks WHERE user_id = %s",
+                        (user_id,),
+                    )
+                return cur.fetchone()[0]
+        except Exception as e:
+            logger.error(f"Failed to count tasks: {e}")
+            raise
 
-    def _row_to_domain(self, row: "app.models.ExtractTask") -> ExtractTask:
-        """将 PostgresClient 返回的 ExtractTask 模型转换为 domain ExtractTask
+    def find_by_id_with_user(self, task_id: str, user_id: str) -> ExtractTask | None:
+        """根据 ID 和用户 ID 查找提取任务
 
         Args:
-            row: PostgresClient 的 ExtractTask 模型
+            task_id: 任务唯一标识
+            user_id: 用户 ID（用于验证归属）
 
         Returns:
-            domain ExtractTask 聚合
+            ExtractTask 实例或 None
         """
-        extracted_interview = None
-        if row.result:
-            extracted_interview = row.result.model_dump()
+        try:
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT task_id, user_id, source_type, source_content,
+                           source_images_gz, status, error_message, result,
+                           created_at, updated_at
+                    FROM extract_tasks WHERE task_id = %s AND user_id = %s
+                    """,
+                    (task_id, user_id),
+                )
+                row = cur.fetchone()
 
-        source_images = None
-        if row.source_images_gz:
-            try:
-                decompressed = gzip.decompress(row.source_images_gz).decode()
-                source_images = json.loads(decompressed)
-            except Exception as e:
-                logger.warning(f"Failed to decompress images: {e}")
+            if row is None:
+                return None
 
-        return ExtractTask(
-            task_id=row.task_id,
-            user_id=row.user_id,
-            source_type=row.source_type,
-            source_content=row.source_content or "",
-            source_images=source_images,
-            status=row.status,
-            extracted_interview=extracted_interview,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
+            row_dict = {
+                "task_id": row[0],
+                "user_id": row[1],
+                "source_type": row[2],
+                "source_content": row[3],
+                "source_images_gz": row[4],
+                "status": row[5],
+                "error_message": row[6],
+                "result": row[7],
+                "created_at": row[8],
+                "updated_at": row[9],
+            }
+            return self._row_dict_to_domain(row_dict)
+
+        except Exception as e:
+            logger.error(f"Failed to find extract task {task_id}: {e}")
+            raise
+
+    def update_edit(
+        self,
+        task_id: str,
+        user_id: str,
+        company: str,
+        position: str,
+        questions: list[dict],
+    ) -> ExtractTask | None:
+        """编辑任务结果
+
+        Args:
+            task_id: 任务 ID
+            user_id: 用户 ID
+            company: 公司名称
+            position: 岗位名称
+            questions: 题目列表
+
+        Returns:
+            更新后的 ExtractTask 或 None
+        """
+        try:
+            now = datetime.now()
+
+            # 构建新的 result
+            result = {
+                "company": company,
+                "position": position,
+                "questions": questions,
+            }
+
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE extract_tasks
+                    SET result = %s, updated_at = %s
+                    WHERE task_id = %s AND user_id = %s AND status = 'completed'
+                    RETURNING task_id, user_id, source_type, source_content,
+                              source_images_gz, status, error_message, result,
+                              created_at, updated_at
+                    """,
+                    (json.dumps(result), now, task_id, user_id),
+                )
+                row = cur.fetchone()
+                self._client.conn.commit()
+
+            if row is None:
+                return None
+
+            row_dict = {
+                "task_id": row[0],
+                "user_id": row[1],
+                "source_type": row[2],
+                "source_content": row[3],
+                "source_images_gz": row[4],
+                "status": row[5],
+                "error_message": row[6],
+                "result": row[7],
+                "created_at": row[8],
+                "updated_at": row[9],
+            }
+            logger.info(f"Edited extract task: task_id={task_id}")
+            return self._row_dict_to_domain(row_dict)
+
+        except Exception as e:
+            logger.error(f"Failed to edit extract task {task_id}: {e}")
+            raise
+
+    def delete_with_user(self, task_id: str, user_id: str) -> bool:
+        """删除任务（带用户验证）
+
+        Args:
+            task_id: 任务唯一标识
+            user_id: 用户 ID
+
+        Returns:
+            是否成功删除
+        """
+        try:
+            with self._client.conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM extract_tasks WHERE task_id = %s AND user_id = %s",
+                    (task_id, user_id),
+                )
+                self._client.conn.commit()
+                deleted = cur.rowcount > 0
+            if deleted:
+                logger.info(f"Deleted extract task: {task_id}")
+            return deleted
+        except Exception as e:
+            logger.error(f"Failed to delete extract task {task_id}: {e}")
+            raise
 
     def _row_dict_to_domain(self, row_dict: dict) -> ExtractTask:
         """将数据库行字典转换为 domain ExtractTask

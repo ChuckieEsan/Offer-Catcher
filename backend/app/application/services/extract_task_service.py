@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from app.domain.question.aggregates import ExtractTask
+from app.domain.question.aggregates import ExtractTask, ExtractTaskStatus
 from app.domain.question.repositories import ExtractTaskRepository
 from app.infrastructure.common.logger import logger
 
@@ -78,7 +78,7 @@ class ExtractTaskApplicationService:
         status: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[List[dict], int]:
+    ) -> tuple[List[ExtractTask], int]:
         """查询任务列表
 
         Args:
@@ -88,20 +88,22 @@ class ExtractTaskApplicationService:
             page_size: 每页数量
 
         Returns:
-            (items, total) 元组
+            (tasks, total) 元组
         """
         logger.info(f"List extract tasks: user={user_id}, status={status}")
 
-        from app.infrastructure.persistence.postgres import get_postgres_client
-
-        pg = get_postgres_client()
         offset = (page - 1) * page_size
-        items = pg.get_extract_tasks(user_id, status, page_size, offset)
-        total = pg.count_extract_tasks(user_id, status)
+        tasks = self._task_repository.find_by_user(
+            user_id=user_id,
+            status=status,
+            limit=page_size,
+            offset=offset,
+        )
+        total = self._task_repository.count_by_user(user_id, status)
 
-        return items, total
+        return tasks, total
 
-    def get(self, task_id: str, user_id: str) -> dict | None:
+    def get(self, task_id: str, user_id: str) -> ExtractTask | None:
         """获取任务详情
 
         Args:
@@ -109,14 +111,11 @@ class ExtractTaskApplicationService:
             user_id: 用户 ID
 
         Returns:
-            任务数据（dict）
+            ExtractTask 聚合或 None
         """
         logger.info(f"Get extract task: task_id={task_id}")
 
-        from app.infrastructure.persistence.postgres import get_postgres_client
-
-        pg = get_postgres_client()
-        return pg.get_extract_task(task_id, user_id)
+        return self._task_repository.find_by_id_with_user(task_id, user_id)
 
     def edit(
         self,
@@ -125,7 +124,7 @@ class ExtractTaskApplicationService:
         company: str,
         position: str,
         questions: List[dict],
-    ) -> dict | None:
+    ) -> ExtractTask | None:
         """编辑任务结果
 
         Args:
@@ -136,30 +135,26 @@ class ExtractTaskApplicationService:
             questions: 题目列表
 
         Returns:
-            更新后的任务数据
+            更新后的 ExtractTask
+
+        Raises:
+            ValueError: 任务不存在或状态不允许编辑
         """
         logger.info(f"Edit extract task: task_id={task_id}")
 
-        from app.infrastructure.persistence.postgres import get_postgres_client
-
-        pg = get_postgres_client()
-
-        # 验证任务状态
-        task_data = pg.get_extract_task(task_id, user_id)
-        if not task_data:
-            return None
-
-        if task_data.status != "completed":
-            raise ValueError("仅可编辑已完成的任务")
-
-        # 更新编辑
-        return pg.update_extract_task_edit(
+        # Repository 的 update_edit 方法已经包含了状态验证
+        task = self._task_repository.update_edit(
             task_id=task_id,
             user_id=user_id,
             company=company,
             position=position,
             questions=questions,
         )
+
+        if task is None:
+            raise ValueError("任务不存在或仅可编辑已完成的任务")
+
+        return task
 
     async def confirm(self, task_id: str, user_id: str) -> dict:
         """确认入库
@@ -176,33 +171,33 @@ class ExtractTaskApplicationService:
 
         Returns:
             入库结果
+
+        Raises:
+            ValueError: 任务不存在、状态不允许确认、无解析结果
         """
         logger.info(f"Confirm extract task: task_id={task_id}")
 
-        from app.infrastructure.persistence.postgres import get_postgres_client
-        from app.application.services.ingestion_service import get_ingestion_service
-
-        pg = get_postgres_client()
-
-        # 1. 验证任务
-        task_data = pg.get_extract_task(task_id, user_id)
-        if not task_data:
+        # 1. 使用 Repository 获取任务
+        task = self._task_repository.find_by_id_with_user(task_id, user_id)
+        if task is None:
             raise ValueError("任务不存在")
 
-        if task_data.status != "completed":
+        if task.status != ExtractTaskStatus.COMPLETED:
             raise ValueError("仅可确认已完成的任务")
 
-        if not task_data.result:
+        if not task.extracted_interview:
             raise ValueError("任务无解析结果")
 
         # 2. 调用 IngestionService 入库题目
+        from app.application.services.ingestion_service import get_ingestion_service
+
         ingestion_service = get_ingestion_service()
         result = await ingestion_service.ingest_from_interview_data(
-            task_data.result.model_dump()
+            task.extracted_interview
         )
 
-        # 3. 更新任务状态为 confirmed（ExtractTaskService 负责状态管理）
-        pg.update_extract_task_status(task_id, "confirmed")
+        # 3. 使用 Repository 更新任务状态为 confirmed
+        self._task_repository.update_status(task_id, ExtractTaskStatus.CONFIRMED)
 
         logger.info(f"Task {task_id} confirmed, processed={result.processed}")
 
@@ -224,10 +219,7 @@ class ExtractTaskApplicationService:
         """
         logger.info(f"Delete extract task: task_id={task_id}")
 
-        from app.infrastructure.persistence.postgres import get_postgres_client
-
-        pg = get_postgres_client()
-        return pg.delete_extract_task(task_id, user_id)
+        return self._task_repository.delete_with_user(task_id, user_id)
 
 
 def get_extract_task_service() -> ExtractTaskApplicationService:
