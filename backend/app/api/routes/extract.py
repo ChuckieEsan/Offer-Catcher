@@ -16,7 +16,7 @@ import tempfile
 import uuid
 import os
 
-from app.agents.vision_extractor import get_vision_extractor
+from app.application.agents.factory import get_vision_extractor
 from app.application.services.extract_task_service import get_extract_task_service
 from app.application.services.ingestion_service import get_ingestion_service
 from app.api.dto.extract_dto import (

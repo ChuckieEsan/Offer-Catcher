@@ -20,8 +20,8 @@ from app.models.interview_session import (
     InterviewSessionCreate,
     InterviewReport,
 )
-from app.tools.search_question_tool import search_questions
-from app.tools.embedding_tool import get_embedding_tool
+from app.application.agents.shared.tools.search_questions import search_questions
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.infrastructure.common.logger import logger
 from app.agents.prompts import build_prompt
 from app.infrastructure.common.cache import singleton
@@ -143,11 +143,11 @@ class InterviewManager:
         Args:
             session: 面试会话
         """
-        embedding_tool = get_embedding_tool()
+        embedding_adapter = get_embedding_adapter()
 
         # 构建查询上下文
         context = f"公司：{session.company} | 岗位：{session.position} | 面试题"
-        query_vector = embedding_tool.embed_text(context)
+        query_vector = embedding_adapter.embed(context)
 
         # 搜索更多候选题目，从中随机选取
         # 取 3 倍数量的候选，保证随机性

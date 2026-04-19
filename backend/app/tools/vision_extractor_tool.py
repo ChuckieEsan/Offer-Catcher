@@ -5,7 +5,7 @@
 
 from langchain_core.tools import tool
 
-from app.agents.vision_extractor import get_vision_extractor
+from app.application.agents.factory import get_vision_extractor
 from app.infrastructure.common.logger import logger
 
 

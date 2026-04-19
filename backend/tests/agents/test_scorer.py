@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.agents.scorer import ScorerAgent, get_scorer_agent, calculate_new_level
+from app.application.agents.scorer.agent import ScorerAgent, get_scorer_agent
+from app.domain.interview.services import calculate_new_level
 from app.models.question import MasteryLevel
 
 

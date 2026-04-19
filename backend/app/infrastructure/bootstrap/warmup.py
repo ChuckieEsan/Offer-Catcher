@@ -63,21 +63,21 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Qdrant init failed: {e}")
 
-    # 5. Embedding Tool（模型加载，耗时操作）
+    # 5. Embedding Adapter（模型加载，耗时操作）
     try:
-        from app.tools.embedding_tool import get_embedding_tool
-        get_embedding_tool()
-        logger.info("[Warmup] Embedding tool initialized (model loaded)")
+        from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
+        get_embedding_adapter()
+        logger.info("[Warmup] Embedding adapter initialized (model loaded)")
     except Exception as e:
-        logger.warning(f"[Warmup] Embedding tool init failed: {e}")
+        logger.warning(f"[Warmup] Embedding adapter init failed: {e}")
 
-    # 5.1. Reranker Tool（模型加载，耗时操作）
+    # 5.1. Reranker Adapter（模型加载，耗时操作）
     try:
-        from app.tools.reranker_tool import get_reranker_tool
-        get_reranker_tool()
-        logger.info("[Warmup] Reranker tool initialized (model loaded)")
+        from app.infrastructure.adapters.reranker_adapter import get_reranker_adapter
+        get_reranker_adapter()
+        logger.info("[Warmup] Reranker adapter initialized (model loaded)")
     except Exception as e:
-        logger.warning(f"[Warmup] Reranker tool init failed: {e}")
+        logger.warning(f"[Warmup] Reranker adapter init failed: {e}")
 
     # ========== Tier 2: LLM & Agents ==========
 
@@ -91,7 +91,7 @@ def warmup() -> None:
 
     # 7. Scorer Agent
     try:
-        from app.agents.scorer import get_scorer_agent
+        from app.application.agents.factory import get_scorer_agent
         get_scorer_agent()
         logger.info("[Warmup] Scorer Agent initialized")
     except Exception as e:
@@ -99,7 +99,7 @@ def warmup() -> None:
 
     # 8. Vision Extractor
     try:
-        from app.agents.vision_extractor import get_vision_extractor
+        from app.application.agents.factory import get_vision_extractor
         get_vision_extractor()
         logger.info("[Warmup] Vision Extractor initialized")
     except Exception as e:
@@ -107,15 +107,15 @@ def warmup() -> None:
 
     # 9. Title Generator Agent
     try:
-        from app.agents.title_generator import get_title_generator_agent
-        get_title_generator_agent()
+        from app.application.agents.factory import get_title_generator
+        get_title_generator()
         logger.info("[Warmup] Title Generator Agent initialized")
     except Exception as e:
         logger.warning(f"[Warmup] Title Generator Agent init failed: {e}")
 
     # 10. Answer Specialist
     try:
-        from app.agents.answer_specialist import get_answer_specialist
+        from app.application.agents.factory import get_answer_specialist
         get_answer_specialist()
         logger.info("[Warmup] Answer Specialist initialized")
     except Exception as e:
@@ -147,13 +147,13 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Retrieval Pipeline init failed: {e}")
 
-    # 14. Web Search Tool
+    # 14. Web Search Adapter
     try:
-        from app.tools.web_search_tool import get_web_search_tool
-        get_web_search_tool()
-        logger.info("[Warmup] Web Search Tool initialized")
+        from app.infrastructure.adapters.web_search_adapter import get_web_search_adapter
+        get_web_search_adapter()
+        logger.info("[Warmup] Web Search Adapter initialized")
     except Exception as e:
-        logger.warning(f"[Warmup] Web Search Tool init failed: {e}")
+        logger.warning(f"[Warmup] Web Search Adapter init failed: {e}")
 
     # 15. Graph Client (Neo4j) - 懒加载连接，仅创建单例
     try:

@@ -24,6 +24,7 @@ from app.application.services.cache_service import (
     get_cache_service,
 )
 from app.models import QuestionItem
+from app.application.agents.factory import get_answer_specialist
 from app.infrastructure.common.logger import logger
 
 
@@ -372,9 +373,6 @@ class QuestionApplicationService:
         Returns:
             生成的新答案，或 None（题目不存在）
         """
-        # 延迟导入避免循环依赖
-        from app.agents.answer_specialist import get_answer_specialist
-
         # 获取题目
         question = self._question_repo.find_by_id(question_id)
         if not question:

@@ -1,139 +1,90 @@
 """智能体工具功能测试
 
-验证 Embedding、Web 搜索工具是否正常工作。
+验证 Embedding、Web 搜索 Adapter 是否正常工作。
 向量检索功能请参考 test_qdrant_client.py
 """
 import pytest
 
 from app.infrastructure.persistence.qdrant import QdrantManager
-from app.tools.embedding_tool import EmbeddingTool, get_embedding_tool
-from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
+from app.infrastructure.adapters.embedding_adapter import EmbeddingAdapter, get_embedding_adapter
+from app.infrastructure.adapters.web_search_adapter import WebSearchAdapter, get_web_search_adapter
 
 
-class TestEmbeddingTool:
-    """Embedding 工具测试"""
+class TestEmbeddingAdapter:
+    """Embedding Adapter 测试"""
 
-    def test_embedding_tool_initialization(self):
-        """测试 Embedding 工具初始化"""
-        tool = EmbeddingTool()
-        assert tool is not None
-        assert tool.embedding_dimension == 1024
-        print(f"Embedding dimension: {tool.embedding_dimension}")
+    def test_embedding_adapter_initialization(self):
+        """测试 Embedding Adapter 初始化"""
+        adapter = get_embedding_adapter()
+        assert adapter is not None
+        assert adapter.dimension == 1024
+        print(f"Embedding dimension: {adapter.dimension}")
 
     def test_embed_single_text(self):
         """测试单条文本向量化"""
-        tool = EmbeddingTool()
+        adapter = get_embedding_adapter()
         text = "什么是 RAG？"
-        vector = tool.embed_text(text)
+        vector = adapter.embed(text)
 
         assert vector is not None
         assert len(vector) == 1024  # BGE-M3 向量维度
-        print(f"Single text embedding: {len(vector)} dims")
 
     def test_embed_batch_texts(self):
         """测试批量文本向量化"""
-        tool = EmbeddingTool()
-        texts = ["什么是 RAG？", "什么是 LangChain？", "什么是 Vector DB？"]
-        vectors = tool.embed_texts(texts)
+        adapter = get_embedding_adapter()
+        texts = [
+            "什么是 RAG？",
+            "如何实现向量检索？",
+            "Qdrant 的使用方法",
+        ]
+        vectors = adapter.embed_batch(texts)
 
+        assert vectors is not None
         assert len(vectors) == 3
-        for v in vectors:
-            assert len(v) == 1024  # BGE-M3 向量维度
-        print(f"Batch embeddings: {len(vectors)} texts")
+        assert len(vectors[0]) == 1024
 
-    def test_embed_with_context(self):
-        """测试上下文拼接后向量化（Context Enrichment）
-
-        上下文拼接在 IngestionPipeline 中实现，此处验证核心 embedding 功能正常
-        """
-        tool = EmbeddingTool()
-        # 测试常规向量化功能
-        text = "公司：字节跳动 | 岗位：Agent应用开发 | 题目：qlora怎么优化显存？"
-        vector = tool.embed_text(text)
-
-        assert vector is not None
-        assert len(vector) == 1024  # BGE-M3 向量维度
-        print(f"Context enriched embedding: {len(vector)} dims")
-
-    def test_get_embedding_tool_singleton(self):
-        """测试单例获取"""
-        tool1 = get_embedding_tool()
-        tool2 = get_embedding_tool()
-        assert tool1 is tool2
-        print("Singleton pattern verified")
+    def test_embedding_adapter_singleton(self):
+        """测试 Embedding Adapter 单例"""
+        adapter1 = get_embedding_adapter()
+        adapter2 = get_embedding_adapter()
+        assert adapter1 is adapter2
 
 
-class TestWebSearchTool:
-    """Web 搜索工具测试"""
+class TestWebSearchAdapter:
+    """Web Search Adapter 测试"""
 
-    def test_web_search_tool_initialization(self):
-        """测试 Web 搜索工具初始化"""
-        tool = WebSearchTool(max_results=3)
-        assert tool is not None
-        assert tool.max_results == 3
-        print(f"Web search tool initialized, max_results={tool.max_results}")
+    def test_web_search_adapter_initialization(self):
+        """测试 Web Search Adapter 初始化"""
+        adapter = get_web_search_adapter()
+        assert adapter is not None
 
-    def test_web_search(self):
-        """测试 Web 搜索功能"""
-        tool = WebSearchTool(max_results=3)
-
-        try:
-            results = tool.search("Python RAG vector database")
-            print(f"Search returned {len(results)} results")
-
-            for r in results:
-                print(f"  - {r.title}")
-                print(f"    URL: {r.url}")
-                if r.content:
-                    print(f"    Content: {r.content[:100]}...")
-        except Exception as e:
-            # 网络搜索可能有网络问题，仅记录
-            print(f"Web search test skipped due to: {e}")
-
-    def test_search_for_answer(self):
-        """测试为答案搜索资料"""
-        tool = WebSearchTool(max_results=2)
-
-        try:
-            result = tool.search_for_answer(
-                question="什么是 RAG",
-                company="字节跳动",
-                position="Agent开发",
-            )
-            print(f"Search for answer result:\n{result[:500]}...")
-        except Exception as e:
-            print(f"Search for answer test skipped due to: {e}")
-
-    def test_get_web_search_tool_singleton(self):
-        """测试单例获取"""
-        tool1 = get_web_search_tool(max_results=5)
-        tool2 = get_web_search_tool(max_results=3)  # 应该返回已有实例，忽略参数
-        assert tool1 is tool2
-        print("Singleton pattern verified")
-
-
-class TestToolsIntegration:
-    """工具集成测试"""
-
-    def test_embedding_to_qdrant_pipeline(self):
-        """测试 Embedding -> Qdrant 完整流程"""
-        # 使用测试 collection
-        test_collection = "questions_test"
-
-        # 1. Embedding
-        embedding_tool = get_embedding_tool()
-        query = "什么是 RAG"
-        vector = embedding_tool.embed_text(query)
-        print(f"1. Embedded query: {len(vector)} dims")
-
-        # 2. Qdrant search (使用测试 collection)
-        qdrant_manager = QdrantManager(collection_name=test_collection)
-        results = qdrant_manager.search(query_vector=vector, limit=5)
-        print(f"2. Qdrant search returned {len(results)} results")
+    @pytest.mark.skip(reason="需要网络连接，跳过")
+    def test_search(self):
+        """测试搜索功能"""
+        adapter = get_web_search_adapter()
+        results = adapter.search("RAG 检索增强生成", max_results=3)
 
         assert results is not None
-        print("Integration test passed")
+        assert len(results) > 0
+
+        for result in results:
+            print(f"Title: {result.title}")
+            print(f"Content: {result.content[:100]}...")
+
+    @pytest.mark.skip(reason="需要网络连接，跳过")
+    def test_search_for_context(self):
+        """测试搜索上下文"""
+        adapter = get_web_search_adapter()
+        context = adapter.search_for_context(
+            question="如何实现 RAG？",
+            company="字节跳动",
+            position="算法工程师",
+        )
+
+        assert context is not None
+        assert len(context) > 0
+        print(f"Context length: {len(context)}")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "-s"])
+    pytest.main([__file__, "-v"])

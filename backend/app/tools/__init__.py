@@ -1,48 +1,29 @@
-"""智能体工具箱
+"""智能体工具箱（兼容层）
 
-提供 Embedding、Web 搜索、Rerank 等工具，供 Pipeline 和 Agents 使用。
+提供 LangChain @tool 的兼容导入。
+实际工具已迁移到 application/agents/ 目录。
 
-底层服务由 infrastructure/adapters 提供：
-- EmbeddingAdapter
-- RerankerAdapter
-- WebSearchAdapter
-- OCRAdapter
-
-记忆相关功能请使用 memory 模块：
-    from app.memory import inject_memory_context, trigger_memory_update
-
-Skill 相关功能请使用 skills 模块：
-    from app.skills import load_skill
+注意：
+- EmbeddingTool、RerankerTool、WebSearchTool 已删除
+- 请直接使用对应的 Adapter：
+  - get_embedding_adapter()
+  - get_reranker_adapter()
+  - get_web_search_adapter()
 """
 
-from app.tools.embedding_tool import EmbeddingTool, get_embedding_tool
-from app.tools.reranker_tool import RerankerTool, get_reranker_tool
-from app.tools.web_search_tool import WebSearchTool, get_web_search_tool
+# LangChain @tool 装饰器函数（兼容导入）
+from app.application.agents.shared.tools.search_web import search_web
+from app.application.agents.shared.tools.search_questions import search_questions
+from app.application.agents.shared.tools.query_graph import query_graph
+
+# UserContext 保留
 from app.tools.context import UserContext
 
-# LangChain @tool 装饰器函数
-from app.tools.web_search_tool import search_web
-from app.tools.search_question_tool import search_questions
-from app.tools.vision_extractor_tool import extract_interview_questions
-
-# Skill 工具从 skills 模块导入
-from app.skills import load_skill
-
 __all__ = [
-    # Embedding
-    "EmbeddingTool",
-    "get_embedding_tool",
-    # Reranker
-    "RerankerTool",
-    "get_reranker_tool",
-    # Web Search
-    "WebSearchTool",
-    "get_web_search_tool",
-    # LangChain @tool functions
+    # LangChain @tool 函数
     "search_web",
     "search_questions",
-    "extract_interview_questions",
-    # Skill
-    "load_skill",
+    "query_graph",
+    # Context
     "UserContext",
 ]

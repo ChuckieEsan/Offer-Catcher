@@ -1,4 +1,4 @@
-"""搜索题目工具
+"""搜索题目 LangChain @tool
 
 从向量数据库中搜索面试题。
 采用两阶段检索架构：
@@ -16,7 +16,12 @@ from app.infrastructure.common.logger import logger
 
 
 @tool
-def search_questions(query: str, company: str = None, position: str = None, k: int = 5) -> str:
+def search_questions(
+    query: str,
+    company: str = None,
+    position: str = None,
+    k: int = 5,
+) -> str:
     """搜索本地题库中的面试题（默认首选工具）
 
     从本地向量数据库检索面试题目，无需联网。
@@ -36,7 +41,9 @@ def search_questions(query: str, company: str = None, position: str = None, k: i
     retrieval = get_retrieval_service()
 
     # 构建缓存 key
-    query_hash = CacheKeys.hash_params(query, company=company, position=position, k=k)
+    query_hash = CacheKeys.hash_params(
+        query, company=company, position=position, k=k
+    )
     cache_key = CacheKeys.tool_search_questions(query_hash)
 
     def fetch():

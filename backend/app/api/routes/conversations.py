@@ -18,7 +18,7 @@ from app.api.dto.chat_dto import (
     conversation_to_response,
     message_to_response,
 )
-from app.agents.title_generator import get_title_generator_agent
+from app.application.agents.factory import get_title_generator
 from app.infrastructure.common.logger import logger
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -143,7 +143,7 @@ async def generate_conversation_title(
     service = get_chat_service()
 
     # 获取标题生成器 Agent
-    title_agent = get_title_generator_agent()
+    title_agent = get_title_generator()
 
     # 使用 Application Service 生成标题
     new_title = service.generate_title(

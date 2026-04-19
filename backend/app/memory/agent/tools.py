@@ -28,7 +28,7 @@ from app.memory.io import (
     read_memory_reference,
 )
 from app.memory.cursor import save_cursor
-from app.tools.embedding_tool import get_embedding_tool
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.tools.context import UserContext
 from app.infrastructure.common.logger import logger
 
@@ -103,8 +103,8 @@ def write_session_summary(
     """
     try:
         # 1. 计算 embedding
-        embedding_tool = get_embedding_tool()
-        embedding = embedding_tool.embed_text(summary)
+        embedding_adapter = get_embedding_adapter()
+        embedding = embedding_adapter.embed(summary)
 
         # 2. 写入数据库
         pg_client = get_postgres_client()

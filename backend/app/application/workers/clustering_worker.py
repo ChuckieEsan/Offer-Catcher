@@ -1,16 +1,13 @@
-"""聚类定时任务 Worker
+"""Clustering Worker - 题目聚类定时任务
 
 使用 APScheduler 每天凌晨 2 点执行聚类任务。
 
 运行方式：
     # 定时执行（每天凌晨 2 点）
-    PYTHONPATH=. uv run python workers/clustering_worker.py
+    PYTHONPATH=. uv run python -m app.application.workers.clustering_worker
 
     # 立即执行一次聚类
-    PYTHONPATH=. uv run python workers/clustering_worker.py --run-now
-
-    # 显示帮助
-    PYTHONPATH=. uv run python workers/clustering_worker.py --help
+    PYTHONPATH=. uv run python -m app.application.workers.clustering_worker --run-now
 """
 
 import signal
@@ -77,7 +74,6 @@ def main():
 
     logger.info("Starting clustering worker...")
 
-    # 如果指定了 --run-now，立即执行一次聚类
     if args.run_now:
         auto_k = not args.no_auto_k
         logger.info(
@@ -85,9 +81,7 @@ def main():
             f"max_clusters={args.max_clusters}, auto_k={auto_k})..."
         )
 
-        # 清除单例缓存以使用新参数
-        from app.application.services.clustering_service import get_clustering_service as get_service
-        get_service.clear_cache()
+        get_clustering_service.clear_cache()
 
         service = get_clustering_service(
             min_cluster_size=args.min_cluster_size,
@@ -108,10 +102,8 @@ def main():
 
         return
 
-    # 创建调度器
     scheduler = BlockingScheduler()
 
-    # 添加定时任务：每天凌晨 2 点执行
     scheduler.add_job(
         run_clustering_job,
         "cron",
@@ -124,7 +116,6 @@ def main():
     logger.info("Clustering worker started. Next run at 2:00 AM daily.")
     logger.info("Use --run-now to execute clustering immediately")
 
-    # 设置信号处理器Graceful shutdown
     def signal_handler(signum, frame):
         logger.info("Shutting down clustering worker...")
         scheduler.shutdown()

@@ -18,7 +18,7 @@ import pytest
 
 from app.infrastructure.persistence.qdrant import QdrantManager
 from app.application.services.cache_service import get_cache_service
-from app.tools.embedding_tool import get_embedding_tool
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.models import QdrantQuestionPayload
 
 
@@ -31,7 +31,7 @@ class TestWritePerformance:
         # 使用测试集合
         self.qdrant = QdrantManager(collection_name="questions_test")
         self.cache = get_cache_service()
-        self.embedding_tool = get_embedding_tool()
+        self.embedding_adapter = get_embedding_adapter()
 
         # 创建集合
         self.qdrant.create_collection_if_not_exists()
@@ -66,7 +66,7 @@ class TestWritePerformance:
 
         # 生成 embedding
         context = f"公司：{company} | 岗位：{position} | 题目：{question_text}"
-        vector = self.embedding_tool.embed_text(context)
+        vector = self.embedding_adapter.embed(context)
 
         return question_id, question_text, company, position, vector
 

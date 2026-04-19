@@ -9,15 +9,15 @@ from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 
 from app.agents.graph.state import AgentState
-from app.agents.vision_extractor import get_vision_extractor
+from app.application.agents.factory import get_vision_extractor
 from app.infrastructure.common.logger import logger
 from app.infrastructure.observability import traced_async
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.cache import singleton
 from app.agents.prompts import load_prompt_template
-from app.tools.search_question_tool import search_questions
-from app.tools.web_search_tool import search_web
-from app.tools.query_graph_tool import query_graph
+from app.application.agents.shared.tools.search_questions import search_questions
+from app.application.agents.shared.tools.search_web import search_web
+from app.application.agents.shared.tools.query_graph import query_graph
 from app.skills import load_skill
 from app.memory import inject_memory_context
 from app.tools.context import UserContext

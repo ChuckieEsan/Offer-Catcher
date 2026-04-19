@@ -1,26 +1,26 @@
-"""Vision Extractor 模块
+"""Vision Extractor Agent - 面经提取 Agent
 
-从文本或 OCR 识别后的文字中提取面经题目信息，输出 ExtractedInterview 结构化数据。
-
-支持输入类型：
-- text: 直接分析文本内容
-- image: OCR 识别图片文字后分析（默认必须使用 OCR）
+从文本或图片中提取面经题目信息。
+图片输入必须经过 OCR 预处理，统一走文本 LLM 路径。
 """
+
+from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
+from langchain_openai import ChatOpenAI
 
-from app.agents.base import BaseAgent
-from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
+from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.vision_extractor.prompts import PROMPTS_DIR
 from app.domain.question.utils import generate_question_id
+from app.infrastructure.adapters.ocr_adapter import OCRAdapter, get_ocr_adapter
 from app.infrastructure.common.logger import logger
-from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
+from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
 
 
-# 用于 with_structured_output 的 Pydantic 模型
 class ExtractedQuestion(BaseModel):
     """提取的单个题目"""
     question_text: str = Field(description="题目文本内容")
@@ -50,26 +50,37 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 
     从文本或 OCR 识别后的文字中提取面经题目信息。
     图片输入必须经过 OCR 预处理，统一走文本 LLM 路径。
+
+    使用依赖注入：
+    - llm: ChatOpenAI 实例
+    - ocr_adapter: OCRAdapter 实例
     """
 
     _prompt_filename = "vision_extractor.md"
     _structured_output_schema = ExtractedInterviewSchema
 
-    def __init__(self, provider: str = "deepseek", use_structured_output: bool = True):
+    def __init__(
+        self,
+        llm: ChatOpenAI,
+        ocr_adapter: OCRAdapter,
+        prompts_dir: Any = PROMPTS_DIR,
+        use_structured_output: bool = True,
+    ) -> None:
         """初始化 Vision Extractor
 
         Args:
-            provider: LLM Provider 名称，默认 deepseek
-            use_structured_output: 是否使用 structured output，默认 True
+            llm: LLM 实例（依赖注入）
+            ocr_adapter: OCR Adapter 实例（依赖注入）
+            prompts_dir: Prompt 目录路径
+            use_structured_output: 是否使用 structured output
         """
-        super().__init__(provider)
+        super().__init__(llm, prompts_dir)
+        self._ocr_adapter = ocr_adapter
         self.use_structured_output = use_structured_output
-        self._ocr_adapter = get_ocr_adapter()
 
     def _parse_json_response(self, response: str) -> ExtractedInterviewSchema:
         """手动解析 JSON 响应"""
         try:
-            # 查找 JSON 块
             json_start = response.find("{")
             json_end = response.rfind("}") + 1
             if json_start == -1 or json_end == 0:
@@ -78,13 +89,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             json_str = response[json_start:json_end]
             data = json.loads(json_str)
 
-            # 处理 questions 字段可能是字符串的情况
             if "questions" in data and isinstance(data["questions"], str):
-                # LLM 可能返回了字符串形式的列表，尝试解析
                 try:
                     data["questions"] = json.loads(data["questions"])
                 except json.JSONDecodeError:
-                    # 如果还是失败，尝试提取数组
                     match = re.search(r'\[.*\]', data["questions"])
                     if match:
                         data["questions"] = json.loads(match.group())
@@ -104,13 +112,11 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         questions = []
 
         for q in schema.questions:
-            # 转换 question_type（使用 Enum 直接转换，更简洁）
             try:
                 question_type = QuestionType(q.question_type)
             except ValueError:
                 question_type = QuestionType.KNOWLEDGE
 
-            # 生成 question_id
             question_id = generate_question_id(schema.company, q.question_text)
 
             question = QuestionItem(
@@ -164,19 +170,16 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         Raises:
             NotImplementedError: 当 source_type="image" 且 use_ocr=False 时
         """
-        # 图片输入必须使用 OCR
         if source_type == "image":
             if not use_ocr:
                 raise NotImplementedError(
                     "图片提取必须使用 OCR 预处理，请设置 use_ocr=True"
                 )
 
-            # 将 source 规范化为列表
             image_sources = [source] if isinstance(source, str) else source
 
             logger.info(f"OCR processing {len(image_sources)} images...")
 
-            # 使用 OCRAdapter 识别文字
             ocr_text = self._ocr_adapter.recognize_batch(image_sources)
 
             logger.info(f"OCR completed, extracted text length: {len(ocr_text)}")
@@ -184,13 +187,10 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             if not ocr_text.strip():
                 raise ValueError("OCR 未能识别出任何文字")
 
-            # 使用 OCR 结果作为文本输入
             source = ocr_text
 
-        # 记录日志
         logger.info(f"Extracting from text: {source[:100]}...")
 
-        # 选择提取方式
         if self.use_structured_output and self.structured_llm:
             try:
                 return self._extract_with_structured_output(source)
@@ -201,20 +201,32 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             return self._extract_with_parsing(source)
 
 
-# 单例获取函数
-_vision_extractor: "VisionExtractor | None" = None
+_vision_extractor: Optional[VisionExtractor] = None
 
 
-def get_vision_extractor(provider: str = "deepseek") -> VisionExtractor:
+def get_vision_extractor() -> VisionExtractor:
     """获取 Vision Extractor 单例
 
-    Args:
-        provider: LLM Provider 名称
+    Note: 使用 factory.get_vision_extractor() 获取实例，
+    此函数作为备用入口。
 
     Returns:
         VisionExtractor 实例
     """
     global _vision_extractor
     if _vision_extractor is None:
-        _vision_extractor = VisionExtractor(provider=provider)
+        from app.infrastructure.adapters.llm_adapter import get_llm
+        from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
+
+        llm = get_llm("deepseek", "chat")
+        ocr_adapter = get_ocr_adapter()
+        _vision_extractor = VisionExtractor(llm, ocr_adapter)
     return _vision_extractor
+
+
+__all__ = [
+    "VisionExtractor",
+    "get_vision_extractor",
+    "ExtractedQuestion",
+    "ExtractedInterviewSchema",
+]

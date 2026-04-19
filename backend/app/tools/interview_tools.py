@@ -8,8 +8,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from app.infrastructure.persistence.qdrant import get_qdrant_manager
-from app.tools.embedding_tool import get_embedding_tool
-from app.tools.reranker_tool import get_reranker_tool
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
+from app.infrastructure.adapters.reranker_adapter import get_reranker_adapter
 from app.infrastructure.common.logger import logger
 
 
@@ -57,8 +57,8 @@ def get_next_question(
         题目信息，包含 question_id, question_text, question_type, difficulty
     """
     qdrant = get_qdrant_manager()
-    embedding_tool = get_embedding_tool()
-    reranker_tool = get_reranker_tool()
+    embedding_adapter = get_embedding_adapter()
+    reranker_adapter = get_reranker_adapter()
 
     # 构建查询上下文
     query_parts = []
@@ -72,7 +72,7 @@ def get_next_question(
     query_context = " | ".join(query_parts) if query_parts else "面试题"
 
     # 向量搜索
-    query_vector = embedding_tool.embed_text(query_context)
+    query_vector = embedding_adapter.embed(query_context)
     candidates = qdrant.search(query_vector, limit=15)
 
     if not candidates:
@@ -80,7 +80,7 @@ def get_next_question(
 
     # Rerank
     candidate_texts = [c.question_text for c in candidates]
-    ranked_indices = reranker_tool.rerank(query_context, candidate_texts, top_k=5)
+    ranked_indices = reranker_adapter.rerank(query_context, candidate_texts, top_k=5)
 
     # 优先推荐未掌握的题目（通过 mastery_level 判断）
     # mastery_level 存储在 Qdrant payload 中，而非记忆模块
@@ -123,7 +123,7 @@ def evaluate_answer(
     Returns:
         评估结果，包含 score, strengths, improvements, should_follow_up, follow_up_question
     """
-    from app.agents.scorer import get_scorer_agent
+    from app.application.agents.factory import get_scorer_agent
 
     qdrant = get_qdrant_manager()
 

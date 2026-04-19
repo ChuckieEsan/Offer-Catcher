@@ -29,21 +29,21 @@ PROCESSES = {
         "reload": False,  # uvicorn 自己处理 reload
     },
     "answer_worker": {
-        "cmd": ["uv", "run", "python", "workers/answer_worker.py"],
+        "cmd": ["uv", "run", "python", "-m", "app.application.workers.answer_worker"],
         "reload": True,
     },
     "extract_worker": {
-        "cmd": ["uv", "run", "python", "workers/extract_worker.py"],
+        "cmd": ["uv", "run", "python", "-m", "app.application.workers.extract_worker"],
         "reload": True,
     },
     "clustering_worker": {
-        "cmd": ["uv", "run", "python", "workers/clustering_worker.py"],
+        "cmd": ["uv", "run", "python", "-m", "app.application.workers.clustering_worker"],
         "reload": True,
     },
 }
 
 # 监听的目录
-WATCH_DIRS = ["app", "workers"]
+WATCH_DIRS = ["app"]
 # 忽略的文件模式
 IGNORE_PATTERNS = [
     "__pycache__",

@@ -13,10 +13,10 @@ from app.agents.chat_agent import (
     ChatAgent,
     get_chat_agent,
 )
-from app.tools.search_question_tool import search_questions
-from app.tools.web_search_tool import search_web
-from app.tools.query_graph_tool import query_graph
-from app.tools.embedding_tool import get_embedding_tool
+from app.application.agents.shared.tools.search_questions import search_questions
+from app.application.agents.shared.tools.search_web import search_web
+from app.application.agents.shared.tools.query_graph import query_graph
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 
 
 class TestSearchQuestionsTool:
@@ -38,8 +38,8 @@ class TestSearchQuestionsTool:
 
     def test_embedding_works(self):
         """测试 embedding 工具是否可用"""
-        embedding_tool = get_embedding_tool()
-        vector = embedding_tool.embed_text("测试文本")
+        embedding_adapter = get_embedding_adapter()
+        vector = embedding_adapter.embed("测试文本")
         assert vector is not None
         assert len(vector) > 0
         print(f"\n✓ Embedding 维度: {len(vector)}")

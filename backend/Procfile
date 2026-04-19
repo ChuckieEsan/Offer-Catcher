@@ -1,4 +1,4 @@
 web: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-answer_worker: PYTHONPATH=. uv run python workers/answer_worker.py
-extract_worker: PYTHONPATH=. uv run python workers/extract_worker.py
-clustering_worker: PYTHONPATH=. uv run python workers/clustering_worker.py
+answer_worker: uv run python -m app.application.workers.answer_worker
+extract_worker: uv run python -m app.application.workers.extract_worker
+clustering_worker: uv run python -m app.application.workers.clustering_worker

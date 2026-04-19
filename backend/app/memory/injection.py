@@ -20,7 +20,7 @@ from app.infrastructure.persistence.postgres import get_postgres_client
 from app.memory.io import read_memory, memory_exists
 from app.memory.init import ensure_user_memory
 from app.memory.store import get_memory_store
-from app.tools.embedding_tool import get_embedding_tool
+from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.infrastructure.common.logger import logger
 
 
@@ -94,8 +94,8 @@ def _search_relevant_sessions(user_id: str, query: str) -> str:
     """
     try:
         # 计算 embedding
-        embedding_tool = get_embedding_tool()
-        query_embedding = embedding_tool.embed_text(query)
+        embedding_adapter = get_embedding_adapter()
+        query_embedding = embedding_adapter.embed(query)
 
         # 语义检索
         pg_client = get_postgres_client()

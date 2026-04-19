@@ -1,13 +1,12 @@
-"""批量重新嵌入 Worker
+"""Reembed Worker - 批量重新嵌入脚本
 
 用于在所有题目已存在的情况下，使用新的上下文格式重新计算 embedding。
 
-使用方式:
-    PYTHONPATH=. uv run python workers/reembed_worker.py
+运行方式：
+    PYTHONPATH=. uv run python -m app.application.workers.reembed_worker
 """
 
 import asyncio
-from qdrant_client import models
 
 from app.infrastructure.persistence.qdrant import get_qdrant_client
 from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
@@ -23,7 +22,7 @@ async def reembed_all():
     qdrant_client = get_qdrant_client()
     embedding_adapter = get_embedding_adapter()
 
-    # 1. 遍历获取所有题目
+    # 遍历获取所有题目
     print("\n[Step 1] 获取所有题目...")
     all_questions = []
     offset = None
@@ -43,7 +42,7 @@ async def reembed_all():
 
     print(f"共找到 {len(all_questions)} 道题目")
 
-    # 2. 批量重新嵌入（每次 10 道）
+    # 批量重新嵌入（每次 10 道）
     print("\n[Step 2] 开始重新嵌入...")
 
     BATCH_SIZE = 10
@@ -62,7 +61,6 @@ async def reembed_all():
             try:
                 payload = record.payload
 
-                # 使用新的上下文格式
                 entities = payload.get("core_entities", [])
                 entities_str = ",".join(entities) if entities else "综合"
 
@@ -74,7 +72,6 @@ async def reembed_all():
                     f"题目：{payload.get('question_text', '')}"
                 )
 
-                # 计算新向量
                 vector = embedding_adapter.embed(context)
 
                 ids.append(record.id)
@@ -85,7 +82,6 @@ async def reembed_all():
                 print(f"  失败：{record.id} - {e}")
                 total_failed += 1
 
-        # 批量更新向量
         if ids:
             try:
                 qdrant_client.update_vectors(ids, vectors)

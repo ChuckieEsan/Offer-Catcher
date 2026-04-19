@@ -1,25 +1,43 @@
-"""Title Generator Agent 模块
+"""Title Generator Agent - 会话标题生成 Agent
 
-负责根据对话内容生成简洁、准确的会话标题。
+分析对话内容，生成简洁的标题。
 """
 
-from typing import List
+from __future__ import annotations
 
-from app.agents.base import BaseAgent
+from typing import List, Optional
+
+from langchain_openai import ChatOpenAI
+
+from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.title_generator.prompts import PROMPTS_DIR
 from app.infrastructure.common.logger import logger
-from app.infrastructure.common.cache import singleton
 
 
 class TitleGeneratorAgent(BaseAgent[str]):
     """Title Generator Agent - 会话标题生成
 
     分析对话内容，生成简洁的标题。
+
+    使用依赖注入：
+    - llm: ChatOpenAI 实例
     """
 
     _prompt_filename = "title_generator.md"
+    _structured_output_schema = None
 
-    def __init__(self, provider: str = "deepseek") -> None:
-        super().__init__(provider)
+    def __init__(
+        self,
+        llm: ChatOpenAI,
+        prompts_dir: Any = PROMPTS_DIR,
+    ) -> None:
+        """初始化 Title Generator
+
+        Args:
+            llm: LLM 实例（依赖注入）
+            prompts_dir: Prompt 目录路径
+        """
+        super().__init__(llm, prompts_dir)
 
     def generate_title(self, messages: List) -> str:
         """生成会话标题
@@ -32,16 +50,12 @@ class TitleGeneratorAgent(BaseAgent[str]):
         """
         logger.info(f"Generating title for {len(messages)} messages")
 
-        # 构建对话内容
         conversation_content = self._build_conversation_content(messages)
 
-        # 构建 Prompt
         prompt = self._build_prompt(conversation_content=conversation_content)
 
-        # 调用 LLM
         try:
             title = self.invoke_llm(prompt)
-            # 清理标题（移除多余空白、限制长度）
             title = title.strip()
             if len(title) > 20:
                 title = title[:20]
@@ -55,40 +69,48 @@ class TitleGeneratorAgent(BaseAgent[str]):
         """构建对话内容文本
 
         Args:
-            messages: 消息列表（支持 Domain Message 实体或 dict）
+            messages: 消息列表（支持 Domain Message 实体和 dict）
 
         Returns:
             格式化的对话内容
         """
         lines = []
         for msg in messages:
-            # 支持 Domain Message 实体和 dict
             if isinstance(msg, dict):
                 role = msg.get("role", "")
                 content = msg.get("content", "")
             else:
-                # Domain Message 实体
                 role = msg.role.value if hasattr(msg.role, "value") else msg.role
                 content = msg.content
 
             role_label = "用户" if role == "user" else "AI"
-            # 截断过长的消息（标题生成只需要关键信息）
             content = content[:200] if len(content) > 200 else content
             lines.append(f"{role_label}: {content}")
         return "\n".join(lines)
 
 
-@singleton
-def get_title_generator_agent(provider: str = "deepseek") -> TitleGeneratorAgent:
-    """获取 Title Generator Agent 单例
+_title_generator: Optional[TitleGeneratorAgent] = None
 
-    Args:
-        provider: LLM Provider 名称（首次调用后忽略）
+
+def get_title_generator() -> TitleGeneratorAgent:
+    """获取 Title Generator 单例
+
+    Note: 使用 factory.get_title_generator() 获取实例，
+    此函数作为备用入口。
 
     Returns:
         TitleGeneratorAgent 实例
     """
-    return TitleGeneratorAgent(provider=provider)
+    global _title_generator
+    if _title_generator is None:
+        from app.infrastructure.adapters.llm_adapter import get_llm
+
+        llm = get_llm("deepseek", "chat")
+        _title_generator = TitleGeneratorAgent(llm)
+    return _title_generator
 
 
-__all__ = ["TitleGeneratorAgent", "get_title_generator_agent"]
+__all__ = [
+    "TitleGeneratorAgent",
+    "get_title_generator",
+]
