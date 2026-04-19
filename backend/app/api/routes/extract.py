@@ -19,16 +19,13 @@ import os
 from app.application.agents.factory import get_vision_extractor
 from app.application.services.extract_task_service import get_extract_task_service
 from app.application.services.ingestion_service import get_ingestion_service
+from app.domain.question.aggregates import ExtractedInterview, QuestionItem
 from app.api.dto.extract_dto import (
-    extract_task_to_response,
-    extract_tasks_to_list_items,
-)
-from app.models import (
-    ExtractedInterview,
-    QuestionItem,
     ExtractTaskCreate,
     ExtractTaskUpdate,
     ExtractTaskListItem,
+    extract_task_to_response,
+    extract_tasks_to_list_items,
 )
 from app.infrastructure.common.logger import logger
 

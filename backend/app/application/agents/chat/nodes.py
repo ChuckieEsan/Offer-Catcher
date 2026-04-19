@@ -14,8 +14,6 @@ from app.infrastructure.observability import traced_async
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.cache import singleton
 from app.infrastructure.common.prompt import load_prompt_template
-from app.skills import load_skill
-from app.memory import inject_memory_context
 from app.tools.context import UserContext
 from app.application.agents.chat.prompts import PROMPTS_DIR
 
@@ -192,7 +190,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         MQ 异步答案生成功能在 `app/pipelines/ingestion.py` 中实现。
     """
     from app.infrastructure.persistence.qdrant import get_qdrant_manager
-    from app.models.question import QuestionType
+    from app.domain.shared.enums import QuestionType
 
     interview = state.get("extracted_interview")
     if not interview:
@@ -242,9 +240,6 @@ def _get_react_agent() -> CompiledStateGraph:
     # 通过 Factory 获取工具（依赖注入）
     from app.application.agents.factory import get_react_tools
     tools = get_react_tools()
-
-    # Skill 工具（用户自定义 Skill）
-    tools.append(load_skill)
 
     prompt = load_prompt_template("react_agent.md", PROMPTS_DIR)
     # 提取原始模板字符串（create_agent 接受 str）
@@ -335,9 +330,6 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     # 从会话上下文获取用户 ID
     session_context = state.get("session_context", {})
     user_id = session_context.get("user_id") or "default_user"
-
-    # 注入用户记忆上下文（MEMORY.md + 相关历史）
-    inject_memory_context(user_id, messages)
 
     logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 

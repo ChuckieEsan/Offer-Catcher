@@ -18,7 +18,9 @@ import signal
 from app.application.agents.factory import get_answer_specialist
 from app.infrastructure.persistence.qdrant.question_repository import get_question_repository
 from app.infrastructure.messaging import get_thread_pool_consumer
-from app.models import MQTaskMessage, QuestionItem, QuestionType, MasteryLevel
+from app.domain.question.aggregates import QuestionItem
+from app.domain.shared.enums import MasteryLevel, QuestionType
+from app.infrastructure.messaging.messages import MQTaskMessage
 from app.infrastructure.common.logger import logger
 
 

@@ -11,7 +11,7 @@
 import asyncio
 from typing import Optional
 
-from app.domain.question.aggregates import Question
+from app.domain.question.aggregates import Question, QuestionItem
 from app.domain.question.repositories import QuestionRepository
 from app.domain.shared.enums import MasteryLevel, QuestionType
 
@@ -23,7 +23,7 @@ from app.application.services.cache_service import (
     CacheKeys,
     get_cache_service,
 )
-from app.models import QuestionItem
+from app.application.agents.factory import get_answer_specialist
 from app.application.agents.factory import get_answer_specialist
 from app.infrastructure.common.logger import logger
 

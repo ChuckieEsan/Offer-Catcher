@@ -16,10 +16,20 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain.question.aggregates import Question
+from app.domain.question.aggregates import ExtractedInterview, Question, QuestionItem
 from app.domain.question.repositories import QuestionRepository
 from app.domain.shared.enums import QuestionType
-from app.models import ExtractedInterview, QuestionItem, MQTaskMessage
+
+from app.infrastructure.persistence.qdrant.question_repository import (
+    get_question_repository,
+)
+from app.infrastructure.adapters.embedding_adapter import (
+    EmbeddingAdapter,
+    get_embedding_adapter,
+)
+from app.infrastructure.messaging import get_producer
+from app.infrastructure.messaging.messages import MQTaskMessage
+from app.infrastructure.messaging.messages import MQTaskMessage
 
 from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,

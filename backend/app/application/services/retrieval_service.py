@@ -26,7 +26,7 @@ from app.infrastructure.adapters.reranker_adapter import (
 )
 from app.infrastructure.common.cache import singleton
 from app.infrastructure.common.logger import logger
-from app.models import SearchResult
+from app.infrastructure.persistence.qdrant.payloads import SearchResult
 
 
 class RetrievalApplicationService:

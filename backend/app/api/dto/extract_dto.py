@@ -1,17 +1,55 @@
-"""ExtractTask DTO 转换器
+"""ExtractTask DTO 转换器和请求/响应模型
 
 将 ExtractTask domain 聚合转换为 API 响应格式。
 """
 
 from __future__ import annotations
 
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 
-from app.domain.question.aggregates import ExtractTask
-from app.models import ExtractTaskListItem
+from pydantic import BaseModel, Field
 
 
-def extract_task_to_response(task: ExtractTask) -> dict:
+# ========== Request Models ==========
+
+
+class ExtractTaskCreate(BaseModel):
+    """创建解析任务请求"""
+
+    source_type: str = Field(description="来源类型: image / text")
+    source_content: Optional[str] = Field(default=None, description="文本内容")
+    source_images: Optional[List[str]] = Field(default=None, description="图片 Base64 列表")
+
+
+class ExtractTaskUpdate(BaseModel):
+    """更新解析结果请求"""
+
+    company: Optional[str] = None
+    position: Optional[str] = None
+    questions: Optional[List[dict]] = None
+
+
+# ========== Response Models ==========
+
+
+class ExtractTaskListItem(BaseModel):
+    """任务列表项（精简版）"""
+
+    task_id: str
+    status: str
+    source_type: str
+    company: str = ""
+    position: str = ""
+    question_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+# ========== DTO 转换函数 ==========
+
+
+def extract_task_to_response(task) -> dict:
     """将 ExtractTask 聚合转换为 API 响应字典
 
     Args:
@@ -39,7 +77,7 @@ def extract_task_to_response(task: ExtractTask) -> dict:
 
 
 def extract_tasks_to_list_items(
-    tasks: List[ExtractTask],
+    tasks: List,
 ) -> List[ExtractTaskListItem]:
     """将 ExtractTask 列表转换为 ExtractTaskListItem 列表
 
@@ -77,6 +115,9 @@ def extract_tasks_to_list_items(
 
 
 __all__ = [
+    "ExtractTaskCreate",
+    "ExtractTaskUpdate",
+    "ExtractTaskListItem",
     "extract_task_to_response",
     "extract_tasks_to_list_items",
 ]

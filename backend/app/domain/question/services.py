@@ -10,7 +10,7 @@
 
 from typing import Protocol
 
-from app.models import ExtractedInterview, QuestionItem
+from app.domain.question.aggregates import ExtractedInterview, QuestionItem
 
 
 class AnswerGenerator(Protocol):

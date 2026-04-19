@@ -18,7 +18,8 @@ from app.application.agents.vision_extractor.prompts import PROMPTS_DIR
 from app.domain.question.utils import generate_question_id
 from app.infrastructure.adapters.ocr_adapter import OCRAdapter, get_ocr_adapter
 from app.infrastructure.common.logger import logger
-from app.models import ExtractedInterview, QuestionItem, QuestionType, MasteryLevel
+from app.domain.question.aggregates import ExtractedInterview, QuestionItem
+from app.domain.shared.enums import MasteryLevel, QuestionType
 
 
 class ExtractedQuestion(BaseModel):

@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from app.models import ExtractedInterview
+from app.domain.question.aggregates import ExtractedInterview
 
 
 class SessionContext(TypedDict, total=False):

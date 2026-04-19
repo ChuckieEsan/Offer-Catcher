@@ -8,7 +8,6 @@
 - 消息管理（Message）
 - 面经解析任务（ExtractTask）
 - 收藏管理（Favorite）
-- 会话摘要（SessionSummary）
 """
 
 import gzip
@@ -23,26 +22,31 @@ from pgvector.psycopg2 import register_vector
 
 from app.infrastructure.config.settings import get_settings
 from app.infrastructure.common.logger import logger
-from app.models import (
-    ExtractTask,
-    ExtractTaskStatus,
-    ExtractedInterview,
-)
-from app.models.chat_session import (
-    Conversation,
-    Message,
-    SessionSummary,
-    SessionSummarySearchResult,
-    SessionSummaryRecentResult,
-)
+from app.domain.question.aggregates import ExtractTask, ExtractTaskStatus, ExtractedInterview
 
 
-def _row_to_session_summary(row: dict) -> SessionSummary:
-    """将 RealDictCursor 返回的 row 转换为 SessionSummary 实例"""
-    data = dict(row)
-    if data["embedding"] is not None:
-        data["embedding"] = list(data["embedding"])
-    return SessionSummary(**data)
+# ========== 临时数据模型（后续迁移到 Domain 层） ==========
+
+
+class Conversation:
+    """对话数据模型"""
+    def __init__(self, id: str, user_id: str, title: str, created_at: datetime, updated_at: datetime):
+        self.id = id
+        self.user_id = user_id
+        self.title = title
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+
+class Message:
+    """消息数据模型"""
+    def __init__(self, id: str, conversation_id: str, user_id: str, role: str, content: str, created_at: datetime):
+        self.id = id
+        self.conversation_id = conversation_id
+        self.user_id = user_id
+        self.role = role
+        self.content = content
+        self.created_at = created_at
 
 
 class PostgresClient:
@@ -52,7 +56,6 @@ class PostgresClient:
     - 对话和消息管理
     - 面经解析任务管理
     - 收藏管理
-    - 会话摘要（含向量检索）
 
     设计原则：
     - 连接池管理
@@ -186,42 +189,13 @@ class PostgresClient:
                 ON favorites(user_id, created_at DESC)
             """)
 
-            # 会话摘要表
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS session_summaries (
-                    conversation_id VARCHAR(36) PRIMARY KEY,
-                    user_id VARCHAR(36) NOT NULL,
-                    summary TEXT NOT NULL,
-                    embedding vector(1024),
-                    session_type VARCHAR(20) DEFAULT 'chat',
-                    metadata JSONB,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-                )
-            """)
-
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_id ON session_summaries(user_id)
-            """)
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_created
-                ON session_summaries(user_id, created_at DESC)
-            """)
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_session_summaries_embedding
-                ON session_summaries USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)
-            """)
-
             self.conn.commit()
             logger.info("PostgreSQL tables initialized")
 
-    # ========== 对话操作（Memory/Chat 模块使用） ==========
+    # ========== 对话操作（Chat 模块使用） ==========
 
     def get_conversation(self, user_id: str, conversation_id: str) -> Optional[Conversation]:
-        """获取指定对话（Memory 模块使用）
-
-        注意：应用层应使用 ConversationRepository.find_by_id()
-        """
+        """获取指定对话"""
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -236,10 +210,7 @@ class PostgresClient:
     # ========== 消息操作（Chat 模块使用） ==========
 
     def add_message(self, user_id: str, conversation_id: str, role: str, content: str) -> Message:
-        """添加消息（Chat 模块使用）
-
-        注意：应用层应使用 ConversationRepository.add_message()
-        """
+        """添加消息"""
         msg_id = str(uuid.uuid4())
         now = datetime.now()
 
@@ -268,10 +239,7 @@ class PostgresClient:
     # ========== 面经解析任务操作（Worker 使用） ==========
 
     def get_extract_task(self, task_id: str) -> Optional[ExtractTask]:
-        """获取单个任务详情（Worker 使用）
-
-        注意：应用层应使用 ExtractTaskRepository.find_by_id()
-        """
+        """获取单个任务详情（Worker 使用）"""
         with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
@@ -285,10 +253,7 @@ class PostgresClient:
         return self._row_to_extract_task(row) if row else None
 
     def update_extract_task_status(self, task_id: str, status: str, error_message: str = None) -> bool:
-        """更新任务状态（Worker 使用）
-
-        注意：应用层应使用 ExtractTaskRepository.update_status()
-        """
+        """更新任务状态（Worker 使用）"""
         now = datetime.now()
         with self.conn.cursor() as cur:
             cur.execute(
@@ -302,10 +267,7 @@ class PostgresClient:
             return cur.rowcount > 0
 
     def update_extract_task_result(self, task_id: str, result: ExtractedInterview) -> bool:
-        """更新任务解析结果（Worker 使用）
-
-        注意：应用层应使用 ExtractTaskRepository.update_result()
-        """
+        """更新任务解析结果（Worker 使用）"""
         now = datetime.now()
         with self.conn.cursor() as cur:
             cur.execute(
@@ -319,7 +281,7 @@ class PostgresClient:
             return cur.rowcount > 0
 
     def _row_to_extract_task(self, row: dict) -> ExtractTask:
-        """将数据库行转换为 ExtractTask 模型（Worker 使用）"""
+        """将数据库行转换为 ExtractTask 模型"""
         source_images_gz = row.get("source_images_gz")
         source_images = None
         if source_images_gz:
@@ -339,90 +301,10 @@ class PostgresClient:
         return ExtractTask(
             task_id=row["task_id"], user_id=row["user_id"],
             source_type=row["source_type"], source_content=row.get("source_content"),
-            source_images_gz=source_images, status=row["status"],
-            error_message=row.get("error_message"), created_at=row["created_at"],
-            updated_at=row["updated_at"], result=result,
+            source_images=source_images, status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"], extracted_interview=result.model_dump() if result else None,
         )
-
-    # ========== 会话摘要操作（Memory 模块使用） ==========
-
-    def create_session_summary(
-        self, conversation_id: str, user_id: str, summary: str,
-        embedding: Optional[List[float]], session_type: str = "chat",
-        metadata: Optional[dict] = None,
-    ) -> SessionSummary:
-        """创建会话摘要"""
-        now = datetime.now()
-
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                INSERT INTO session_summaries
-                (conversation_id, user_id, summary, embedding, session_type, metadata, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING conversation_id, user_id, summary, embedding, session_type, metadata, created_at
-                """,
-                (conversation_id, user_id, summary, embedding, session_type,
-                 json.dumps(metadata) if metadata else None, now),
-            )
-            row = cur.fetchone()
-            self.conn.commit()
-
-        logger.info(f"Session summary created: conversation_id={conversation_id}")
-        return _row_to_session_summary(row)
-
-    def search_session_summaries(
-        self, user_id: str, query_embedding: List[float], top_k: int = 5
-    ) -> List[SessionSummarySearchResult]:
-        """语义检索会话摘要"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT conversation_id, summary, session_type, metadata,
-                       1 - (embedding <=> %s::vector) as similarity
-                FROM session_summaries WHERE user_id = %s
-                ORDER BY embedding <=> %s::vector LIMIT %s
-                """,
-                (query_embedding, user_id, query_embedding, top_k),
-            )
-            rows = cur.fetchall()
-
-        return [
-            SessionSummarySearchResult(
-                conversation_id=row["conversation_id"], summary=row["summary"],
-                session_type=row["session_type"],
-                metadata=row["metadata"] if row["metadata"] else None,
-                similarity=float(row["similarity"]) if row["similarity"] else 0.0,
-            )
-            for row in rows
-        ]
-
-    def get_recent_session_summaries(
-        self, user_id: str, limit: int = 5
-    ) -> List[SessionSummaryRecentResult]:
-        """获取最近 N 条会话摘要"""
-        with self.conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT ss.conversation_id, ss.summary, ss.session_type, ss.metadata,
-                       c.title, c.created_at
-                FROM session_summaries ss
-                JOIN conversations c ON ss.conversation_id = c.id
-                WHERE ss.user_id = %s ORDER BY c.created_at DESC LIMIT %s
-                """,
-                (user_id, limit),
-            )
-            rows = cur.fetchall()
-
-        return [
-            SessionSummaryRecentResult(
-                conversation_id=row["conversation_id"], summary=row["summary"],
-                session_type=row["session_type"],
-                metadata=row["metadata"] if row["metadata"] else None,
-                title=row["title"], created_at=row["created_at"],
-            )
-            for row in rows
-        ]
 
     def close(self) -> None:
         """关闭连接"""
@@ -436,11 +318,7 @@ _postgres_client: Optional[PostgresClient] = None
 
 
 def get_postgres_client() -> PostgresClient:
-    """获取 PostgreSQL 客户端单例
-
-    Returns:
-        PostgresClient 实例
-    """
+    """获取 PostgreSQL 客户端单例"""
     global _postgres_client
     if _postgres_client is None:
         _postgres_client = PostgresClient()
@@ -451,4 +329,6 @@ def get_postgres_client() -> PostgresClient:
 __all__ = [
     "PostgresClient",
     "get_postgres_client",
+    "Conversation",
+    "Message",
 ]

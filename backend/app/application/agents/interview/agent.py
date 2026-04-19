@@ -20,12 +20,8 @@ from app.domain.question.repositories import QuestionRepository
 from app.infrastructure.adapters.embedding_adapter import EmbeddingAdapter
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.prompt import build_prompt
-from app.models.interview_session import (
-    InterviewSession,
-    InterviewQuestion,
-    InterviewSessionCreate,
-    InterviewReport,
-)
+from app.domain.interview.aggregates import InterviewSession, InterviewQuestion
+from app.domain.interview.aggregates import InterviewSession, InterviewQuestion, InterviewSessionCreate, InterviewReport
 from app.application.agents.interview.prompts import PROMPTS_DIR
 
 

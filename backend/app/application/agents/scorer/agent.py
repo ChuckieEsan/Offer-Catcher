@@ -15,8 +15,8 @@ from app.application.agents.scorer.prompts import PROMPTS_DIR
 from app.domain.interview.services import calculate_new_level
 from app.domain.question.repositories import QuestionRepository
 from app.infrastructure.persistence.qdrant.question_repository import get_question_repository
-from app.models import ScoreResult
-from app.models.question import MasteryLevel
+from app.application.agents.scorer.results import ScoreResult
+from app.domain.shared.enums import MasteryLevel
 from app.infrastructure.common.logger import logger
 
 

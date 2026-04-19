@@ -13,7 +13,7 @@ from aio_pika import Message, DeliveryMode
 
 from app.infrastructure.config.settings import get_settings
 from app.infrastructure.common.logger import logger
-from app.models import MQTaskMessage
+from app.infrastructure.messaging.messages import MQTaskMessage
 
 
 class RabbitMQProducer:

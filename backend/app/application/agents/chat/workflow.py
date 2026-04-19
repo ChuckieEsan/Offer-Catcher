@@ -24,7 +24,7 @@ from app.application.agents.chat.state import AgentState
 from app.application.agents.chat import nodes, edges
 from app.infrastructure.persistence.postgres import get_checkpointer
 from app.infrastructure.common.logger import logger
-from app.models import ExtractedInterview
+from app.domain.question.aggregates import ExtractedInterview
 
 
 def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> CompiledStateGraph:

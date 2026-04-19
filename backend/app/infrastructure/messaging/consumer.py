@@ -16,7 +16,7 @@ from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, Abstra
 from app.infrastructure.config.settings import get_settings
 from app.infrastructure.common.logger import logger
 from app.infrastructure.messaging.message_helper import get_mq_message_helper
-from app.models import MQTaskMessage
+from app.infrastructure.messaging.messages import MQTaskMessage
 from app.infrastructure.common.circuit_breaker import create_circuit_breaker, CircuitOpenState
 
 

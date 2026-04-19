@@ -11,12 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.application.agents.factory import get_interview_agent
-from app.models.interview_session import (
-    InterviewSession,
-    InterviewSessionCreate,
-    AnswerSubmit,
-    InterviewReport,
-)
+from app.domain.interview.aggregates import InterviewSession, InterviewSessionCreate, InterviewReport
 from app.api.dto.interview_dto import (
     InterviewSessionResponse,
     InterviewSessionListResponse,

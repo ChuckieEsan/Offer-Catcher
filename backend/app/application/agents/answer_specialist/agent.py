@@ -14,7 +14,7 @@ from app.application.agents.shared.base_agent import BaseAgent
 from app.application.agents.answer_specialist.prompts import PROMPTS_DIR
 from app.infrastructure.adapters.web_search_adapter import WebSearchAdapter, get_web_search_adapter
 from app.infrastructure.common.logger import logger
-from app.models import QuestionItem
+from app.domain.question.aggregates import QuestionItem
 
 
 class AnswerSpecialistAgent(BaseAgent[str]):

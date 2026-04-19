@@ -441,4 +441,62 @@ __all__ = [
     "Cluster",
     "ExtractTask",
     "ExtractTaskStatus",
+    "QuestionItem",
+    "ExtractedInterview",
 ]
+
+
+# ============ 值对象（数据传递） ============
+
+
+class QuestionItem(BaseModel):
+    """题目项值对象
+
+    Vision Extractor 输出的题目数据，用于提取阶段的数据传递。
+    与 Question 聚合根的区别：
+    - QuestionItem 是提取阶段的原始数据（无 answer，无业务方法）
+    - Question 是入库后的聚合根（有 answer，有业务方法）
+    两者通过 IngestionService 转换：QuestionItem → Question
+
+    Attributes:
+        question_id: 题目唯一标识，MD5(company|question_text)
+        question_text: 题目文本内容
+        question_type: 题目类型
+        requires_async_answer: 是否需要异步生成答案
+        core_entities: 考察的知识点实体列表
+        mastery_level: 练度等级
+        company: 公司名称
+        position: 岗位名称
+        metadata: 题目元数据
+        cluster_ids: 所属考点簇 ID 列表
+    """
+
+    question_id: str = Field(description="题目唯一标识，MD5哈希值")
+    question_text: str = Field(description="题目文本内容")
+    question_type: QuestionType = Field(description="题目类型")
+    requires_async_answer: bool = Field(default=False, description="是否需要异步生成答案")
+    core_entities: list[str] = Field(default_factory=list, description="考察的知识点实体列表")
+    mastery_level: MasteryLevel = Field(default=MasteryLevel.LEVEL_0, description="熟练度等级")
+    company: str = Field(description="公司名称")
+    position: str = Field(description="岗位名称")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="题目元数据")
+    cluster_ids: list[str] = Field(default_factory=list, description="所属考点簇 ID 列表")
+
+
+class ExtractedInterview(BaseModel):
+    """面试经验提取结果值对象
+
+    Vision Extractor 输出的完整提取结果，包含公司、岗位和题目列表。
+    用于提取阶段到入库阶段的数据传递。
+
+    Attributes:
+        source_type: 数据来源类型
+        company: 公司名称
+        position: 岗位名称
+        questions: 题目列表
+    """
+
+    source_type: str = Field(default="image", description="数据来源类型")
+    company: str = Field(default="", description="公司名称")
+    position: str = Field(default="", description="岗位名称")
+    questions: list[QuestionItem] = Field(default_factory=list, description="题目列表")

@@ -163,17 +163,6 @@ def warmup() -> None:
     except Exception as e:
         logger.warning(f"[Warmup] Neo4j Graph Client init failed: {e}")
 
-    # 16. Memory Store (新版记忆模块)
-    try:
-        from app.memory.store import get_memory_store
-        memory_store = get_memory_store()
-        if memory_store.initialized:
-            logger.info("[Warmup] Memory Store initialized")
-        else:
-            logger.warning(f"[Warmup] Memory Store not initialized: {memory_store.init_error}")
-    except Exception as e:
-        logger.warning(f"[Warmup] Memory Store init failed: {e}")
-
     logger.info("Warmup completed!")
 
 

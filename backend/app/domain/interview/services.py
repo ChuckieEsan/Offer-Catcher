@@ -12,8 +12,8 @@
 
 from typing import Protocol
 
-from app.models import ScoreResult
-from app.models.question import MasteryLevel
+from app.application.agents.scorer.results import ScoreResult
+from app.domain.shared.enums import MasteryLevel
 
 
 def calculate_new_level(current_level: MasteryLevel, score: int) -> MasteryLevel:
