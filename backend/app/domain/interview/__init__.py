@@ -8,13 +8,30 @@
 
 仓库接口：
 - InterviewSessionRepository: 会话持久化接口
+
+领域事件：
+- InterviewStarted: 面试开始事件
+- InterviewEnded: 面试结束事件
 """
 
 from app.domain.interview.aggregates import InterviewQuestion, InterviewSession
 from app.domain.interview.repositories import InterviewSessionRepository
+from app.domain.interview.events import (
+    InterviewStarted,
+    InterviewEnded,
+    QuestionAnswered,
+    QuestionSkipped,
+)
 
 __all__ = [
+    # Aggregates
     "InterviewQuestion",
     "InterviewSession",
+    # Repository Protocol
     "InterviewSessionRepository",
+    # Events
+    "InterviewStarted",
+    "InterviewEnded",
+    "QuestionAnswered",
+    "QuestionSkipped",
 ]
