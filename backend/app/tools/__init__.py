@@ -1,7 +1,7 @@
 """智能体工具箱（兼容层）
 
 提供 LangChain @tool 的兼容导入。
-实际工具已迁移到 application/agents/ 目录。
+实际工具已迁移到 infrastructure/tools/ 目录。
 
 注意：
 - EmbeddingTool、RerankerTool、WebSearchTool 已删除
@@ -12,9 +12,7 @@
 """
 
 # LangChain @tool 装饰器函数（兼容导入）
-from app.application.agents.shared.tools.search_web import search_web
-from app.application.agents.shared.tools.search_questions import search_questions
-from app.application.agents.shared.tools.query_graph import query_graph
+from app.infrastructure.tools import search_web, search_questions, query_graph
 
 # UserContext 保留
 from app.tools.context import UserContext

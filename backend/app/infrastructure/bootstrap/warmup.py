@@ -125,7 +125,7 @@ def warmup() -> None:
 
     # 11. Chat Agent
     try:
-        from app.agents.chat_agent import get_chat_agent
+        from app.application.agents.factory import get_chat_agent
         get_chat_agent()
         logger.info("[Warmup] Chat Agent initialized")
     except Exception as e:

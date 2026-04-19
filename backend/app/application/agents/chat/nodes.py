@@ -8,19 +8,16 @@ from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 
-from app.agents.graph.state import AgentState
-from app.application.agents.factory import get_vision_extractor
+from app.application.agents.chat.state import AgentState
 from app.infrastructure.common.logger import logger
 from app.infrastructure.observability import traced_async
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.cache import singleton
-from app.agents.prompts import load_prompt_template
-from app.application.agents.shared.tools.search_questions import search_questions
-from app.application.agents.shared.tools.search_web import search_web
-from app.application.agents.shared.tools.query_graph import query_graph
+from app.infrastructure.common.prompt import load_prompt_template
 from app.skills import load_skill
 from app.memory import inject_memory_context
 from app.tools.context import UserContext
+from app.application.agents.chat.prompts import PROMPTS_DIR
 
 
 # ==================== State Gate Node ====================
@@ -97,7 +94,8 @@ def extract_node(state: AgentState) -> AgentState:
 
     logger.info("Extracting interview questions...")
 
-    # 使用 Vision Extractor
+    # 使用 Vision Extractor（lazy import 避免 circular import）
+    from app.application.agents.factory import get_vision_extractor
     extractor = get_vision_extractor()
 
     try:
@@ -236,17 +234,19 @@ def _get_react_agent() -> CompiledStateGraph:
     """获取 ReAct Agent 实例（带缓存）
 
     启用 DeepSeek thinking mode 以支持思考 + 工具调用。
+    通过 Factory 获取工具（依赖注入）。
     """
     # 启用 thinking mode
     llm = get_llm("deepseek", "chat", thinking_enabled=True)
 
-    # 基础工具
-    tools = [search_questions, search_web, query_graph]
+    # 通过 Factory 获取工具（依赖注入）
+    from app.application.agents.factory import get_react_tools
+    tools = get_react_tools()
 
     # Skill 工具（用户自定义 Skill）
     tools.append(load_skill)
 
-    prompt = load_prompt_template("react_agent.md")
+    prompt = load_prompt_template("react_agent.md", PROMPTS_DIR)
     # 提取原始模板字符串（create_agent 接受 str）
     system_prompt = prompt.messages[0].prompt.template
     # 移除 skills_prompt 占位符（暂时不使用 skill 系统）

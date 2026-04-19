@@ -1,16 +1,17 @@
 """Web 搜索 LangChain @tool
 
-直接调用 WebSearchAdapter，不通过 Tool 类封装。
+作为 Infrastructure 层组件，直接调用 WebSearchAdapter。
 """
 
 from langchain_core.tools import tool
-from app.infrastructure.adapters.web_search_adapter import get_web_search_adapter
-from app.application.services.cache_service import get_cache_service, CacheKeys
 from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache_keys import CacheKeys
 
 
 def _do_web_search(query: str, max_results: int) -> str:
     """执行实际的 Web 搜索（内部函数）"""
+    from app.infrastructure.adapters.web_search_adapter import get_web_search_adapter
+
     try:
         adapter = get_web_search_adapter()
         results = adapter.search(query, max_results)
@@ -45,6 +46,9 @@ def search_web(query: str, max_results: int = 3) -> str:
     Returns:
         搜索结果，以文本形式返回
     """
+    # Lazy import 避免 circular import
+    from app.application.services.cache_service import get_cache_service
+
     cache = get_cache_service()
 
     # 构建缓存 key

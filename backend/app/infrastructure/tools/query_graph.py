@@ -1,19 +1,19 @@
 """图数据库查询 LangChain @tool
 
-查询图数据库，获取知识点之间的关系。
-结果会被缓存 10 分钟。
+作为 Infrastructure 层组件，直接调用 GraphClient。
 """
 
 from langchain_core.tools import tool
 
-from app.infrastructure.persistence.neo4j import get_graph_client
-from app.application.services.cache_service import get_cache_service, CacheKeys
 from app.infrastructure.common.logger import logger
+from app.infrastructure.common.cache_keys import CacheKeys
 from app.infrastructure.observability import traced
 
 
 def _do_query_graph(question: str) -> str:
     """执行实际的图数据库查询（内部函数）"""
+    from app.infrastructure.persistence.neo4j import get_graph_client
+
     try:
         graph_client = get_graph_client()
 
@@ -75,6 +75,9 @@ def query_graph(question: str) -> str:
     Returns:
         查询结果
     """
+    # Lazy import 避免 circular import
+    from app.application.services.cache_service import get_cache_service
+
     cache = get_cache_service()
 
     # 构建缓存 key

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Header, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.agents.interview_agent import get_interview_manager
+from app.application.agents.factory import get_interview_agent
 from app.models.interview_session import (
     InterviewSession,
     InterviewSessionCreate,
@@ -120,8 +120,8 @@ async def create_interview_session(
         total_questions=request.total_questions,
     )
 
-    manager = get_interview_manager()
-    session = manager.create_session(user_id, create_request)
+    agent = get_interview_agent()
+    session = agent.create_session(user_id, create_request)
 
     return _session_to_response(session)
 
@@ -141,8 +141,8 @@ async def get_interview_session(
     """
     logger.info(f"Get interview session: session={session_id}, user={user_id}")
 
-    manager = get_interview_manager()
-    session = manager.get_session(session_id)
+    agent = get_interview_agent()
+    session = agent.get_session(session_id)
 
     if not session:
         return {"error": "Session not found"}
@@ -169,11 +169,11 @@ async def submit_answer(
     """
     logger.info(f"Submit answer: session={session_id}, answer_length={len(request.answer)}")
 
-    manager = get_interview_manager()
+    agent = get_interview_agent()
 
     async def generate():
         try:
-            async for chunk in manager.process_answer_stream(session_id, request.answer):
+            async for chunk in agent.process_answer_stream(session_id, request.answer):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")
@@ -209,11 +209,11 @@ async def request_hint(
     """
     logger.info(f"Request hint: session={session_id}")
 
-    manager = get_interview_manager()
+    agent = get_interview_agent()
 
     async def generate():
         try:
-            async for chunk in manager.get_hint_stream(session_id):
+            async for chunk in agent.get_hint_stream(session_id):
                 yield f"data: {chunk}\n\n"
         except Exception as e:
             logger.error(f"Stream error: {e}")
@@ -249,8 +249,8 @@ async def skip_question(
     """
     logger.info(f"Skip question: session={session_id}")
 
-    manager = get_interview_manager()
-    result = await manager.skip_question(session_id)
+    agent = get_interview_agent()
+    result = await agent.skip_question(session_id)
 
     return AnswerResponse(
         type=result.get("type", "next_question"),
@@ -277,8 +277,8 @@ async def end_interview(
     """
     logger.info(f"End interview: session={session_id}")
 
-    manager = get_interview_manager()
-    session = manager.get_session(session_id)
+    agent = get_interview_agent()
+    session = agent.get_session(session_id)
 
     if session:
         session.status = "completed"
@@ -307,8 +307,8 @@ async def get_interview_report(
     """
     logger.info(f"Get interview report: session={session_id}")
 
-    manager = get_interview_manager()
-    report = manager.get_report(session_id)
+    agent = get_interview_agent()
+    report = agent.get_report(session_id)
 
     if not report:
         return {"error": "Report not available"}

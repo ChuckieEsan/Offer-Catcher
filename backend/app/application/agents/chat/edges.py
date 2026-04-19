@@ -3,7 +3,7 @@
 实现意图路由、子图内条件边等。
 """
 
-from app.agents.graph.state import AgentState
+from app.application.agents.chat.state import AgentState
 from app.infrastructure.common.logger import logger
 
 

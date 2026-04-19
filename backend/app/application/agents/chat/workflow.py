@@ -4,12 +4,12 @@
 支持异步流式输出和 PostgreSQL 持久化。
 
 工作流结构：
-START → state_gate → (router / handle_confirmation)
-router → (extract / react_loop)
-extract → confirm → END
-handle_confirmation → (store_and_mq / extract / END)
-store_and_mq → END
-react_loop → END
+START -> state_gate -> (router / handle_confirmation)
+router -> (extract / react_loop)
+extract -> confirm -> END
+handle_confirmation -> (store_and_mq / extract / END)
+store_and_mq -> END
+react_loop -> END
 """
 
 from typing import AsyncGenerator, Optional
@@ -20,8 +20,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from app.agents.graph.state import AgentState
-from app.agents.graph import nodes, edges
+from app.application.agents.chat.state import AgentState
+from app.application.agents.chat import nodes, edges
 from app.infrastructure.persistence.postgres import get_checkpointer
 from app.infrastructure.common.logger import logger
 from app.models import ExtractedInterview
@@ -55,7 +55,7 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
     # 设置入口
     workflow.set_entry_point("state_gate")
 
-    # State Gate → 条件路由
+    # State Gate -> 条件路由
     workflow.add_conditional_edges(
         "state_gate",
         edges.state_gate,
@@ -65,7 +65,7 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
         }
     )
 
-    # Router → 条件路由
+    # Router -> 条件路由
     workflow.add_conditional_edges(
         "router",
         edges.route_by_intent,
@@ -75,11 +75,11 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
         }
     )
 
-    # Extract → Confirm
+    # Extract -> Confirm
     workflow.add_edge("extract", "confirm")
     workflow.add_edge("confirm", END)
 
-    # Handle Confirmation → 条件路由
+    # Handle Confirmation -> 条件路由
     workflow.add_conditional_edges(
         "handle_confirmation",
         edges.route_by_confirmation,
@@ -89,10 +89,10 @@ def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> Compil
         }
     )
 
-    # Store → 结束
+    # Store -> 结束
     workflow.add_edge("store_and_mq", END)
 
-    # ReAct Loop → 结束
+    # ReAct Loop -> 结束
     workflow.add_edge("react_loop", END)
 
     return workflow.compile(checkpointer=checkpointer)
@@ -167,7 +167,7 @@ async def astream_workflow(
     Args:
         messages: 当前消息（通常只有一条用户消息）
         thread_id: 会话 ID（用于持久化）
-        user_id: 用户 ID（用于长期记忆检索）
+        user_id: 用户 ID（用于长期记忆）
 
     Yields:
         事件流

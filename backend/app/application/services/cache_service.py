@@ -1,11 +1,11 @@
 """缓存应用服务
 
 编排缓存用例，包含业务决策逻辑：
-- CacheKeys 命名规则（业务知识）
 - 缓存失效决策（哪些缓存需要失效）
 - 延迟双删（一致性策略）
 
 依赖 CacheAdapter 提供基础缓存能力。
+依赖 CacheKeys（Infrastructure 层）提供 key 命名规则。
 """
 
 import asyncio
@@ -20,120 +20,8 @@ from app.infrastructure.adapters.cache_adapter import (
     get_cache_adapter,
 )
 from app.infrastructure.common.cache import singleton
+from app.infrastructure.common.cache_keys import CacheKeys
 from app.infrastructure.common.logger import logger
-
-
-class CacheKeys:
-    """Redis Key 管理器
-
-    定义业务缓存 key 的命名规则。
-    作为业务知识，放在 Application 层。
-    """
-
-    PREFIX = "oc"
-
-    # ========== Stats Keys ==========
-
-    @classmethod
-    def stats_overview(cls) -> str:
-        return f"{cls.PREFIX}:stats:overview"
-
-    @classmethod
-    def stats_clusters(cls) -> str:
-        return f"{cls.PREFIX}:stats:clusters"
-
-    @classmethod
-    def stats_companies(cls) -> str:
-        return f"{cls.PREFIX}:stats:companies"
-
-    @classmethod
-    def stats_entities(cls, company: Optional[str] = None, limit: int = 20) -> str:
-        """考点统计缓存 key"""
-        company_key = company or "all"
-        return f"{cls.PREFIX}:stats:entities:{company_key}:{limit}"
-
-    @classmethod
-    def stats_entities_pattern(cls) -> str:
-        return f"{cls.PREFIX}:stats:entities:*"
-
-    # ========== Questions Keys ==========
-
-    @classmethod
-    def questions_list(cls, filter_hash: str) -> str:
-        return f"{cls.PREFIX}:questions:list:{filter_hash}"
-
-    @classmethod
-    def questions_count(cls, filter_hash: str) -> str:
-        return f"{cls.PREFIX}:questions:count:{filter_hash}"
-
-    @classmethod
-    def questions_item(cls, question_id: str) -> str:
-        return f"{cls.PREFIX}:questions:item:{question_id}"
-
-    @classmethod
-    def questions_list_pattern(cls) -> str:
-        return f"{cls.PREFIX}:questions:list:*"
-
-    @classmethod
-    def questions_count_pattern(cls) -> str:
-        return f"{cls.PREFIX}:questions:count:*"
-
-    @classmethod
-    def stats_pattern(cls) -> str:
-        return f"{cls.PREFIX}:stats:*"
-
-    # ========== Tool Cache Keys ==========
-
-    @classmethod
-    def tool_search_questions(cls, query_hash: str) -> str:
-        """题目搜索工具缓存 key"""
-        return f"{cls.PREFIX}:tool:search:{query_hash}"
-
-    @classmethod
-    def tool_query_graph(cls, query_hash: str) -> str:
-        """图数据库查询工具缓存 key"""
-        return f"{cls.PREFIX}:tool:graph:{query_hash}"
-
-    @classmethod
-    def tool_web_search(cls, query_hash: str) -> str:
-        """Web 搜索工具缓存 key"""
-        return f"{cls.PREFIX}:tool:web:{query_hash}"
-
-    @classmethod
-    def tool_search_pattern(cls) -> str:
-        return f"{cls.PREFIX}:tool:search:*"
-
-    @classmethod
-    def tool_graph_pattern(cls) -> str:
-        return f"{cls.PREFIX}:tool:graph:*"
-
-    @classmethod
-    def tool_web_pattern(cls) -> str:
-        return f"{cls.PREFIX}:tool:web:*"
-
-    # ========== Utility Methods ==========
-
-    @classmethod
-    def hash_params(cls, *args, **kwargs) -> str:
-        """生成参数哈希值
-
-        Args:
-            *args: 位置参数
-            **kwargs: 关键字参数
-
-        Returns:
-            8 字符哈希值
-        """
-        parts = [str(arg) for arg in args if arg is not None]
-        if kwargs:
-            sorted_items = sorted((k, v) for k, v in kwargs.items() if v is not None)
-            parts.extend(f"{k}={v}" for k, v in sorted_items)
-
-        if not parts:
-            return "empty"
-
-        content = ":".join(parts)
-        return hashlib.md5(content.encode()).hexdigest()[:8]
 
 
 class CacheApplicationService:
@@ -317,7 +205,6 @@ def get_cache_service() -> CacheApplicationService:
 
 
 __all__ = [
-    "CacheKeys",
     "CacheApplicationService",
     "get_cache_service",
 ]
