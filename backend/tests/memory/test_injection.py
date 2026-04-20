@@ -80,9 +80,11 @@ class TestMemoryToolsForMainAgent:
 
         tools = get_memory_tools()
 
-        assert len(tools) == 3
+        assert len(tools) == 5
         tool_names = [t.name for t in tools]
 
         assert "load_memory_reference" in tool_names
         assert "search_session_history" in tool_names
         assert "load_skill" in tool_names
+        assert "update_preferences" in tool_names
+        assert "update_behaviors" in tool_names

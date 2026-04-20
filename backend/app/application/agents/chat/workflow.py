@@ -10,11 +10,16 @@ extract -> confirm -> END
 handle_confirmation -> (store_and_mq / extract / END)
 store_and_mq -> END
 react_loop -> END
+
+记忆系统：
+- 对话开始时触发异步检索 Worker（fire-and-forget）
+- 使用 checkpoint 中的 memory_context（上一轮检索结果）
+- 对话结束后触发 Memory Agent（更新 preferences/behaviors）
 """
 
 from typing import AsyncGenerator, Optional
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -25,6 +30,8 @@ from app.application.agents.chat import nodes, edges
 from app.infrastructure.persistence.postgres import get_checkpointer
 from app.infrastructure.common.logger import logger
 from app.domain.question.aggregates import ExtractedInterview
+from app.application.agents.memory.hooks import extract_memories
+from app.infrastructure.persistence.memory import trigger_retrieval
 
 
 def create_workflow(checkpointer: Optional[AsyncPostgresSaver] = None) -> CompiledStateGraph:
@@ -155,6 +162,10 @@ async def astream_workflow(
     - user_id: 注入到 session_context（用于长期记忆）
     - 其他状态: 由 Checkpointer 自动恢复或 Agent 内部计算
 
+    记忆系统：
+    - 对话开始时触发异步检索 Worker（fire-and-forget）
+    - 使用 checkpoint 中的 memory_context（上一轮检索结果）
+
     基于 LangGraph astream_events，自动捕获 LLM Token 流以及节点状态更新。
     输出统一协议：
     {
@@ -183,6 +194,14 @@ async def astream_workflow(
         initial_state["session_context"] = {"user_id": user_id}
 
     final_state = None
+
+    # 触发异步检索（fire-and-forget）
+    # 为下一轮对话准备 memory_context
+    if user_id and thread_id and messages:
+        last_message = messages[-1]
+        if isinstance(last_message, HumanMessage):
+            query = last_message.content
+            trigger_retrieval(user_id, thread_id, query)
 
     try:
         config: RunnableConfig = {
@@ -260,6 +279,13 @@ async def astream_workflow(
         return
 
     if final_state:
+        # 触发 Memory Agent（fire-and-forget）
+        # 在对话结束后异步提取记忆
+        messages = final_state.get("messages", [])
+        if messages and user_id and thread_id:
+            extract_memories(user_id, thread_id, messages)
+            logger.debug(f"Memory extraction triggered for conversation {thread_id}")
+
         yield {
             "type": "final",
             "node": "__end__",

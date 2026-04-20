@@ -10,6 +10,8 @@
 - load_memory_reference: 加载记忆详情
 - search_session_history: 语义检索历史
 - load_skill: 加载用户 Skill
+- update_preferences: 更新用户偏好
+- update_behaviors: 更新用户行为模式
 """
 
 from app.infrastructure.tools.search_questions import search_questions
@@ -19,6 +21,8 @@ from app.infrastructure.tools.memory_tools import (
     load_memory_reference,
     search_session_history,
     load_skill,
+    update_preferences,
+    update_behaviors,
     get_memory_tools,
 )
 
@@ -29,5 +33,7 @@ __all__ = [
     "load_memory_reference",
     "search_session_history",
     "load_skill",
+    "update_preferences",
+    "update_behaviors",
     "get_memory_tools",
 ]

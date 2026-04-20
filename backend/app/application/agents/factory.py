@@ -27,6 +27,13 @@ from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
 from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.infrastructure.persistence.qdrant.question_repository import get_question_repository
 from app.infrastructure.tools import search_questions, search_web, query_graph
+from app.infrastructure.tools.memory_tools import (
+    load_memory_reference,
+    search_session_history,
+    load_skill,
+    update_preferences,
+    update_behaviors,
+)
 
 from app.application.agents.answer_specialist.agent import AnswerSpecialistAgent
 from app.application.agents.vision_extractor.agent import VisionExtractor
@@ -192,11 +199,25 @@ def get_react_tools() -> list:
     - search_questions: 搜索本地题库
     - search_web: Web 搜索
     - query_graph: 图数据库查询
+    - load_memory_reference: 加载用户偏好/行为详情
+    - search_session_history: 语义检索历史会话
+    - load_skill: 加载用户自定义 Skill
+    - update_preferences: 更新用户偏好设置（写入时添加 memory_write 标记）
+    - update_behaviors: 更新用户行为模式（写入时添加 memory_write 标记）
 
     Returns:
         LangChain @tool 函数列表
     """
-    return [search_questions, search_web, query_graph]
+    return [
+        search_questions,
+        search_web,
+        query_graph,
+        load_memory_reference,
+        search_session_history,
+        load_skill,
+        update_preferences,
+        update_behaviors,
+    ]
 
 
 # ========== Domain Service 接口适配器 ==========

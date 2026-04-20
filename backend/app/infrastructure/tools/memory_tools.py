@@ -7,6 +7,10 @@
 - load_memory_reference: 加载 preferences/behaviors 详情
 - search_session_history: 语义检索历史会话
 - load_skill: 加载用户自定义 Skill
+- update_preferences: 更新用户偏好设置
+- update_behaviors: 更新用户行为模式
+
+写入记忆时返回 <memory_write> 标记，后台 Agent 检测到后会跳过处理。
 """
 
 from langchain_core.tools import tool
@@ -25,9 +29,7 @@ def load_memory_reference(reference_name: str) -> str:
     Returns:
         reference 文件的完整内容（Markdown 格式）
     """
-    # 从 ToolRuntime 获取 user_id（需要在 Agent 中配置 context_schema）
-    # 这里使用临时方案：从全局上下文获取
-    user_id = "default_user"  # 临时默认值
+    user_id = "default_user"
 
     from app.infrastructure.persistence.postgres import get_memory_repository
 
@@ -55,7 +57,7 @@ def search_session_history(query: str, top_k: int = 3) -> str:
     from app.infrastructure.persistence.postgres import get_session_summary_repository
     from app.infrastructure.persistence.postgres.conversation_repository import get_conversation_repository
 
-    user_id = "default_user"  # 临时默认值
+    user_id = "default_user"
 
     # 计算 embedding
     embedding_adapter = get_embedding_adapter()
@@ -97,7 +99,7 @@ def load_skill(skill_name: str) -> str:
     """
     from app.infrastructure.persistence.postgres import get_memory_repository
 
-    user_id = "default_user"  # 临时默认值
+    user_id = "default_user"
 
     with get_memory_repository() as repo:
         skill_md = repo.read_skill(user_id, skill_name)
@@ -109,16 +111,64 @@ def load_skill(skill_name: str) -> str:
         return skill_md
 
 
+@tool
+def update_preferences(content: str) -> str:
+    """更新用户偏好设置
+
+    Args:
+        content: 完整的 preferences.md 内容（整合现有内容和新反馈）
+
+    Returns:
+        操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
+    """
+    from app.infrastructure.persistence.postgres import get_memory_repository
+
+    user_id = "default_user"
+
+    with get_memory_repository() as repo:
+        repo.write_reference(user_id, "preferences", content)
+
+    logger.info(f"preferences.md updated by Main Agent for user {user_id}")
+
+    # 返回带标记的结果（后台 Agent 检测到此标记后跳过处理）
+    return "<memory_write>preferences</memory_write>\n偏好设置已更新"
+
+
+@tool
+def update_behaviors(content: str) -> str:
+    """更新用户行为模式
+
+    Args:
+        content: 完整的 behaviors.md 内容（整合现有内容和新观察）
+
+    Returns:
+        操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
+    """
+    from app.infrastructure.persistence.postgres import get_memory_repository
+
+    user_id = "default_user"
+
+    with get_memory_repository() as repo:
+        repo.write_reference(user_id, "behaviors", content)
+
+    logger.info(f"behaviors.md updated by Main Agent for user {user_id}")
+
+    # 返回带标记的结果（后台 Agent 检测到此标记后跳过处理）
+    return "<memory_write>behaviors</memory_write>\n行为模式已更新"
+
+
 def get_memory_tools() -> list:
     """获取记忆工具列表
 
     Returns:
-        记忆工具列表
+        记忆工具列表（读取 + 写入）
     """
     return [
         load_memory_reference,
         search_session_history,
         load_skill,
+        update_preferences,
+        update_behaviors,
     ]
 
 
@@ -126,5 +176,7 @@ __all__ = [
     "load_memory_reference",
     "search_session_history",
     "load_skill",
+    "update_preferences",
+    "update_behaviors",
     "get_memory_tools",
 ]

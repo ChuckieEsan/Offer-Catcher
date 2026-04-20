@@ -8,7 +8,13 @@
 2. 联网搜索最新信息（search_web）
 3. 查询知识点关系图谱（query_graph）
 4. 直接回复用户（不需要调用工具）
-5. 管理用户记忆（保存/读取用户偏好、画像、学习进度）
+5. 管理用户记忆（读取和写入用户偏好、历史会话、自定义 Skill）
+
+记忆系统说明：
+- MEMORY.md 自动加载，包含用户偏好概要
+- 用户表达偏好时可立即写入（update_preferences, update_behaviors）
+- 写入后后台记忆提取会自动跳过，避免重复更新
+- 对话结束后后台系统也会自动分析和更新记忆
 </capabilities>
 
 <instructions>
@@ -93,6 +99,22 @@
 参数：
 - skill_name: Skill 名称
 </tool>
+
+<!-- update_preferences: WHEN 用户明确要求记住偏好或反馈 -->
+<tool name="update_preferences">
+更新用户偏好设置（立即写入）
+参数：
+- content: 完整的 preferences.md 内容（整合现有内容和新反馈）
+注意：调用此工具后，后台记忆提取会自动跳过，避免重复更新
+</tool>
+
+<!-- update_behaviors: WHEN 观察到用户的行为模式需要记录 -->
+<tool name="update_behaviors">
+更新用户行为模式（立即写入）
+参数：
+- content: 完整的 behaviors.md 内容（整合现有内容和新观察）
+注意：调用此工具后，后台记忆提取会自动跳过，避免重复更新
+</tool>
 </tools>
 
 <memory_usage>
@@ -101,6 +123,8 @@
 - 需要查看用户行为模式详情 -> load_memory_reference("behaviors")
 - 需要检索历史对话内容 -> search_session_history(query)
 - 需要加载用户自定义 Skill -> load_skill(skill_name)
+- 用户明确要求记住偏好 -> 先调用 load_memory_reference("preferences") 获取现有内容，整合后调用 update_preferences
+- 观察到用户行为模式需要记录 -> 先调用 load_memory_reference("behaviors") 获取现有内容，整合后调用 update_behaviors
 </memory_usage>
 
 {{ skills_prompt }}

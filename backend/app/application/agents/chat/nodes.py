@@ -337,8 +337,10 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
 
     执行 ReAct：LLM 决定是否调用工具，如果调用则执行工具并返回结果。
 
-    记忆注入：
-    - MEMORY.md 始终加载，注入到 System Prompt
+    记忆注入（符合设计文档 8.8节）：
+    - 从 checkpoint 读取 memory_context（动态累积的会话摘要检索结果）
+    - 加载静态 MEMORY.md（用户偏好概要）
+    - 合合两者作为 SystemMessage 注入到消息列表
     - 确保用户记忆在首次对话时自动初始化
 
     Note:
@@ -355,8 +357,9 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     session_context = state.get("session_context", {})
     user_id = session_context.get("user_id") or "default_user"
 
-    # 注入 MEMORY.md（记忆模块）
-    memory_context = _load_memory_context(user_id)
+    # 构建完整记忆上下文（符合设计文档）
+    memory_context = _build_full_memory_context(state, user_id)
+
     if memory_context:
         memory_message = SystemMessage(
             content=f"<记忆上下文>\n{memory_context}\n</记忆上下文>"
@@ -396,6 +399,39 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     except Exception as e:
         logger.error(f"ReAct loop failed: {e}", exc_info=True)
         return {"response_to_user": f"查询失败：{e}"}
+
+
+def _build_full_memory_context(state: AgentState, user_id: str) -> str | None:
+    """构建完整记忆上下文（符合设计文档 8.8节）
+
+    合合静态 MEMORY.md 和动态 memory_context。
+
+    Args:
+        state: 当前状态（包含 checkpoint 恢复的 memory_context）
+        user_id: 用户唯一标识
+
+    Returns:
+        合合后的记忆上下文（Markdown 格式）
+    """
+    # 1. 加载静态 MEMORY.md（用户偏好概要）
+    static_memory = _load_memory_context(user_id)
+
+    # 2. 从 state 读取动态 memory_context（checkpoint 恢复）
+    dynamic_memory = state.get("memory_context", "")
+
+    # 3. 合合两者
+    if static_memory and dynamic_memory:
+        # 两者都有：合并
+        return f"{static_memory}\n\n---\n\n## 相关历史会话\n{dynamic_memory}"
+    elif static_memory:
+        # 只有静态内容
+        return static_memory
+    elif dynamic_memory:
+        # 只有动态内容（首次对话时 MEMORY.md 刚初始化，可能没有偏好概要）
+        return f"# 用户记忆\n\n## 相关历史会话\n{dynamic_memory}"
+    else:
+        # 都没有（不应该发生）
+        return None
 
 
 __all__ = [
