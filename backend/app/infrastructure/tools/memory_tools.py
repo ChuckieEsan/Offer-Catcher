@@ -11,16 +11,22 @@
 - update_behaviors: 更新用户行为模式
 
 写入记忆时返回 <memory_write> 标记，后台 Agent 检测到后会跳过处理。
+
+使用 ToolRuntime.context 获取 UserContext 中的 user_id。
 """
 
-from langchain_core.tools import tool
+from langchain.tools import tool, ToolRuntime
+from typing import TYPE_CHECKING
 
 from app.infrastructure.common.logger import logger
 from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 
+if TYPE_CHECKING:
+    from app.application.agents.chat.runtime import UserContext
+
 
 @tool
-def load_memory_reference(reference_name: str) -> str:
+def load_memory_reference(reference_name: str, runtime: ToolRuntime) -> str:
     """加载用户记忆的详细信息
 
     Args:
@@ -29,7 +35,7 @@ def load_memory_reference(reference_name: str) -> str:
     Returns:
         reference 文件的完整内容（Markdown 格式）
     """
-    user_id = "default_user"
+    user_id = runtime.context.user_id
 
     from app.infrastructure.persistence.postgres import get_memory_repository
 
@@ -44,7 +50,7 @@ def load_memory_reference(reference_name: str) -> str:
 
 
 @tool
-def search_session_history(query: str, top_k: int = 3) -> str:
+def search_session_history(query: str, runtime: ToolRuntime, top_k: int = 3) -> str:
     """语义检索会话历史
 
     Args:
@@ -57,7 +63,7 @@ def search_session_history(query: str, top_k: int = 3) -> str:
     from app.infrastructure.persistence.postgres import get_session_summary_repository
     from app.infrastructure.persistence.postgres.conversation_repository import get_conversation_repository
 
-    user_id = "default_user"
+    user_id = runtime.context.user_id
 
     # 计算 embedding
     embedding_adapter = get_embedding_adapter()
@@ -88,7 +94,7 @@ def search_session_history(query: str, top_k: int = 3) -> str:
 
 
 @tool
-def load_skill(skill_name: str) -> str:
+def load_skill(skill_name: str, runtime: ToolRuntime) -> str:
     """加载用户自定义 Skill
 
     Args:
@@ -99,7 +105,7 @@ def load_skill(skill_name: str) -> str:
     """
     from app.infrastructure.persistence.postgres import get_memory_repository
 
-    user_id = "default_user"
+    user_id = runtime.context.user_id
 
     with get_memory_repository() as repo:
         skill_md = repo.read_skill(user_id, skill_name)
@@ -112,7 +118,7 @@ def load_skill(skill_name: str) -> str:
 
 
 @tool
-def update_preferences(content: str) -> str:
+def update_preferences(content: str, runtime: ToolRuntime) -> str:
     """更新用户偏好设置
 
     Args:
@@ -121,12 +127,13 @@ def update_preferences(content: str) -> str:
     Returns:
         操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
     """
-    from app.infrastructure.persistence.postgres import get_memory_repository
+    from app.application.services.memory_service import get_memory_service
 
-    user_id = "default_user"
+    user_id = runtime.context.user_id
 
-    with get_memory_repository() as repo:
-        repo.write_reference(user_id, "preferences", content)
+    # 使用 MemoryService 更新（包含同步 MEMORY.md）
+    service = get_memory_service()
+    service.update_preferences(user_id, content)
 
     logger.info(f"preferences.md updated by Main Agent for user {user_id}")
 
@@ -135,7 +142,7 @@ def update_preferences(content: str) -> str:
 
 
 @tool
-def update_behaviors(content: str) -> str:
+def update_behaviors(content: str, runtime: ToolRuntime) -> str:
     """更新用户行为模式
 
     Args:
@@ -144,12 +151,13 @@ def update_behaviors(content: str) -> str:
     Returns:
         操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
     """
-    from app.infrastructure.persistence.postgres import get_memory_repository
+    from app.application.services.memory_service import get_memory_service
 
-    user_id = "default_user"
+    user_id = runtime.context.user_id
 
-    with get_memory_repository() as repo:
-        repo.write_reference(user_id, "behaviors", content)
+    # 使用 MemoryService 更新（包含同步 MEMORY.md）
+    service = get_memory_service()
+    service.update_behaviors(user_id, content)
 
     logger.info(f"behaviors.md updated by Main Agent for user {user_id}")
 
