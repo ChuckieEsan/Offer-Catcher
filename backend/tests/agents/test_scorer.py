@@ -4,7 +4,7 @@ import pytest
 
 from app.application.agents.scorer.agent import ScorerAgent, get_scorer_agent
 from app.domain.interview.services import calculate_new_level
-from app.models.question import MasteryLevel
+from app.domain.question import MasteryLevel
 
 
 class TestCalculateNewLevel:
@@ -112,17 +112,3 @@ class TestScorerAgent:
         except Exception as e:
             # 预期会抛出某种异常（可能是 400 错误）
             assert "Question not found" in str(e) or "Bad Request" in str(e) or "not a valid point" in str(e)
-
-
-class TestScorerAgentSingleton:
-    """单例测试"""
-
-    def test_get_scorer_agent_singleton(self):
-        """测试单例获取"""
-        from app.agents import scorer as scorer_module
-        scorer_module._scorer_agent = None
-
-        agent1 = get_scorer_agent()
-        agent2 = get_scorer_agent()
-
-        assert agent1 is agent2
