@@ -27,6 +27,14 @@ from app.infrastructure.persistence.postgres.favorite_repository import (
     PostgresFavoriteRepository,
     get_favorite_repository,
 )
+from app.infrastructure.persistence.postgres.memory_repository import (
+    PostgresMemoryRepository,
+    get_memory_repository,
+)
+from app.infrastructure.persistence.postgres.session_summary_repository import (
+    PostgresSessionSummaryRepository,
+    get_session_summary_repository,
+)
 
 __all__ = [
     "PostgresClient",
@@ -41,4 +49,10 @@ __all__ = [
     "get_conversation_repository",
     "PostgresFavoriteRepository",
     "get_favorite_repository",
+    # Memory Repository
+    "PostgresMemoryRepository",
+    "get_memory_repository",
+    # Session Summary Repository
+    "PostgresSessionSummaryRepository",
+    "get_session_summary_repository",
 ]

@@ -189,6 +189,36 @@ class PostgresClient:
                 ON favorites(user_id, created_at DESC)
             """)
 
+            # 会话摘要表（记忆模块）
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS session_summaries (
+                    id VARCHAR(36) PRIMARY KEY,
+                    conversation_id VARCHAR(36) NOT NULL,
+                    user_id VARCHAR(36) NOT NULL,
+                    summary TEXT NOT NULL,
+                    embedding vector(1024),
+                    message_cursor_uuid VARCHAR(36),
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                )
+            """)
+
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_id ON session_summaries(user_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_conversation_id ON session_summaries(conversation_id)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_user_created
+                ON session_summaries(user_id, created_at DESC)
+            """)
+            # 向量索引（使用 hnsw）
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_session_summaries_embedding ON session_summaries
+                USING hnsw (embedding vector_cosine_ops)
+            """)
+
             self.conn.commit()
             logger.info("PostgreSQL tables initialized")
 

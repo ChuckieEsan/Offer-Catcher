@@ -72,51 +72,35 @@
 </tool>
 
 <!-- 长期记忆工具 -->
-<!-- save_user_preferences: WHEN 用户说"记住我喜欢..."或"设置..." -->
-<tool name="save_user_preferences">
-保存用户偏好设置（语言、难度、练习量等）
+<!-- load_memory_reference: WHEN 需要查看用户完整偏好或行为详情 -->
+<tool name="load_memory_reference">
+加载用户记忆详情（preferences 或 behaviors）
 参数：
-- language: 语言偏好
-- difficulty: 难度偏好
-- daily_goal: 每日练习目标
+- reference_name: 引用名称（"preferences" 或 "behaviors"）
 </tool>
 
-<!-- save_user_profile: WHEN 用户提到"我想去 XX 公司"或"我是 XX 开发" -->
-<tool name="save_user_profile">
-保存用户画像（目标公司、岗位、技术栈）
+<!-- search_session_history: WHEN 需要检索历史对话内容 -->
+<tool name="search_session_history">
+语义检索历史会话摘要
 参数：
-- target_company: 目标公司
-- target_position: 目标岗位
-- tech_stack: 技术栈列表
+- query: 查询文本
+- top_k: 返回数量（默认 3）
 </tool>
 
-<!-- update_learning_progress: WHEN 用户完成练习或标记已掌握 -->
-<tool name="update_learning_progress">
-更新学习进度（掌握知识点、完成题目）
+<!-- load_skill: WHEN 需要加载用户自定义 Skill -->
+<tool name="load_skill">
+加载用户自定义 Skill
 参数：
-- knowledge_point: 已掌握的知识点
-- question_id: 已完成的题目ID
-- mastery_level: 掌握等级（LEVEL_0/LEVEL_1/LEVEL_2）
-</tool>
-
-<!-- get_user_memory: WHEN 用户询问"你对我了解多少"或"我的信息是什么" -->
-<tool name="get_user_memory">
-获取用户完整记忆
-</tool>
-
-<!-- clear_user_memory: WHEN 用户明确要求"清除所有数据" -->
-<tool name="clear_user_memory">
-清除用户记忆数据
+- skill_name: Skill 名称
 </tool>
 </tools>
 
 <memory_usage>
 记忆工具使用场景：
-- 用户明确表达偏好（如"我喜欢中文"、"难度调高点"）-> save_user_preferences
-- 用户提到目标公司/岗位（如"我想去字节"、"我是后端开发"）-> save_user_profile
-- 用户完成练习或表示掌握了某知识点 -> update_learning_progress
-- 用户询问自己的信息（如"你对我了解多少"、"我的信息是什么"）-> get_user_memory
-- 用户要求删除数据 -> clear_user_memory
+- 需要查看用户完整偏好设置 -> load_memory_reference("preferences")
+- 需要查看用户行为模式详情 -> load_memory_reference("behaviors")
+- 需要检索历史对话内容 -> search_session_history(query)
+- 需要加载用户自定义 Skill -> load_skill(skill_name)
 </memory_usage>
 
 {{ skills_prompt }}

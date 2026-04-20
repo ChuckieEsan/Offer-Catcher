@@ -307,6 +307,30 @@ def _trim_messages_by_token(
         return trimmed
 
 
+def _load_memory_context(user_id: str) -> str | None:
+    """加载用户 MEMORY.md 内容（同步）
+
+    Args:
+        user_id: 用户唯一标识
+
+    Returns:
+        MEMORY.md 内容，不存在时初始化后返回模板
+    """
+    from app.infrastructure.persistence.postgres import get_memory_repository
+
+    with get_memory_repository() as repo:
+        # 尝试读取现有记忆
+        memory_content = repo.read_content(user_id)
+
+        if not memory_content:
+            # 首次对话，初始化记忆
+            memory = repo.initialize(user_id)
+            memory_content = memory.content
+            logger.info(f"Memory initialized for user {user_id}")
+
+        return memory_content
+
+
 @traced_async
 async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
@@ -330,6 +354,15 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     # 从会话上下文获取用户 ID
     session_context = state.get("session_context", {})
     user_id = session_context.get("user_id") or "default_user"
+
+    # 注入 MEMORY.md（记忆模块）
+    memory_context = _load_memory_context(user_id)
+    if memory_context:
+        memory_message = SystemMessage(
+            content=f"<记忆上下文>\n{memory_context}\n</记忆上下文>"
+        )
+        # 在消息列表开头添加记忆上下文（保留 System Prompt）
+        messages = [memory_message] + messages
 
     logger.info(f"ReAct loop starting with {len(messages)} messages (trimmed from {len(all_messages)})")
 
