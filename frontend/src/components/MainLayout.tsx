@@ -11,6 +11,7 @@ import {
   DashboardOutlined,
   TeamOutlined,
   StarOutlined,
+  BookOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 
@@ -52,6 +53,11 @@ const menuItems: MenuProps["items"] = [
     key: "/favorites",
     icon: <StarOutlined />,
     label: "收藏夹",
+  },
+  {
+    key: "/memory",
+    icon: <BookOutlined />,
+    label: "我的记忆",
   },
   {
     key: "/dashboard",
