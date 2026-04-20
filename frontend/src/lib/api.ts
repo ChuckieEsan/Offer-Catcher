@@ -535,3 +535,30 @@ export async function checkFavorites(
   });
   return res.data;
 }
+
+// ========== Memory API ==========
+
+export async function getMemoryContent(userId: string): Promise<{ content: string }> {
+  const res = await api.get(`/memory/${userId}/content`);
+  return res.data;
+}
+
+export async function getPreferences(userId: string): Promise<{ content: string }> {
+  const res = await api.get(`/memory/${userId}/preferences`);
+  return res.data;
+}
+
+export async function getBehaviors(userId: string): Promise<{ content: string }> {
+  const res = await api.get(`/memory/${userId}/behaviors`);
+  return res.data;
+}
+
+export async function updatePreferences(userId: string, content: string): Promise<{ success: boolean }> {
+  const res = await api.put(`/memory/${userId}/preferences`, { content });
+  return res.data;
+}
+
+export async function updateBehaviors(userId: string, content: string): Promise<{ success: boolean }> {
+  const res = await api.put(`/memory/${userId}/behaviors`, { content });
+  return res.data;
+}

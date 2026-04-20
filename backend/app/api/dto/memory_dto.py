@@ -34,6 +34,21 @@ class MemoryDetailResponse(BaseModel):
     references: list[MemoryReferenceResponse] = Field(description="引用文件列表")
 
 
+# ========== Update Request DTOs ==========
+
+
+class UpdatePreferencesRequest(BaseModel):
+    """更新偏好设置请求"""
+
+    content: str = Field(description="preferences.md 内容（Markdown 格式）")
+
+
+class UpdateBehaviorsRequest(BaseModel):
+    """更新行为模式请求"""
+
+    content: str = Field(description="behaviors.md 内容（Markdown 格式）")
+
+
 # ========== DTO Converters ==========
 
 
@@ -74,6 +89,8 @@ __all__ = [
     "MemoryResponse",
     "MemoryReferenceResponse",
     "MemoryDetailResponse",
+    "UpdatePreferencesRequest",
+    "UpdateBehaviorsRequest",
     "memory_to_response",
     "reference_to_response",
 ]

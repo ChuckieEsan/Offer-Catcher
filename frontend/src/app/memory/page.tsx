@@ -1,24 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, Tabs, Spin, Empty, Typography } from "antd";
-import { BookOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
+import { Card, Tabs, Spin, Empty, Typography, Button, Space, App } from "antd";
+import { BookOutlined, SettingOutlined, UserOutlined, EditOutlined, SaveOutlined, CloseOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
+import { getMemoryContent, getPreferences, getBehaviors, updatePreferences, updateBehaviors } from "@/lib/api";
 
 const { Title } = Typography;
 
-interface MemoryContent {
-  content: string;
-  reference_name?: string;
-}
-
 export default function MemoryPage() {
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [memoryContent, setMemoryContent] = useState<string>("");
   const [preferences, setPreferences] = useState<string>("");
   const [behaviors, setBehaviors] = useState<string>("");
+
+  // 编辑状态
+  const [editingTab, setEditingTab] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState<string>("");
 
   const userId = "default_user";
 
@@ -29,30 +31,127 @@ export default function MemoryPage() {
   const fetchMemoryData = async () => {
     setLoading(true);
     try {
-      // Fetch all memory content in parallel
       const [memoryRes, prefsRes, behaviorsRes] = await Promise.all([
-        fetch(`http://localhost:8000/api/v1/memory/${userId}/content`),
-        fetch(`http://localhost:8000/api/v1/memory/${userId}/preferences`),
-        fetch(`http://localhost:8000/api/v1/memory/${userId}/behaviors`),
+        getMemoryContent(userId),
+        getPreferences(userId),
+        getBehaviors(userId),
       ]);
 
-      if (memoryRes.ok) {
-        const data = await memoryRes.json();
-        setMemoryContent(data.content);
-      }
-      if (prefsRes.ok) {
-        const data = await prefsRes.json();
-        setPreferences(data.content);
-      }
-      if (behaviorsRes.ok) {
-        const data = await behaviorsRes.json();
-        setBehaviors(data.content);
-      }
+      setMemoryContent(memoryRes.content);
+      setPreferences(prefsRes.content);
+      setBehaviors(behaviorsRes.content);
     } catch (error) {
-      console.error("Failed to fetch memory:", error);
+      message.error("加载记忆数据失败");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (tabKey: string) => {
+    const content = tabKey === "preferences" ? preferences : behaviors;
+    setEditContent(content);
+    setEditingTab(tabKey);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTab(null);
+    setEditContent("");
+  };
+
+  const handleSave = async () => {
+    if (!editingTab) return;
+
+    setSaving(true);
+    try {
+      if (editingTab === "preferences") {
+        await updatePreferences(userId, editContent);
+        setPreferences(editContent);
+        message.success("偏好设置已保存");
+      } else if (editingTab === "behaviors") {
+        await updateBehaviors(userId, editContent);
+        setBehaviors(editContent);
+        message.success("行为模式已保存");
+      }
+      setEditingTab(null);
+      setEditContent("");
+    } catch (error) {
+      message.error("保存失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderTabContent = (
+    tabKey: string,
+    content: string,
+    editable: boolean = false
+  ) => {
+    if (loading) {
+      return <Spin />;
+    }
+
+    if (editingTab === tabKey) {
+      return (
+        <div style={{ padding: 16 }}>
+          <Space style={{ marginBottom: 16 }}>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={handleSave}
+              loading={saving}
+            >
+              保存
+            </Button>
+            <Button
+              icon={<CloseOutlined />}
+              onClick={handleCancelEdit}
+              disabled={saving}
+            >
+              取消
+            </Button>
+          </Space>
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            style={{
+              width: "100%",
+              minHeight: 400,
+              padding: 12,
+              border: "1px solid #d9d9d9",
+              borderRadius: 6,
+              fontFamily: "monospace",
+              fontSize: 14,
+              lineHeight: 1.6,
+              resize: "vertical",
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (!content) {
+      return <Empty description="暂无内容" />;
+    }
+
+    return (
+      <div style={{ padding: 16 }}>
+        {editable && (
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(tabKey)}
+            style={{ marginBottom: 16 }}
+          >
+            编辑
+          </Button>
+        )}
+        <div className="markdown-content">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      </div>
+    );
   };
 
   const tabItems = [
@@ -60,61 +159,19 @@ export default function MemoryPage() {
       key: "overview",
       label: "概要",
       icon: <BookOutlined />,
-      children: (
-        <div style={{ padding: 16 }}>
-          {loading ? (
-            <Spin />
-          ) : memoryContent ? (
-            <div className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {memoryContent}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <Empty description="暂无记忆内容" />
-          )}
-        </div>
-      ),
+      children: renderTabContent("overview", memoryContent, false),
     },
     {
       key: "preferences",
       label: "偏好设置",
       icon: <SettingOutlined />,
-      children: (
-        <div style={{ padding: 16 }}>
-          {loading ? (
-            <Spin />
-          ) : preferences ? (
-            <div className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {preferences}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <Empty description="暂无偏好设置" />
-          )}
-        </div>
-      ),
+      children: renderTabContent("preferences", preferences, true),
     },
     {
       key: "behaviors",
       label: "行为模式",
       icon: <UserOutlined />,
-      children: (
-        <div style={{ padding: 16 }}>
-          {loading ? (
-            <Spin />
-          ) : behaviors ? (
-            <div className="markdown-content">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {behaviors}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <Empty description="暂无行为模式" />
-          )}
-        </div>
-      ),
+      children: renderTabContent("behaviors", behaviors, true),
     },
   ];
 

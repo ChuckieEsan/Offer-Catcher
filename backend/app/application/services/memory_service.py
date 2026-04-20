@@ -85,6 +85,34 @@ class MemoryService:
                 content = repo.read_content(user_id)
             return content or ""
 
+    def update_preferences(self, user_id: str, content: str) -> None:
+        """更新用户偏好设置
+
+        Args:
+            user_id: 用户唯一标识
+            content: preferences.md 内容（Markdown 格式）
+        """
+        with get_memory_repository() as repo:
+            # 确保 memory 已初始化
+            if not repo.read_content(user_id):
+                repo.initialize(user_id)
+            repo.write_reference(user_id, "preferences", content)
+            logger.info(f"preferences.md updated for user {user_id}")
+
+    def update_behaviors(self, user_id: str, content: str) -> None:
+        """更新用户行为模式
+
+        Args:
+            user_id: 用户唯一标识
+            content: behaviors.md 内容（Markdown 格式）
+        """
+        with get_memory_repository() as repo:
+            # 确保 memory 已初始化
+            if not repo.read_content(user_id):
+                repo.initialize(user_id)
+            repo.write_reference(user_id, "behaviors", content)
+            logger.info(f"behaviors.md updated for user {user_id}")
+
 
 def get_memory_service() -> MemoryService:
     """获取 MemoryService 实例"""
