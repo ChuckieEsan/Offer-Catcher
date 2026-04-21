@@ -202,12 +202,13 @@ async def update_extract_task(
     # 使用 ExtractTaskApplicationService
     service = get_extract_task_service()
     try:
+        # 提供默认值以处理 Optional 字段
         updated_task = service.edit(
             task_id=task_id,
             user_id=user_id,
-            company=request.company,
-            position=request.position,
-            questions=request.questions,
+            company=request.company or "",
+            position=request.position or "",
+            questions=request.questions or [],
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

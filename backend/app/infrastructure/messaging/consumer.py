@@ -11,7 +11,7 @@ import time
 from typing import Callable, Awaitable, Optional
 
 import aio_pika
-from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
+from aio_pika.abc import AbstractRobustConnection, AbstractChannel, AbstractIncomingMessage
 
 from app.infrastructure.config.settings import get_settings
 from app.infrastructure.common.logger import logger
@@ -60,7 +60,7 @@ class RabbitMQConsumer:
 
         self.prefetch_count = prefetch_count
         self._connection: Optional[AbstractRobustConnection] = None
-        self._channel: Optional[AbstractRobustChannel] = None
+        self._channel: Optional[AbstractChannel] = None
         self._queue_obj = None
         self._exchange = None
 
@@ -79,14 +79,15 @@ class RabbitMQConsumer:
                 password=self._password,
                 heartbeat=300,
             )
-            self._channel = await self._connection.channel()
+            channel = await self._connection.channel()
+            self._channel = channel
 
-            await self._channel.set_qos(prefetch_count=self.prefetch_count)
+            await channel.set_qos(prefetch_count=self.prefetch_count)
 
-            self._queue_obj = await self._channel.declare_queue(self._queue, durable=True)
-            await self._channel.declare_queue(self._dlq, durable=True)
+            self._queue_obj = await channel.declare_queue(self._queue, durable=True)
+            await channel.declare_queue(self._dlq, durable=True)
 
-            self._exchange = self._channel.default_exchange
+            self._exchange = channel.default_exchange
 
             logger.info(
                 f"RabbitMQConsumer connected: {self._host}:{self._port}, "
@@ -111,6 +112,8 @@ class RabbitMQConsumer:
     ) -> bool:
         """降级：将失败的消息重新发布到队尾"""
         await self._ensure_connected()
+        if self._channel is None:
+            raise RuntimeError("Channel not available")
         return await self._message_helper.republish_to_back(
             original_msg=original_msg,
             channel=self._channel,
@@ -125,6 +128,8 @@ class RabbitMQConsumer:
     ) -> bool:
         """死信处理"""
         await self._ensure_connected()
+        if self._channel is None:
+            raise RuntimeError("Channel not available")
         return await self._message_helper._send_to_dlq(
             original_msg=original_msg,
             channel=self._channel,
@@ -153,7 +158,10 @@ class RabbitMQConsumer:
                 return
 
         question_id = "unknown"
-        retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
+        retry_count: int = 0
+        if message.headers:
+            raw_retry = message.headers.get("x-retry-count", 0)
+            retry_count = int(raw_retry) if isinstance(raw_retry, (int, float)) else 0
 
         try:
             task = MQTaskMessage.model_validate_json(message.body)
@@ -195,6 +203,8 @@ class RabbitMQConsumer:
     ) -> None:
         """启动并发消费协程"""
         await self._ensure_connected()
+        if self._queue_obj is None:
+            raise RuntimeError("Queue not available")
 
         await self._queue_obj.consume(lambda msg: self._on_message(msg, callback))
 

@@ -6,7 +6,7 @@
 
 import threading
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Callable, TypeVar
 
 T = TypeVar("T")
 
@@ -98,7 +98,7 @@ def singleton(func: Callable[..., T]) -> Callable[..., T]:
         with _lock:
             _container.instance = None
 
-    wrapper.clear_cache = clear_cache
+    wrapper.clear_cache = clear_cache  # type: ignore
     wrapper._is_singleton = True  # type: ignore
 
     return wrapper

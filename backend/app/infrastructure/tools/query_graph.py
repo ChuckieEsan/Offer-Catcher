@@ -63,7 +63,7 @@ def _do_query_graph(question: str) -> str:
 
 
 @tool
-@traced
+@traced()
 def query_graph(question: str) -> str:
     """查询图数据库，获取知识点之间的关系
 

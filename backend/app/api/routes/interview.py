@@ -5,12 +5,14 @@
 注意：当前使用 InterviewManager（内存会话），后续将迁移到 InterviewApplicationService（PostgreSQL 持久化）。
 """
 
+import datetime
 from typing import Optional
 from fastapi import APIRouter, Header, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.application.agents.factory import get_interview_agent
+from app.domain.shared.enums import SessionStatus
 from app.domain.interview.aggregates import InterviewSession, InterviewSessionCreate, InterviewReport
 from app.api.dto.interview_dto import (
     InterviewSessionResponse,
@@ -276,8 +278,8 @@ async def end_interview(
     session = agent.get_session(session_id)
 
     if session:
-        session.status = "completed"
-        session.ended_at = __import__("datetime").datetime.now()
+        session.status = SessionStatus.COMPLETED
+        session.ended_at = datetime.datetime.now()
 
     return {
         "message": "面试已结束",

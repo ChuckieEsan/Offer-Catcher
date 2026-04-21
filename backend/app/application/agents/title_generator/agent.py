@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from langchain_openai import ChatOpenAI
 
-from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.shared.base_agent import BaseAgent, LLMType
 from app.application.agents.title_generator.prompts import PROMPTS_DIR
 from app.infrastructure.common.logger import logger
 
@@ -28,7 +28,7 @@ class TitleGeneratorAgent(BaseAgent[str]):
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         prompts_dir: Any = PROMPTS_DIR,
     ) -> None:
         """初始化 Title Generator

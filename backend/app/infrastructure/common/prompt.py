@@ -81,7 +81,18 @@ def build_prompt(
     messages = template.format_messages(**filtered_kwargs)
 
     if messages:
-        return messages[0].content
+        content = messages[0].content
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # 处理多部分内容
+            text_parts = []
+            for part in content:
+                if isinstance(part, str):
+                    text_parts.append(part)
+                elif isinstance(part, dict) and "text" in part:
+                    text_parts.append(part["text"])
+            return " ".join(text_parts)
     return ""
 
 

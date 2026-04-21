@@ -5,7 +5,7 @@
 """
 
 import aio_pika
-from aio_pika.abc import AbstractRobustChannel, AbstractIncomingMessage
+from aio_pika.abc import AbstractChannel, AbstractIncomingMessage
 from aio_pika import Message, DeliveryMode
 
 from app.infrastructure.config.settings import get_settings
@@ -33,7 +33,7 @@ class MQMessageHelper:
     async def republish_to_back(
         self,
         original_msg: AbstractIncomingMessage,
-        channel: AbstractRobustChannel,
+        channel: AbstractChannel,
         question_id: str,
         retry_count: int,
     ) -> bool:
@@ -69,7 +69,7 @@ class MQMessageHelper:
     async def _send_to_dlq(
         self,
         original_msg: AbstractIncomingMessage,
-        channel: AbstractRobustChannel,
+        channel: AbstractChannel,
         question_id: str,
     ) -> bool:
         """死信处理

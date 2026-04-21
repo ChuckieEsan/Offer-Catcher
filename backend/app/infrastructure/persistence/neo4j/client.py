@@ -44,7 +44,7 @@ class Neo4jClient:
     @property
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        return self._driver is not None and not self._driver._closed
+        return self._driver is not None
 
     def _ensure_connected(self) -> bool:
         """确保已连接，未连接时自动尝试连接"""
@@ -62,11 +62,12 @@ class Neo4jClient:
             return True
 
         try:
-            self._driver = GraphDatabase.driver(
+            driver = GraphDatabase.driver(
                 self._uri,
                 auth=(self._user, self._password),
             )
-            self._driver.verify_connectivity()
+            driver.verify_connectivity()
+            self._driver = driver
             logger.info(f"Neo4jClient connected: {self._uri}")
             return True
         except Exception as e:
@@ -76,7 +77,7 @@ class Neo4jClient:
 
     def close(self) -> None:
         """关闭连接"""
-        if self._driver and not self._driver._closed:
+        if self._driver is not None:
             self._driver.close()
             self._driver = None
             logger.info("Neo4j connection closed")
@@ -86,18 +87,16 @@ class Neo4jClient:
         """获取 Neo4j session 的上下文管理器
 
         Yields:
-            Neo4j Session 实例，如果连接失败则返回 None
-        """
-        if not self._ensure_connected():
-            yield None
-            return
+            Neo4j Session 实例
 
-        try:
-            with self._driver.session(database=self._database) as session:
-                yield session
-        except Exception as e:
-            logger.error(f"Neo4j session error: {e}")
-            yield None
+        Raises:
+            RuntimeError: 如果连接失败
+        """
+        if not self._ensure_connected() or self._driver is None:
+            raise RuntimeError("Neo4j connection not available")
+
+        with self._driver.session(database=self._database) as session:
+            yield session
 
     # ========== 公司与考点操作 ==========
 
@@ -108,8 +107,6 @@ class Neo4jClient:
         RETURN c
         """
         with self.session() as session:
-            if session is None:
-                return False
             try:
                 session.run(query, company=company)
                 logger.debug(f"Created/merged company node: {company}")
@@ -125,8 +122,6 @@ class Neo4jClient:
         RETURN e
         """
         with self.session() as session:
-            if session is None:
-                return False
             try:
                 session.run(query, entity=entity)
                 logger.debug(f"Created/merged entity node: {entity}")
@@ -153,8 +148,6 @@ class Neo4jClient:
         RETURN r
         """
         with self.session() as session:
-            if session is None:
-                return False
             try:
                 session.run(query, company=company, entity=entity, count=question_count)
                 logger.debug(f"Updated 考频 relationship: {company} -> {entity}")
@@ -187,8 +180,6 @@ class Neo4jClient:
             params = {"limit": limit}
 
         with self.session() as session:
-            if session is None:
-                return []
             try:
                 result = session.run(query, **params)
                 return [{"entity": record["entity"], "count": record["count"]} for record in result]
@@ -205,7 +196,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 result = session.run(query, company=company)
                 record = result.single()
                 if record:
@@ -253,7 +244,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 result = session.run(query, entity=entity, limit=limit)
                 return [
                     {"entity": record["related_entity"], "co_occurrence_count": record["co_occurrence_count"]}
@@ -277,7 +268,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 result = session.run(query, min_companies=min_companies)
                 return [
                     {
@@ -313,7 +304,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 session.run(
                     query,
                     cluster_id=cluster_id,
@@ -354,7 +345,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 session.run(
                     query,
                     cluster_id=cluster_id,
@@ -394,7 +385,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 session.run(
                     query,
                     question_id=question_id,
@@ -421,7 +412,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 session.run(query, question_id=question_id)
             return True
         except Exception as e:
@@ -446,7 +437,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 result = session.run(query, cluster_id=cluster_id)
                 record = result.single()
                 if record:
@@ -480,7 +471,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 result = session.run(query, limit=limit)
                 return [
                     {
@@ -506,7 +497,7 @@ class Neo4jClient:
         """
 
         try:
-            with self._driver.session(database=self._database) as session:
+            with self.session() as session:
                 for company in companies:
                     session.run(query, company=company)
             logger.debug(f"Cleaned up companies: {companies}")

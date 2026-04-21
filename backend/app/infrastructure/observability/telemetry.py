@@ -208,12 +208,15 @@ def get_tracer() -> trace.Tracer:
 
     如果 telemetry 未初始化，返回 no-op tracer。
     """
+    global _tracer
     if _tracer is None:
         settings = get_settings()
         if getattr(settings, 'telemetry_enabled', False):
             init_telemetry()
+            # init_telemetry() should set _tracer, but double-check
+            if _tracer is None:
+                return trace.NoOpTracer()
         else:
-            # 返回 no-op tracer
             return trace.NoOpTracer()
     return _tracer
 
@@ -223,13 +226,15 @@ def get_meter() -> metrics.Meter:
 
     如果 telemetry 未初始化，返回 no-op meter。
     """
+    global _meter
     if _meter is None:
         settings = get_settings()
         if getattr(settings, 'telemetry_enabled', False):
             init_telemetry()
+            if _meter is None:
+                return metrics.NoOpMeter(name="no-op")
         else:
-            # 返回 no-op meter
-            return metrics.NoOpMeter()
+            return metrics.NoOpMeter(name="no-op")
     return _meter
 
 
@@ -274,6 +279,7 @@ def traced(name: Optional[str] = None):
                     # 记录成功指标
                     if _tool_call_counter is not None:
                         _tool_call_counter.add(1, {"name": span_name, "status": "success"})
+                    if _tool_call_duration is not None:
                         _tool_call_duration.record(duration_ms, {"name": span_name})
 
                     span.set_attribute("status", "success")
@@ -288,6 +294,7 @@ def traced(name: Optional[str] = None):
                     # 记录失败指标
                     if _tool_call_counter is not None:
                         _tool_call_counter.add(1, {"name": span_name, "status": "error"})
+                    if _tool_call_errors is not None:
                         _tool_call_errors.add(1, {"name": span_name, "error_type": type(e).__name__})
 
                     span.set_attribute("status", "error")
@@ -341,6 +348,7 @@ def traced_async(name: Optional[str] = None):
 
                     if _tool_call_counter is not None:
                         _tool_call_counter.add(1, {"name": span_name, "status": "success"})
+                    if _tool_call_duration is not None:
                         _tool_call_duration.record(duration_ms, {"name": span_name})
 
                     span.set_attribute("status", "success")
@@ -354,6 +362,7 @@ def traced_async(name: Optional[str] = None):
 
                     if _tool_call_counter is not None:
                         _tool_call_counter.add(1, {"name": span_name, "status": "error"})
+                    if _tool_call_errors is not None:
                         _tool_call_errors.add(1, {"name": span_name, "error_type": type(e).__name__})
 
                     span.set_attribute("status", "error")
@@ -395,15 +404,17 @@ def record_llm_tokens(
         duration_ms: 调用时长（毫秒）
         call_type: 调用类型 (chat, vision, embedding)
     """
-    if _llm_token_input is None:
+    if _llm_token_input is None or _llm_token_output is None:
         return
 
     attrs = {"provider": provider, "model": model, "call_type": call_type}
 
     _llm_token_input.add(input_tokens, attrs)
     _llm_token_output.add(output_tokens, attrs)
-    _llm_call_duration.record(duration_ms, attrs)
-    _llm_call_counter.add(1, attrs)
+    if _llm_call_duration is not None:
+        _llm_call_duration.record(duration_ms, attrs)
+    if _llm_call_counter is not None:
+        _llm_call_counter.add(1, attrs)
 
     # 设置当前 Span 属性
     span = trace.get_current_span()
@@ -428,7 +439,7 @@ def record_vector_query(duration_ms: float, results_count: int, collection: str 
         results_count: 返回结果数量
         collection: 集合名称
     """
-    if _vector_query_duration is None:
+    if _vector_query_duration is None or _vector_query_results is None:
         return
 
     attrs = {"collection": collection}

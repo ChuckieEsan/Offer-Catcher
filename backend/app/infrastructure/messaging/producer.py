@@ -8,7 +8,7 @@ import asyncio
 from typing import Optional
 
 import aio_pika
-from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel
+from aio_pika.abc import AbstractRobustConnection, AbstractChannel
 from aio_pika import Message, DeliveryMode
 
 from app.infrastructure.config.settings import get_settings
@@ -39,7 +39,7 @@ class RabbitMQProducer:
         self._password = settings.rabbitmq_password
         self._queue = settings.rabbitmq_queue
         self._connection: Optional[AbstractRobustConnection] = None
-        self._channel: Optional[AbstractRobustChannel] = None
+        self._channel: Optional[AbstractChannel] = None
         self._exchange = None
 
     async def connect(self) -> bool:
@@ -51,10 +51,11 @@ class RabbitMQProducer:
                 login=self._user,
                 password=self._password,
             )
-            self._channel = await self._connection.channel()
+            channel = await self._connection.channel()
+            self._channel = channel
 
-            await self._channel.declare_queue(self._queue, durable=True)
-            self._exchange = self._channel.default_exchange
+            await channel.declare_queue(self._queue, durable=True)
+            self._exchange = channel.default_exchange
 
             logger.info(f"RabbitMQProducer connected: {self._host}:{self._port}")
             return True
@@ -94,6 +95,10 @@ class RabbitMQProducer:
             是否发布成功
         """
         await self._ensure_connected()
+
+        if self._exchange is None:
+            logger.error("Exchange not available after connection")
+            return False
 
         for attempt in range(retry):
             try:

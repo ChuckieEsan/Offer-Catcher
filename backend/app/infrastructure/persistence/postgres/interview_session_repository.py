@@ -315,7 +315,8 @@ class PostgresInterviewSessionRepository:
                     """,
                     (user_id,),
                 )
-                count = cur.fetchone()[0]
+                row = cur.fetchone()
+                count = row[0] if row else 0
 
             return count
 

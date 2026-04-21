@@ -13,7 +13,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 
-from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.shared.base_agent import BaseAgent, LLMType
 from app.application.agents.vision_extractor.prompts import PROMPTS_DIR
 from app.domain.question.utils import generate_question_id
 from app.infrastructure.adapters.ocr_adapter import OCRAdapter, get_ocr_adapter
@@ -62,7 +62,7 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         ocr_adapter: OCRAdapter,
         prompts_dir: Any = PROMPTS_DIR,
         use_structured_output: bool = True,
@@ -149,7 +149,21 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
         """使用手动解析提取"""
         prompt = self._build_prompt(text=text)
         response = self.llm.invoke(prompt)
-        schema = self._parse_json_response(response.content)
+        content = response.content
+        if isinstance(content, str):
+            response_str = content
+        elif isinstance(content, list):
+            # 处理多部分内容
+            text_parts = []
+            for part in content:
+                if isinstance(part, str):
+                    text_parts.append(part)
+                elif isinstance(part, dict) and "text" in part:
+                    text_parts.append(part["text"])
+            response_str = " ".join(text_parts)
+        else:
+            response_str = str(content)
+        schema = self._parse_json_response(response_str)
         return self._convert_to_extracted_interview(schema)
 
     def extract(
@@ -188,18 +202,21 @@ class VisionExtractor(BaseAgent[ExtractedInterviewSchema]):
             if not ocr_text.strip():
                 raise ValueError("OCR 未能识别出任何文字")
 
-            source = ocr_text
+            # OCR 处理后，source 变为文本
+            text_source: str = ocr_text
+        else:
+            text_source = source if isinstance(source, str) else source[0]
 
-        logger.info(f"Extracting from text: {source[:100]}...")
+        logger.info(f"Extracting from text: {text_source[:100]}...")
 
         if self.use_structured_output and self.structured_llm:
             try:
-                return self._extract_with_structured_output(source)
+                return self._extract_with_structured_output(text_source)
             except Exception as e:
                 logger.warning(f"Structured output failed, falling back to manual parsing: {e}")
-                return self._extract_with_parsing(source)
+                return self._extract_with_parsing(text_source)
         else:
-            return self._extract_with_parsing(source)
+            return self._extract_with_parsing(text_source)
 
 
 _vision_extractor: Optional[VisionExtractor] = None

@@ -89,7 +89,8 @@ def is_retrieval_in_progress(user_id: str, conversation_id: str) -> bool:
     """
     redis_client = get_redis_client()
     key = get_retrieval_lock_key(user_id, conversation_id)
-    return redis_client.client.exists(key) > 0
+    exists_result = redis_client.client.exists(key)
+    return bool(exists_result)
 
 
 # ==================== Retrieval Service ====================
@@ -173,8 +174,10 @@ async def _do_retrieval(
 
         if current_checkpoint:
             # 读取现有 memory_context 和 injected_ids
-            current_memory = current_checkpoint.channel_values.get("memory_context", "")
-            injected_ids = current_checkpoint.channel_values.get("injected_session_ids", [])
+            # 使用字典访问方式处理 TypedDict
+            channel_values = current_checkpoint.get("channel_values", {})
+            current_memory = channel_values.get("memory_context", "")
+            injected_ids = channel_values.get("injected_session_ids", [])
 
             # 合并新结果（去重 + 容量控制）
             merged_context, merged_ids = merge_memory_context(
@@ -184,11 +187,18 @@ async def _do_retrieval(
                 max_size,
             )
 
-            # 更新 checkpoint
-            current_checkpoint.channel_values["memory_context"] = merged_context
-            current_checkpoint.channel_values["injected_session_ids"] = merged_ids
+            # 更新 checkpoint - 构建新的 checkpoint dict
+            updated_channel_values = dict(channel_values)
+            updated_channel_values["memory_context"] = merged_context
+            updated_channel_values["injected_session_ids"] = merged_ids
 
-            await checkpointer.aput(config, current_checkpoint)
+            # 使用 aput 写入更新后的 checkpoint
+            await checkpointer.aput(
+                config,
+                current_checkpoint,
+                {"memory_context": merged_context, "injected_session_ids": merged_ids},
+                {"step": -1},
+            )
             logger.info(f"Memory context updated: {len(merged_ids)} sessions, {len(merged_context)} bytes")
 
 

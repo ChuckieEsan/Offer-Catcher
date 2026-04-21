@@ -22,7 +22,7 @@ from app.infrastructure.common.logger import logger
 from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 
 if TYPE_CHECKING:
-    from app.application.agents.chat.runtime import UserContext
+    from app.application.agents.chat.runtime import UserContext  # noqa: F401
 
 
 @tool
@@ -35,7 +35,7 @@ def load_memory_reference(reference_name: str, runtime: ToolRuntime) -> str:
     Returns:
         reference 文件的完整内容（Markdown 格式）
     """
-    user_id = runtime.context.user_id
+    user_id = runtime.context.user_id  # type: ignore
 
     from app.infrastructure.persistence.postgres import get_memory_repository
 
@@ -60,10 +60,10 @@ def search_session_history(query: str, runtime: ToolRuntime, top_k: int = 3) -> 
     Returns:
         相关会话的摘要内容（Markdown 格式）
     """
+    user_id = runtime.context.user_id  # type: ignore
+
     from app.infrastructure.persistence.postgres import get_session_summary_repository
     from app.infrastructure.persistence.postgres.conversation_repository import get_conversation_repository
-
-    user_id = runtime.context.user_id
 
     # 计算 embedding
     embedding_adapter = get_embedding_adapter()
@@ -103,9 +103,9 @@ def load_skill(skill_name: str, runtime: ToolRuntime) -> str:
     Returns:
         SKILL.md 内容（Markdown 格式）
     """
-    from app.infrastructure.persistence.postgres import get_memory_repository
+    user_id = runtime.context.user_id  # type: ignore
 
-    user_id = runtime.context.user_id
+    from app.infrastructure.persistence.postgres import get_memory_repository
 
     with get_memory_repository() as repo:
         skill_md = repo.read_skill(user_id, skill_name)
@@ -127,9 +127,9 @@ def update_preferences(content: str, runtime: ToolRuntime) -> str:
     Returns:
         操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
     """
-    from app.application.services.memory_service import get_memory_service
+    user_id = runtime.context.user_id  # type: ignore
 
-    user_id = runtime.context.user_id
+    from app.application.services.memory_service import get_memory_service
 
     # 使用 MemoryService 更新（包含同步 MEMORY.md）
     service = get_memory_service()
@@ -151,9 +151,9 @@ def update_behaviors(content: str, runtime: ToolRuntime) -> str:
     Returns:
         操作结果（包含 memory_write 标记，后台 Agent 会跳过处理）
     """
-    from app.application.services.memory_service import get_memory_service
+    user_id = runtime.context.user_id  # type: ignore
 
-    user_id = runtime.context.user_id
+    from app.application.services.memory_service import get_memory_service
 
     # 使用 MemoryService 更新（包含同步 MEMORY.md）
     service = get_memory_service()

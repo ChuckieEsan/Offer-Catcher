@@ -17,12 +17,15 @@ from typing import Any, Generic, Optional, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 
 from app.infrastructure.common.prompt import build_prompt
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.retry import retry
 
 T = TypeVar("T")
+
+LLMType = ChatOpenAI | ChatDeepSeek
 
 
 class BaseAgent(Generic[T]):
@@ -34,7 +37,7 @@ class BaseAgent(Generic[T]):
     - _structured_output_schema: 结构化输出 Schema（可选）
 
     使用依赖注入：
-    - llm: ChatOpenAI 实例（由 factory 注入）
+    - llm: ChatOpenAI | ChatDeepSeek 实例（由 factory 注入）
     """
 
     _prompt_filename: str = ""
@@ -43,7 +46,7 @@ class BaseAgent(Generic[T]):
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         prompts_dir: Any,
     ) -> None:
         """初始化 Agent
@@ -54,15 +57,15 @@ class BaseAgent(Generic[T]):
         """
         self._llm = llm
         self._prompts_dir = prompts_dir
-        self._structured_llm: Optional[ChatOpenAI] = None
+        self._structured_llm: Any = None
 
     @property
-    def llm(self) -> ChatOpenAI:
+    def llm(self) -> LLMType:
         """获取 LLM 实例"""
         return self._llm
 
     @property
-    def structured_llm(self) -> Optional[ChatOpenAI]:
+    def structured_llm(self) -> Any:
         """获取结构化输出 LLM（懒加载）"""
         if self._structured_llm is None and self._structured_output_schema:
             self._structured_llm = self._llm.with_structured_output(
@@ -100,10 +103,22 @@ class BaseAgent(Generic[T]):
             HumanMessage(content=prompt),
         ]
         response = self._llm.invoke(messages)
-        return response.content
+        content = response.content
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # 处理多部分内容
+            text_parts = []
+            for part in content:
+                if isinstance(part, str):
+                    text_parts.append(part)
+                elif isinstance(part, dict) and "text" in part:
+                    text_parts.append(part["text"])
+            return " ".join(text_parts)
+        return ""
 
     @retry(max_retries=3, delay=1.0)
-    def invoke_structured(self, prompt: str) -> Optional[T]:
+    def invoke_structured(self, prompt: str) -> T | None:
         """调用结构化输出 LLM（带重试）
 
         Args:
@@ -127,4 +142,4 @@ class BaseAgent(Generic[T]):
             return None
 
 
-__all__ = ["BaseAgent"]
+__all__ = ["BaseAgent", "LLMType"]

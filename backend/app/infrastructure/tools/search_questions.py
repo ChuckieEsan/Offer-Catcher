@@ -17,8 +17,8 @@ from app.infrastructure.common.cache_keys import CacheKeys
 @tool
 def search_questions(
     query: str,
-    company: str = None,
-    position: str = None,
+    company: str | None = None,
+    position: str | None = None,
     k: int = 5,
 ) -> str:
     """搜索本地题库中的面试题（默认首选工具）
@@ -73,7 +73,7 @@ def search_questions(
 
         # 格式化输出
         output = []
-        for idx, rerank_score in ranked_indices:
+        for idx, _ in ranked_indices:
             question = candidates[idx]
             output.append(f"题目 {len(output)//4 + 1}: {question.question_text[:100]}...")
             if question.answer:

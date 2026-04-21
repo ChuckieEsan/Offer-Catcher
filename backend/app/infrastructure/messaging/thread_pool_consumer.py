@@ -10,10 +10,10 @@ import inspect
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, cast, Awaitable
 
 import aio_pika
-from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, AbstractIncomingMessage
+from aio_pika.abc import AbstractRobustConnection, AbstractChannel, AbstractIncomingMessage
 from aiobreaker import CircuitBreaker
 
 from app.infrastructure.config.settings import get_settings
@@ -147,7 +147,7 @@ class ThreadPoolRabbitMQConsumer:
     ) -> None:
         """在线程中运行异步消费者"""
         connection: Optional[AbstractRobustConnection] = None
-        channel: Optional[AbstractRobustChannel] = None
+        channel: Optional[AbstractChannel] = None
 
         try:
             connection = await aio_pika.connect_robust(
@@ -157,16 +157,18 @@ class ThreadPoolRabbitMQConsumer:
                 password=self._password,
                 heartbeat=300,
             )
-            channel = await connection.channel()
-            await channel.set_qos(prefetch_count=self.prefetch_count)
+            ch = await connection.channel()
+            channel = ch
 
-            queue = await channel.declare_queue(self._queue, durable=True)
+            await ch.set_qos(prefetch_count=self.prefetch_count)
+
+            queue = await ch.declare_queue(self._queue, durable=True)
 
             logger.info(f"Thread-{thread_id}: Connected to queue: {self._queue}")
 
             await queue.consume(
                 lambda msg: self._on_message_callback(
-                    msg, thread_id, callback, circuit_breaker, channel
+                    msg, thread_id, callback, circuit_breaker, ch
                 )
             )
 
@@ -189,7 +191,7 @@ class ThreadPoolRabbitMQConsumer:
         thread_id: int,
         callback: Callable[[MQTaskMessage], bool],
         circuit_breaker: CircuitBreaker,
-        channel: AbstractRobustChannel,
+        channel: AbstractChannel,
     ) -> None:
         """消息回调处理"""
         recovery_timeout = 30.0
@@ -227,7 +229,10 @@ class ThreadPoolRabbitMQConsumer:
     ) -> bool:
         """处理单条消息"""
         question_id = "unknown"
-        retry_count = message.headers.get("x-retry-count", 0) if message.headers else 0
+        retry_count: int = 0
+        if message.headers:
+            raw_retry = message.headers.get("x-retry-count", 0)
+            retry_count = int(raw_retry) if isinstance(raw_retry, (int, float)) else 0
 
         try:
             task = MQTaskMessage.model_validate_json(message.body)
@@ -237,11 +242,11 @@ class ThreadPoolRabbitMQConsumer:
             result = callback(task)
 
             if inspect.iscoroutine(result):
-                success = await result
+                success: bool = await cast(Awaitable[bool], result)
             else:
-                success = result
+                success = bool(result)
 
-            return success if success is not None else True
+            return success
 
         except json.JSONDecodeError as e:
             logger.error(f"Thread-{thread_id}: Invalid JSON: {e}")
@@ -253,10 +258,13 @@ class ThreadPoolRabbitMQConsumer:
     async def _republish_to_back(
         self,
         original_msg: AbstractIncomingMessage,
-        channel: AbstractRobustChannel,
+        channel: AbstractChannel,
     ) -> bool:
         """将失败消息重新发布到队尾"""
-        retry_count = original_msg.headers.get("x-retry-count", 0) if original_msg.headers else 0
+        retry_count: int = 0
+        if original_msg.headers:
+            raw_retry = original_msg.headers.get("x-retry-count", 0)
+            retry_count = int(raw_retry) if isinstance(raw_retry, (int, float)) else 0
         question_id = "unknown"
         try:
             task = MQTaskMessage.model_validate_json(original_msg.body)

@@ -134,7 +134,8 @@ class PostgresFavoriteRepository:
                 "SELECT COUNT(*) FROM favorites WHERE user_id = %s",
                 (user_id,),
             )
-            return cur.fetchone()[0]
+            row = cur.fetchone()
+            return row[0] if row else 0
 
     def check_exists(
         self,

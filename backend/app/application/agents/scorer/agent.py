@@ -10,7 +10,7 @@ from typing import Optional, Any
 
 from langchain_openai import ChatOpenAI
 
-from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.shared.base_agent import BaseAgent, LLMType
 from app.application.agents.scorer.prompts import PROMPTS_DIR
 from app.domain.interview.services import calculate_new_level
 from app.domain.question.repositories import QuestionRepository
@@ -35,7 +35,7 @@ class ScorerAgent(BaseAgent[ScoreResult]):
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         question_repo: QuestionRepository,
         prompts_dir: Any = PROMPTS_DIR,
     ) -> None:

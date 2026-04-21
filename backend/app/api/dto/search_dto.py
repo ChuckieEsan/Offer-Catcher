@@ -63,12 +63,12 @@ def to_search_result_item(item) -> SearchResultItem:
     """
     if isinstance(item, dict):
         return SearchResultItem(
-            question_id=item.get("question_id"),
-            question_text=item.get("question_text"),
-            company=item.get("company"),
-            position=item.get("position"),
-            mastery_level=item.get("mastery_level"),
-            question_type=item.get("question_type"),
+            question_id=item.get("question_id", ""),
+            question_text=item.get("question_text", ""),
+            company=item.get("company", ""),
+            position=item.get("position", ""),
+            mastery_level=item.get("mastery_level", 0),
+            question_type=item.get("question_type", ""),
             core_entities=item.get("core_entities", []),
             cluster_ids=item.get("cluster_ids", []),
             metadata=item.get("metadata", {}),

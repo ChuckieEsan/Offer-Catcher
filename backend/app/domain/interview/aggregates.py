@@ -60,6 +60,57 @@ class InterviewQuestion(BaseModel):
         """是否已回答"""
         return self.status in (QuestionStatus.SCORED, QuestionStatus.SKIPPED)
 
+    def to_payload(self) -> dict[str, Any]:
+        """转换为数据库 payload 格式
+
+        Returns:
+            可 JSON 序列化的字典
+        """
+        return {
+            "question_id": self.question_id,
+            "question_text": self.question_text,
+            "question_type": self.question_type,
+            "difficulty": self.difficulty.value,
+            "knowledge_points": self.knowledge_points,
+            "user_answer": self.user_answer,
+            "score": self.score,
+            "feedback": self.feedback,
+            "follow_ups": self.follow_ups,
+            "current_follow_up_idx": self.current_follow_up_idx,
+            "hints_given": self.hints_given,
+            "status": self.status.value,
+            "answered_at": self.answered_at.isoformat() if self.answered_at else None,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "InterviewQuestion":
+        """从数据库 payload 创建实例
+
+        Args:
+            payload: JSON 字典
+
+        Returns:
+            InterviewQuestion 实例
+        """
+        answered_at_str = payload.get("answered_at")
+        answered_at = datetime.fromisoformat(answered_at_str) if answered_at_str else None
+
+        return cls(
+            question_id=payload["question_id"],
+            question_text=payload["question_text"],
+            question_type=payload.get("question_type", "knowledge"),
+            difficulty=DifficultyLevel(payload.get("difficulty", "medium")),
+            knowledge_points=payload.get("knowledge_points", []),
+            user_answer=payload.get("user_answer"),
+            score=payload.get("score"),
+            feedback=payload.get("feedback"),
+            follow_ups=payload.get("follow_ups", []),
+            current_follow_up_idx=payload.get("current_follow_up_idx", 0),
+            hints_given=payload.get("hints_given", []),
+            status=QuestionStatus(payload.get("status", "pending")),
+            answered_at=answered_at,
+        )
+
 
 class InterviewSession(BaseModel):
     """面试会话聚合根"""
@@ -119,6 +170,53 @@ class InterviewSession(BaseModel):
         self.status = SessionStatus.COMPLETED
         self.ended_at = datetime.now()
         self.updated_at = datetime.now()
+
+    def pause(self) -> None:
+        """暂停会话"""
+        self.status = SessionStatus.PAUSED
+        self.updated_at = datetime.now()
+
+    def resume(self) -> None:
+        """恢复会话"""
+        self.status = SessionStatus.ACTIVE
+        self.updated_at = datetime.now()
+
+    def add_question(self, question: InterviewQuestion) -> None:
+        """添加题目"""
+        self.questions.append(question)
+        self.updated_at = datetime.now()
+
+    @classmethod
+    def create(
+        cls,
+        user_id: str,
+        company: str,
+        position: str,
+        difficulty: DifficultyLevel = DifficultyLevel.MEDIUM,
+        total_questions: int = 10,
+    ) -> "InterviewSession":
+        """创建面试会话（工厂方法）
+
+        Args:
+            user_id: 用户 ID
+            company: 公司名称
+            position: 岗位名称
+            difficulty: 难度设置
+            total_questions: 题目总数
+
+        Returns:
+            新创建的 InterviewSession 实例
+        """
+        session_id = str(__import__("uuid").uuid4())
+        return cls(
+            session_id=session_id,
+            user_id=user_id,
+            company=company,
+            position=position,
+            difficulty=difficulty,
+            total_questions=total_questions,
+            status=SessionStatus.ACTIVE,
+        )
 
     def is_completed(self) -> bool:
         """是否已完成"""

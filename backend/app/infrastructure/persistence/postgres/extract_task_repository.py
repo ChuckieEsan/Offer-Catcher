@@ -408,7 +408,8 @@ class PostgresExtractTaskRepository:
                         "SELECT COUNT(*) FROM extract_tasks WHERE user_id = %s",
                         (user_id,),
                     )
-                return cur.fetchone()[0]
+                row = cur.fetchone()
+                return row[0] if row else 0
         except Exception as e:
             logger.error(f"Failed to count tasks: {e}")
             raise

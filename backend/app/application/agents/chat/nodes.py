@@ -3,19 +3,49 @@
 包含 router、ingest_flow、react_loop 等核心节点。
 """
 
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, trim_messages
+from typing import Any, cast
+
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, trim_messages, AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.agents import create_agent
 from langgraph.graph.state import CompiledStateGraph
 
-from app.application.agents.chat.state import AgentState
+from app.application.agents.chat.state import AgentState, SessionContext
 from app.infrastructure.common.logger import logger
 from app.infrastructure.observability import traced_async
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.cache import singleton
-from app.infrastructure.common.prompt import load_prompt_template
+from app.infrastructure.common.prompt import load_prompt_template, load_prompt_content
 from app.application.agents.chat.runtime import UserContext
 from app.application.agents.chat.prompts import PROMPTS_DIR
+
+
+def _get_last_message_content(state: AgentState) -> str:
+    """安全获取最后一条消息的内容
+
+    Args:
+        state: Agent 状态
+
+    Returns:
+        消息内容字符串，如果无法获取则返回空字符串
+    """
+    messages = state.get("messages")
+    if not messages:
+        return ""
+    last_msg = messages[-1]
+    content = last_msg.content
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        # 处理多部分内容，提取文本部分
+        text_parts = []
+        for part in content:
+            if isinstance(part, str):
+                text_parts.append(part)
+            elif isinstance(part, dict) and "text" in part:
+                text_parts.append(part["text"])
+        return " ".join(text_parts)
+    return ""
 
 
 # ==================== State Gate Node ====================
@@ -55,7 +85,7 @@ def router_node(state: AgentState) -> AgentState:
     Returns:
         包含 intent、params 和 context 的状态更新
     """
-    user_input = state["messages"][-1].content
+    user_input = _get_last_message_content(state)
     logger.info(f"Router processing: {user_input[:50]}...")
 
     # 使用轻量 LLM 调用进行二分类
@@ -66,7 +96,11 @@ def router_node(state: AgentState) -> AgentState:
     ]
 
     response = llm.invoke(messages)
-    intent = response.content.strip().lower()
+    content = response.content
+    if isinstance(content, str):
+        intent = content.strip().lower()
+    else:
+        intent = "other"
 
     logger.info(f"Router result: intent={intent}")
 
@@ -88,7 +122,7 @@ def extract_node(state: AgentState) -> AgentState:
         当前默认从文本提取。图片处理由前端通过 OCR 完成，
         OCR 结果作为文本消息传入。
     """
-    user_input = state["messages"][-1].content
+    user_input = _get_last_message_content(state)
 
     logger.info("Extracting interview questions...")
 
@@ -102,11 +136,11 @@ def extract_node(state: AgentState) -> AgentState:
         result = extractor.extract(source=user_input, source_type="text")
 
         # 更新会话上下文（公司/岗位）
-        new_session_context = dict(state.get("session_context", {}))
-        if result.company:
-            new_session_context["company"] = result.company
-        if result.position:
-            new_session_context["position"] = result.position
+        new_session_context: SessionContext = {
+            "user_id": state.get("session_context", {}).get("user_id", ""),
+            "company": result.company or state.get("session_context", {}).get("company", ""),
+            "position": result.position or state.get("session_context", {}).get("position", ""),
+        }
 
         return {
             "extracted_interview": result,
@@ -158,7 +192,7 @@ def handle_confirmation_node(state: AgentState) -> AgentState:
     - 确认：存储并发送 MQ
     - 拒绝：重新提取或退出
     """
-    user_input = state["messages"][-1].content.lower().strip()
+    user_input = _get_last_message_content(state).lower().strip()
 
     if "确认" in user_input or "正确" in user_input or "对" in user_input:
         return {
@@ -189,21 +223,34 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         完整的入库流程（包含 MQ 发送）应使用 `IngestionPipeline.ingest()`。
         MQ 异步答案生成功能在 `app/pipelines/ingestion.py` 中实现。
     """
-    from app.infrastructure.persistence.qdrant import get_qdrant_manager
+    from app.infrastructure.persistence.qdrant import get_question_repository
+    from app.domain.question.aggregates import Question
     from app.domain.shared.enums import QuestionType
 
     interview = state.get("extracted_interview")
     if not interview:
         return {"response_to_user": "没有可存储的数据"}
 
-    qdrant = get_qdrant_manager()
+    repo = get_question_repository()
     stored_count = 0
     mq_count = 0
 
     for q in interview.questions:
         try:
+            # 将 QuestionItem 转换为 Question 聚合根
+            question = Question(
+                question_id=q.question_id,
+                question_text=q.question_text,
+                question_type=q.question_type,
+                mastery_level=q.mastery_level,
+                company=q.company or interview.company,
+                position=q.position or interview.position,
+                core_entities=q.core_entities,
+                metadata=q.metadata,
+                cluster_ids=q.cluster_ids,
+            )
             # 存储到 Qdrant
-            qdrant.upsert_question(q)
+            repo.save(question)
             stored_count += 1
 
             # 分类熔断：knowledge/scenario 需要发 MQ 异步生成答案
@@ -228,7 +275,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
 # ==================== ReAct Loop Node ====================
 
 @singleton
-def _get_react_agent() -> CompiledStateGraph:
+def _get_react_agent() -> CompiledStateGraph[Any, Any, Any, Any]:
     """获取 ReAct Agent 实例（带缓存）
 
     启用 DeepSeek thinking mode 以支持思考 + 工具调用。
@@ -241,9 +288,8 @@ def _get_react_agent() -> CompiledStateGraph:
     from app.application.agents.factory import get_react_tools
     tools = get_react_tools()
 
-    prompt = load_prompt_template("react_agent.md", PROMPTS_DIR)
-    # 提取原始模板字符串（create_agent 接受 str）
-    system_prompt = prompt.messages[0].prompt.template
+    # 直接加载原始模板内容
+    system_prompt = load_prompt_content("react_agent.md", PROMPTS_DIR)
     # 移除 skills_prompt 占位符（暂时不使用 skill 系统）
     system_prompt = system_prompt.replace("{{ skills_prompt }}", "")
     # 添加 context_schema 以支持 ToolRuntime 注入 user_id
@@ -331,7 +377,7 @@ def _load_memory_context(user_id: str) -> str | None:
         return memory_content
 
 
-@traced_async
+@traced_async()
 async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """ReAct 循环节点
 
@@ -372,9 +418,10 @@ async def react_loop_node(state: AgentState, config: RunnableConfig) -> AgentSta
     try:
         user_runtime_context = UserContext(user_id=user_id)
 
+        # LangGraph 的 context 参数类型定义问题，使用 cast
         result = await agent.ainvoke(
             {"messages": messages},
-            context=user_runtime_context,
+            context=cast(Any, user_runtime_context),
             config=config
         )
 

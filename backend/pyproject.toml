@@ -46,6 +46,7 @@ dependencies = [
     "langchain-deepseek>=1.0.1",
     "pgvector>=0.4.0",
     "pyroscope-io>=1.0.5",
+    "pyright>=1.1.408",
 ]
 
 [dependency-groups]

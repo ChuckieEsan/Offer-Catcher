@@ -6,11 +6,11 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_openai import ChatOpenAI
 
-from app.application.agents.shared.base_agent import BaseAgent
+from app.application.agents.shared.base_agent import BaseAgent, LLMType
 from app.application.agents.answer_specialist.prompts import PROMPTS_DIR
 from app.infrastructure.adapters.web_search_adapter import WebSearchAdapter, get_web_search_adapter
 from app.infrastructure.common.logger import logger
@@ -33,7 +33,7 @@ class AnswerSpecialistAgent(BaseAgent[str]):
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         web_search_adapter: WebSearchAdapter,
         prompts_dir: Any = PROMPTS_DIR,
     ) -> None:

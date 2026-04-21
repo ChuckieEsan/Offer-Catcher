@@ -10,7 +10,7 @@ import json
 import random
 import re
 from datetime import datetime
-from typing import AsyncIterator, Optional, List, Tuple
+from typing import Any, AsyncIterator, Optional, List, Tuple
 import uuid
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -20,8 +20,9 @@ from app.domain.question.repositories import QuestionRepository
 from app.infrastructure.adapters.embedding_adapter import EmbeddingAdapter
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.prompt import build_prompt
-from app.domain.interview.aggregates import InterviewSession, InterviewQuestion
+from app.domain.shared.enums import SessionStatus, QuestionStatus, DifficultyLevel
 from app.domain.interview.aggregates import InterviewSession, InterviewQuestion, InterviewSessionCreate, InterviewReport
+from app.application.agents.shared.base_agent import LLMType
 from app.application.agents.interview.prompts import PROMPTS_DIR
 
 
@@ -87,10 +88,10 @@ class InterviewAgent:
 
     def __init__(
         self,
-        llm: ChatOpenAI,
+        llm: LLMType,
         question_repo: QuestionRepository,
         embedding_adapter: EmbeddingAdapter,
-        prompts_dir: any = PROMPTS_DIR,
+        prompts_dir: Any = PROMPTS_DIR,
     ) -> None:
         """初始化 InterviewAgent
 
@@ -138,9 +139,9 @@ class InterviewAgent:
             user_id=user_id,
             company=request.company,
             position=request.position,
-            difficulty=request.difficulty,
+            difficulty=DifficultyLevel(request.difficulty),
             total_questions=request.total_questions,
-            status="active",
+            status=SessionStatus.ACTIVE,
         )
 
         # 预加载题目
@@ -189,7 +190,7 @@ class InterviewAgent:
                 question_type=q.question_type.value,
                 difficulty=session.difficulty,
                 knowledge_points=q.core_entities or [],
-                status="pending",
+                status=QuestionStatus.PENDING,
             )
             session.questions.append(interview_question)
 
@@ -219,7 +220,7 @@ class InterviewAgent:
                 question_type=q_type,
                 difficulty=session.difficulty,
                 knowledge_points=[],
-                status="pending",
+                status=QuestionStatus.PENDING,
             )
             session.questions.append(question)
 
@@ -262,7 +263,7 @@ class InterviewAgent:
 
         # 更新用户回答
         current_question.user_answer = answer
-        current_question.status = "answered"
+        current_question.status = QuestionStatus.ANSWERING
         current_question.answered_at = datetime.now()
 
         # 构建评估 Prompt
@@ -302,7 +303,7 @@ class InterviewAgent:
 
             if should_continue or score >= 70:
                 # 进入下一题
-                current_question.status = "scored"
+                current_question.status = QuestionStatus.SCORED
                 session.current_question_idx += 1
 
                 if session.is_completed():
@@ -391,7 +392,7 @@ class InterviewAgent:
 
         current_question = session.get_current_question()
         if current_question:
-            current_question.status = "skipped"
+            current_question.status = QuestionStatus.SKIPPED
             # 跳过的题目评分设为 0
             current_question.score = 0
 
@@ -417,11 +418,11 @@ class InterviewAgent:
         Returns:
             结束信息
         """
-        session.status = "completed"
+        session.status = SessionStatus.COMPLETED
         session.ended_at = datetime.now()
 
         # 计算统计
-        answered = [q for q in session.questions if q.status in ["answered", "scored"]]
+        answered = [q for q in session.questions if q.status in (QuestionStatus.SCORED, QuestionStatus.SKIPPED)]
         session.correct_count = sum(1 for q in answered if q.score and q.score >= 70)
 
         logger.info(f"Interview session ended: {session.session_id}, "
@@ -444,11 +445,11 @@ class InterviewAgent:
             面试报告
         """
         session = self.get_session(session_id)
-        if not session or session.status != "completed":
+        if not session or session.status != SessionStatus.COMPLETED:
             return None
 
-        answered = [q for q in session.questions if q.status in ["answered", "scored"]]
-        skipped = [q for q in session.questions if q.status == "skipped"]
+        answered = [q for q in session.questions if q.status in (QuestionStatus.SCORED, QuestionStatus.SKIPPED)]
+        skipped = [q for q in session.questions if q.status == QuestionStatus.SKIPPED]
 
         # 计算时长
         duration_minutes = 0.0
