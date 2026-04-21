@@ -114,18 +114,21 @@ class PostgresSessionSummaryRepository:
         """语义检索摘要"""
         register_vector(self._client.conn)
 
+        # 将 Python list 转换为 pgvector 可接受的字符串格式
+        embedding_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+
         with self._client.conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
                 SELECT id, conversation_id, user_id, summary, embedding,
                        message_cursor_uuid, created_at,
-                       1 - (embedding <=> %s) as similarity
+                       1 - (embedding <=> %s::vector) as similarity
                 FROM session_summaries
                 WHERE user_id = %s
-                ORDER BY embedding <=> %s
+                ORDER BY embedding <=> %s::vector
                 LIMIT %s
                 """,
-                (query_embedding, user_id, query_embedding, top_k),
+                (embedding_str, user_id, embedding_str, top_k),
             )
             rows = cur.fetchall()
 
@@ -151,7 +154,8 @@ class PostgresSessionSummaryRepository:
     def _row_to_summary(self, row: dict) -> SessionSummary:
         """将数据库行转换为 SessionSummary 实体"""
         embedding = None
-        if row.get("embedding"):
+        # 使用 is not None 检查，避免 numpy 数组的真值判断问题
+        if row.get("embedding") is not None:
             embedding = list(row["embedding"])
 
         return SessionSummary(
