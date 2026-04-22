@@ -13,7 +13,7 @@ from langchain.agents import create_agent
 
 from app.infrastructure.adapters.llm_adapter import get_llm
 from app.infrastructure.common.logger import logger
-from app.infrastructure.common.prompt import load_prompt_template
+from app.infrastructure.common.prompt import load_prompt_template, build_prompt
 from app.application.agents.memory.tools import (
     write_session_summary,
     update_preferences,
@@ -87,12 +87,12 @@ async def run_memory_agent(
         # 1. 获取游标位置
         cursor_uuid = get_cursor(user_id, conversation_id)
 
-        # 2. 检查游标互斥
-        if cursor_uuid and has_memory_writes_since(messages, cursor_uuid):
-            logger.info("Memory update skipped: main agent already wrote")
+        # 2. 永久游标：如果该用户在该对话中已有游标，跳过处理
+        if cursor_uuid:
+            logger.info(f"Memory update skipped: cursor already exists for {conversation_id}")
             return
 
-        # 3. 获取游标后的新消息
+        # 3. 获取游标后的新消息（无游标时处理全部消息）
         new_messages = get_messages_since_cursor(messages, cursor_uuid)
 
         if not new_messages:
@@ -110,22 +110,24 @@ async def run_memory_agent(
         # 6. 获取最新消息的 UUID（用于更新游标）
         latest_uuid = _get_latest_message_uuid(new_messages)
 
-        # 7. 构建 Prompt 参数
-        prompt_context = {
-            "new_messages": formatted_messages,
-            "current_preferences": current_preferences or "",
-            "current_behaviors": current_behaviors or "",
-            "conversation_id": conversation_id,
-            "user_id": user_id,
-            "cursor_uuid": latest_uuid or "",
-        }
+        # 7. 使用 build_prompt 渲染提示词模板
+        rendered_prompt = build_prompt(
+            "memory_agent.md",
+            PROMPTS_DIR,
+            new_messages=formatted_messages,
+            current_preferences=current_preferences or "",
+            current_behaviors=current_behaviors or "",
+            conversation_id=conversation_id,
+            user_id=user_id,
+            cursor_uuid=latest_uuid or "",
+        )
 
         # 8. 创建 Agent
         agent = create_memory_agent()
 
-        # 9. 构建输入消息
+        # 9. 构建输入消息（使用渲染后的完整提示词）
         input_messages = [
-            HumanMessage(content=_build_context_message(prompt_context)),
+            HumanMessage(content=rendered_prompt),
         ]
 
         # 10. 调用 Agent（Agent 自主调用 Tools）
@@ -156,26 +158,6 @@ def _get_latest_message_uuid(messages: list[BaseMessage]) -> str | None:
 
     last_msg = messages[-1]
     return getattr(last_msg, "id", None) or getattr(last_msg, "uuid", None)
-
-
-def _build_context_message(context: dict) -> str:
-    """构建上下文消息"""
-    return f"""请分析以下对话并更新记忆。
-
-游标后的新消息：
-{context["new_messages"]}
-
-当前 preferences.md：
-{context["current_preferences"]}
-
-当前 behaviors.md：
-{context["current_behaviors"]}
-
-conversation_id: {context["conversation_id"]}
-user_id: {context["user_id"]}
-cursor_uuid: {context["cursor_uuid"]}
-"""
-
 
 __all__ = [
     "create_memory_agent",
