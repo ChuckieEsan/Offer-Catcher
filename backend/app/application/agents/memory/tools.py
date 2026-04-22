@@ -24,24 +24,41 @@ def write_session_summary(
     summary: str,
     conversation_id: str,
     user_id: str,
+    importance: str = "medium",
+    topics: str = "",
+    memory_layer: str = "short_term",
 ) -> str:
     """写入会话摘要到 session_summaries 表。
 
     Args:
-        summary: 会话摘要（简洁描述关键内容）
+        summary: 会话摘要（简洁描述关键内容，20-50字）
         conversation_id: 对话 ID
         user_id: 用户 ID
+        importance: 重要性评级（high/medium/low），根据讨论深度判断
+        topics: 话题标签（逗号分隔，如 "rabbitmq,kafka,消息队列")
+        memory_layer: 记忆层级（long_term/short_term），高重要性用 long_term
 
     Returns:
         操作结果消息
     """
     from app.infrastructure.persistence.postgres import get_session_summary_repository
+    from app.domain.memory.aggregates import MemoryLayer
 
     repo = get_session_summary_repository()
 
     # 计算 embedding
     embedding_adapter = get_embedding_adapter()
     embedding = embedding_adapter.embed(summary)
+
+    # 重要性映射
+    importance_map = {"high": 0.8, "medium": 0.5, "low": 0.3}
+    importance_score = importance_map.get(importance, 0.5)
+
+    # 解析话题
+    topics_list = [t.strip() for t in topics.split(",") if t.strip()] if topics else []
+
+    # 层级映射
+    layer = MemoryLayer.LTM if memory_layer == "long_term" else MemoryLayer.STM
 
     # 创建摘要
     session_summary_id = str(uuid.uuid4())
@@ -53,12 +70,15 @@ def write_session_summary(
         user_id=user_id,
         summary=summary,
         embedding=embedding,
+        importance_score=importance_score,
+        topics=topics_list,
+        memory_layer=layer,
     )
 
     repo.create(summary_entity)
-    logger.info(f"Session summary written: {session_summary_id}")
+    logger.info(f"Session summary written: {session_summary_id}, importance={importance_score}, layer={memory_layer}")
 
-    return f"会话摘要已写入: {session_summary_id}"
+    return f"会话摘要已写入: {session_summary_id} (重要性:{importance}, 层级:{memory_layer})"
 
 
 @tool

@@ -27,6 +27,17 @@ class MemoryStatus(str, Enum):
     ARCHIVED = "archived"  # 已归档
 
 
+class MemoryLayer(str, Enum):
+    """记忆层级
+
+    STM (Short-term Memory): 短期记忆，可能随时间衰减
+    LTM (Long-term Memory): 长期记忆，长期保留，不衰减
+    """
+
+    STM = "short_term"
+    LTM = "long_term"
+
+
 class MemoryReference(BaseModel):
     """记忆引用实体（聚合内）
 
@@ -180,6 +191,14 @@ class SessionSummary(BaseModel):
         user_id: 用户 ID
         summary: 会话摘要（3句话左右）
         embedding: 语义向量（用于检索）
+        importance_score: 重要性分数（0.0-1.0，Agent 自判断）
+        topics: 话题标签列表（Agent 提取）
+        memory_layer: 记忆层级（STM/LTM）
+        access_count: 访问计数（被召回次数）
+        feedback_score: 反馈分数（用户正向/负向反馈累计）
+        last_accessed: 最后访问时间
+        decay_factor: 衰减因子（STM 衰减，LTM 不衰减）
+        marked_for_deletion: 是否标记删除
         message_cursor_uuid: 产生此记忆时的游标位置
         created_at: 创建时间
     """
@@ -189,6 +208,14 @@ class SessionSummary(BaseModel):
     user_id: str = Field(description="用户 ID")
     summary: str = Field(description="会话摘要（简洁描述关键内容）")
     embedding: Optional[list[float]] = Field(default=None, description="语义向量")
+    importance_score: float = Field(default=0.5, ge=0.0, le=1.0, description="重要性分数")
+    topics: list[str] = Field(default_factory=list, description="话题标签列表")
+    memory_layer: MemoryLayer = Field(default=MemoryLayer.STM, description="记忆层级")
+    access_count: int = Field(default=0, ge=0, description="访问计数")
+    feedback_score: int = Field(default=0, description="反馈分数")
+    last_accessed: Optional[datetime] = Field(default=None, description="最后访问时间")
+    decay_factor: float = Field(default=1.0, ge=0.0, le=1.0, description="衰减因子")
+    marked_for_deletion: bool = Field(default=False, description="是否标记删除")
     message_cursor_uuid: Optional[str] = Field(default=None, description="游标位置")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
 
@@ -200,6 +227,9 @@ class SessionSummary(BaseModel):
         user_id: str,
         summary: str,
         embedding: list[float] | None = None,
+        importance_score: float = 0.5,
+        topics: list[str] | None = None,
+        memory_layer: MemoryLayer = MemoryLayer.STM,
         message_cursor_uuid: str | None = None,
     ) -> "SessionSummary":
         """创建会话摘要"""
@@ -209,13 +239,49 @@ class SessionSummary(BaseModel):
             user_id=user_id,
             summary=summary,
             embedding=embedding,
+            importance_score=importance_score,
+            topics=topics or [],
+            memory_layer=memory_layer,
+            access_count=0,
+            feedback_score=0,
+            last_accessed=None,
+            decay_factor=1.0,
+            marked_for_deletion=False,
             message_cursor_uuid=message_cursor_uuid,
             created_at=datetime.now(),
         )
 
+    def record_access(self) -> None:
+        """记录访问（召回时调用）"""
+        self.access_count += 1
+        self.last_accessed = datetime.now()
+
+    def add_feedback(self, is_positive: bool) -> None:
+        """添加反馈"""
+        if is_positive:
+            self.feedback_score += 1
+            self.importance_score = min(self.importance_score + 0.1, 1.0)
+        else:
+            self.feedback_score -= 1
+            self.importance_score = max(self.importance_score - 0.2, 0.0)
+
+    def upgrade_to_ltm(self) -> None:
+        """升级到长期记忆"""
+        self.memory_layer = MemoryLayer.LTM
+        self.importance_score = max(self.importance_score, 0.7)
+        self.decay_factor = 1.0  # LTM 不衰减
+
+    def apply_decay(self, decay_rate: float) -> None:
+        """应用衰减（仅对 STM 有效）"""
+        if self.memory_layer == MemoryLayer.STM:
+            self.decay_factor *= (1 - decay_rate)
+            if self.decay_factor < 0.1:
+                self.marked_for_deletion = True
+
 
 __all__ = [
     "MemoryStatus",
+    "MemoryLayer",
     "MemoryReference",
     "Memory",
     "SessionSummary",
