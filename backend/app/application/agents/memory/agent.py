@@ -87,12 +87,12 @@ async def run_memory_agent(
         # 1. 获取游标位置
         cursor_uuid = get_cursor(user_id, conversation_id)
 
-        # 2. 永久游标：如果该用户在该对话中已有游标，跳过处理
-        if cursor_uuid:
-            logger.info(f"Memory update skipped: cursor already exists for {conversation_id}")
+        # 2. 检查游标互斥（主 Agent 是否已写入记忆）
+        if cursor_uuid and has_memory_writes_since(messages, cursor_uuid):
+            logger.info("Memory update skipped: main agent already wrote")
             return
 
-        # 3. 获取游标后的新消息（无游标时处理全部消息）
+        # 3. 获取游标后的新消息
         new_messages = get_messages_since_cursor(messages, cursor_uuid)
 
         if not new_messages:
