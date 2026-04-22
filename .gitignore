@@ -27,6 +27,8 @@ models/
 # 备份数据
 backups
 
+data
+
 # 日志文件
 logs/
 
