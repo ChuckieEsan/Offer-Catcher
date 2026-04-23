@@ -459,8 +459,8 @@ class TestMemoryAgentEvaluation:
         Returns:
             Agent 执行结果
         """
-        from app.application.agents.memory.agent import create_memory_agent
-        from app.application.agents.memory.agent import _build_context_message
+        from app.application.agents.memory.agent import create_memory_agent, PROMPTS_DIR
+        from app.infrastructure.common.prompt import build_prompt
 
         # 构建 context
         messages = build_messages_from_scenario(scenario)
@@ -502,7 +502,16 @@ class TestMemoryAgentEvaluation:
                         # 创建并执行 Agent
                         agent = create_memory_agent()
 
-                        input_messages = [HumanMessage(content=_build_context_message(context))]
+                        input_messages = [HumanMessage(content=build_prompt(
+                            "memory_agent.md",
+                            PROMPTS_DIR,
+                            new_messages=context["new_messages"],
+                            current_preferences=context["current_preferences"],
+                            current_behaviors=context["current_behaviors"],
+                            conversation_id=context["conversation_id"],
+                            user_id=context["user_id"],
+                            cursor_uuid=context["cursor_uuid"],
+                        ))]
 
                         result = agent.invoke({"messages": input_messages})
 
