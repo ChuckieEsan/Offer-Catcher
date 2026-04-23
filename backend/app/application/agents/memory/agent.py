@@ -19,23 +19,22 @@ from app.application.agents.memory.tools import (
     update_preferences,
     update_behaviors,
     update_memory_index,
-    update_cursor,
 )
 from app.application.agents.memory.cursor import (
     get_cursor,
     has_memory_writes_since,
     get_messages_since_cursor,
+    save_cursor,
 )
 from app.infrastructure.persistence.postgres import get_memory_repository
 
 
-# Memory Agent Tools 列表
+# Memory Agent Tools 列表（不包含 update_cursor，游标更新由确定性代码执行）
 MEMORY_AGENT_TOOLS = [
     write_session_summary,
     update_preferences,
     update_behaviors,
     update_memory_index,
-    update_cursor,
 ]
 
 
@@ -130,8 +129,13 @@ async def run_memory_agent(
             HumanMessage(content=rendered_prompt),
         ]
 
-        # 10. 调用 Agent（Agent 自主调用 Tools）
+        # 10. 调用 Agent（Agent 自主调用 Tools，不含 update_cursor）
         await agent.ainvoke({"messages": input_messages})
+
+        # 11. 确定性更新游标（无论 Agent 结果如何，都要更新）
+        if latest_uuid:
+            save_cursor(user_id, conversation_id, latest_uuid)
+            logger.info(f"Cursor updated deterministically: {latest_uuid}")
 
         logger.info(f"Memory agent completed for conversation {conversation_id}")
 

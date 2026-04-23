@@ -20,7 +20,6 @@ from app.application.agents.memory.tools import (
     update_preferences,
     update_behaviors,
     update_memory_index,
-    update_cursor,
 )
 from app.application.agents.memory.cursor import (
     get_cursor_key,
@@ -56,7 +55,6 @@ __all__ = [
     "update_preferences",
     "update_behaviors",
     "update_memory_index",
-    "update_cursor",
     # Cursor
     "get_cursor_key",
     "save_cursor",

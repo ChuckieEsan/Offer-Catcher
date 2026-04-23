@@ -8,7 +8,8 @@
 - update_preferences: 更新偏好设置
 - update_behaviors: 更新行为模式
 - update_memory_index: 更新 MEMORY.md 概要
-- update_cursor: 更新游标位置
+
+注意：游标更新由确定性代码执行，不作为 Agent Tool。
 """
 
 import uuid
@@ -257,34 +258,9 @@ def _build_sessions_summary(recent_sessions: list) -> str:
     return "\n".join(lines)
 
 
-@tool
-def update_cursor(
-    conversation_id: str,
-    user_id: str,
-    cursor_uuid: str,
-) -> str:
-    """更新游标位置到最新消息。
-
-    Args:
-        conversation_id: 对话 ID
-        user_id: 用户 ID
-        cursor_uuid: 最新消息的 UUID
-
-    Returns:
-        操作结果消息
-    """
-    from app.application.agents.memory.cursor import save_cursor
-
-    save_cursor(user_id, conversation_id, cursor_uuid)
-    logger.info(f"Cursor updated: {cursor_uuid}")
-
-    return "游标已更新"
-
-
 __all__ = [
     "write_session_summary",
     "update_preferences",
     "update_behaviors",
     "update_memory_index",
-    "update_cursor",
 ]

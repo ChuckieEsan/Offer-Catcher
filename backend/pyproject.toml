@@ -47,6 +47,7 @@ dependencies = [
     "pgvector>=0.4.0",
     "pyroscope-io>=1.0.5",
     "pyright>=1.1.408",
+    "ragas>=0.4.3",
 ]
 
 [dependency-groups]
