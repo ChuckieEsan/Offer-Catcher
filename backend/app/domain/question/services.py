@@ -6,6 +6,7 @@
 接口列表：
 - AnswerGenerator: 答案生成器接口
 - InterviewExtractor: 面经提取器接口
+- PositionNormalizer: 岗位归一化接口
 """
 
 from typing import Protocol
@@ -56,7 +57,45 @@ class InterviewExtractor(Protocol):
         ...
 
 
+class PositionNormalizer(Protocol):
+    """岗位归一化接口
+
+    由 PositionNormalizationService 实现，在 Application 层。
+    """
+
+    def get_normalized(self, position: str) -> str:
+        """获取岗位的规范化名称
+
+        Args:
+            position: 原始岗位名称
+
+        Returns:
+            规范化后的名称
+        """
+        ...
+
+    async def normalize_and_cache(self, position: str) -> str:
+        """规范化新岗位并缓存
+
+        Args:
+            position: 原始岗位名称
+
+        Returns:
+            规范化后的名称
+        """
+        ...
+
+    async def run_pipeline(self) -> dict[str, int]:
+        """执行完整归一化流程
+
+        Returns:
+            迁移统计 {原始名称: 更新数量}
+        """
+        ...
+
+
 __all__ = [
     "AnswerGenerator",
     "InterviewExtractor",
+    "PositionNormalizer",
 ]

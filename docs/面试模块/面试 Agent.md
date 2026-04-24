@@ -131,7 +131,32 @@ process_answer_stream(answer)
 
 ### 4. 追问次数限制
 
-为避免无限追问循环，设置追问上限 `MAX_FOLLOW_UPS = 3`。
+为避免无限追问循环，设置追问上限。配置项 `interview_max_follow_ups` 默认值为 3。
+
+#### 配置位置
+
+```python
+# 文件: infrastructure/config/settings.py
+
+class Settings(BaseSettings):
+    # 面试模块配置
+    interview_max_follow_ups: int = Field(default=3, description="追问次数上限")
+```
+
+可通过环境变量 `INTERVIEW_MAX_FOLLOW_UPS` 覆盖。
+
+#### Agent 使用
+
+```python
+class InterviewAgent:
+    def __init__(
+        self,
+        ...
+        max_follow_ups: Optional[int] = None,
+    ):
+        # 从配置读取，支持构造时覆盖
+        self._max_follow_ups = max_follow_ups or get_settings().interview_max_follow_ups
+```
 
 #### 设计逻辑
 
@@ -343,7 +368,7 @@ COMPANY_STYLES = {
 
 | 文件路径 | 内容 |
 |----------|------|
-| `application/agents/interview/agent.py` | Interview Agent 实现（含 MAX_FOLLOW_UPS=3） |
+| `application/agents/interview/agent.py` | Interview Agent 实现（追问上限可配置） |
 | `application/agents/scorer/agent.py` | Scorer Agent 实现 |
 | `application/agents/factory.py` | Agent 组装和依赖注入 |
 | `domain/interview/aggregates.py` | InterviewSession, InterviewQuestion 聚合 |

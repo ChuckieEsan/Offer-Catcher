@@ -6,6 +6,7 @@
 - 分类熔断（判断是否需要异步答案）
 - 发送 MQ 任务
 - 复用答案机制（查重）
+- 岗位名称规范化
 
 职责边界：
 - 只负责题目入库，不涉及 ExtractTask 任务状态管理
@@ -31,6 +32,10 @@ from app.infrastructure.messaging import get_producer
 from app.infrastructure.messaging.messages import MQTaskMessage
 from app.infrastructure.persistence.neo4j import get_graph_client
 from app.infrastructure.common.logger import logger
+from app.application.services.position_normalization_service import (
+    PositionNormalizationService,
+    get_position_normalization_service,
+)
 
 
 class IngestionResult(BaseModel):
@@ -68,6 +73,7 @@ class IngestionApplicationService:
         question_repo: Optional[QuestionRepository] = None,
         embedding: Optional[EmbeddingAdapter] = None,
         graph_repo: Optional[GraphRepository] = None,
+        position_normalization_service: Optional["PositionNormalizationService"] = None,
     ) -> None:
         """初始化应用服务
 
@@ -75,10 +81,14 @@ class IngestionApplicationService:
             question_repo: Question 仓库（支持依赖注入）
             embedding: Embedding 适配器（支持依赖注入）
             graph_repo: Graph 仓库（支持依赖注入）
+            position_normalization_service: 岗位归一化服务（支持依赖注入）
         """
         self._question_repo = question_repo or get_question_repository()
         self._embedding = embedding or get_embedding_adapter()
         self._graph_repo = graph_repo or get_graph_client()
+        self._position_normalization_service = (
+            position_normalization_service or get_position_normalization_service()
+        )
         self._mq_producer = None
 
     async def _get_producer(self):
@@ -164,11 +174,14 @@ class IngestionApplicationService:
                     # 复用答案，不触发异步任务
                     skip_async_question_ids.add(question_item.question_id)
 
-                # 创建 Question 聚合
+                # 创建 Question 聚合（岗位名称规范化）
+                normalized_position = await self._position_normalization_service.normalize_and_cache(
+                    question_item.position
+                )
                 question = Question.create(
                     question_text=question_item.question_text,
                     company=question_item.company,
-                    position=question_item.position,
+                    position=normalized_position,
                     question_type=QuestionType(question_item.question_type.value),
                     core_entities=question_item.core_entities,
                     metadata=question_item.metadata,

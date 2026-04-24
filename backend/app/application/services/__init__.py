@@ -38,6 +38,10 @@ from app.application.services.interview_service import (
     InterviewApplicationService,
     get_interview_service,
 )
+from app.application.services.position_normalization_service import (
+    PositionNormalizationService,
+    get_position_normalization_service,
+)
 
 __all__ = [
     "QuestionApplicationService",
@@ -61,4 +65,6 @@ __all__ = [
     "get_stats_service",
     "InterviewApplicationService",
     "get_interview_service",
+    "PositionNormalizationService",
+    "get_position_normalization_service",
 ]
