@@ -6,6 +6,7 @@ import {
   Typography,
   Button,
   Input,
+  InputNumber,
   Select,
   Space,
   Spin,
@@ -129,6 +130,7 @@ export default function InterviewPage() {
   const [company, setCompany] = useState<string>("");
   const [position, setPosition] = useState<string>("");
   const [difficulty, setDifficulty] = useState<string>("medium");
+  const [questionCount, setQuestionCount] = useState<number | null>(10);
 
   // 会话状态
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -173,6 +175,11 @@ export default function InterviewPage() {
       return;
     }
 
+    if (!questionCount || questionCount < 1 || questionCount > 20) {
+      message.error("题目数量必须在 1-20 之间");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -187,7 +194,7 @@ export default function InterviewPage() {
           company,
           position,
           difficulty,
-          total_questions: 10,
+          total_questions: questionCount,
         }),
       });
 
@@ -680,6 +687,18 @@ export default function InterviewPage() {
                   value={difficulty}
                   onChange={setDifficulty}
                   options={DIFFICULTIES}
+                />
+              </div>
+
+              <div>
+                <Text strong>题目数量</Text>
+                <InputNumber
+                  style={{ width: "100%", marginTop: 8 }}
+                  min={1}
+                  max={20}
+                  value={questionCount}
+                  onChange={(value) => setQuestionCount(value)}
+                  placeholder="输入题目数量 (1-20)"
                 />
               </div>
 
