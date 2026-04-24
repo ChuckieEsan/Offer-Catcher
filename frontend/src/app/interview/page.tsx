@@ -28,6 +28,7 @@ import { XMarkdown } from "@ant-design/x-markdown";
 import { useRouter } from "next/navigation";
 import MainLayout from "@/components/MainLayout";
 import VoiceInput from "@/components/VoiceInput";
+import { getPositionStats } from "@/lib/api";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -46,18 +47,6 @@ const COMPANIES = [
   "小红书",
 ];
 
-// 岗位列表
-const POSITIONS = [
-  "后端开发",
-  "前端开发",
-  "算法工程师",
-  "数据开发",
-  "测试开发",
-  "运维工程师",
-  "AI Agent 开发岗",
-  "产品经理",
-];
-
 // 难度选项
 const DIFFICULTIES = [
   { value: "easy", label: "简单" },
@@ -65,11 +54,19 @@ const DIFFICULTIES = [
   { value: "hard", label: "困难" },
 ];
 
+interface QuestionData {
+  question_id: string;
+  question_text: string;
+  question_type: string;
+  difficulty?: string;
+  knowledge_points?: string[];
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  question?: string;
+  question?: string | QuestionData;
   isStreaming?: boolean;
 }
 
@@ -80,7 +77,7 @@ interface SessionInfo {
   status: string;
   total_questions: number;
   current_question_idx: number;
-  current_question?: string;
+  current_question?: string | QuestionData;
 }
 
 // 流式数据处理函数
@@ -124,6 +121,10 @@ function ThinkingIndicator() {
 export default function InterviewPage() {
   const router = useRouter();
 
+  // 岗位列表（动态获取）
+  const [positions, setPositions] = useState<string[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(true);
+
   // 面试配置
   const [company, setCompany] = useState<string>("");
   const [position, setPosition] = useState<string>("");
@@ -138,12 +139,27 @@ export default function InterviewPage() {
 
   // 下一题按钮状态
   const [showNextButton, setShowNextButton] = useState(false);
-  const [nextQuestionText, setNextQuestionText] = useState<string | null>(null);
+  const [nextQuestionText, setNextQuestionText] = useState<string | QuestionData | null>(null);
 
   // 面试报告
   const [report, setReport] = useState<any>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 获取岗位列表
+  useEffect(() => {
+    const fetchPositions = async () => {
+      try {
+        const stats = await getPositionStats();
+        setPositions(stats.map((s) => s.position));
+      } catch (error) {
+        message.error("获取岗位列表失败");
+      } finally {
+        setPositionsLoading(false);
+      }
+    };
+    fetchPositions();
+  }, []);
 
   // 自动滚动
   useEffect(() => {
@@ -648,10 +664,12 @@ export default function InterviewPage() {
                 <Text strong>目标岗位</Text>
                 <Select
                   style={{ width: "100%", marginTop: 8 }}
-                  placeholder="选择目标岗位"
+                  placeholder={positionsLoading ? "加载中..." : "选择目标岗位"}
                   value={position}
                   onChange={setPosition}
-                  options={POSITIONS.map((p) => ({ value: p, label: p }))}
+                  options={positions.map((p) => ({ value: p, label: p }))}
+                  loading={positionsLoading}
+                  disabled={positionsLoading}
                 />
               </div>
 
@@ -740,7 +758,9 @@ export default function InterviewPage() {
                         // 题目卡片
                         <div>
                           <Text strong style={{ fontSize: 16 }}>
-                            {msg.question}
+                            {typeof msg.question === "string"
+                              ? msg.question
+                              : msg.question.question_text}
                           </Text>
                         </div>
                       ) : msg.isStreaming ? (

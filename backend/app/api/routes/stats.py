@@ -14,6 +14,7 @@ from app.application.services.stats_service import (
     CompanyStats,
     EntityStats,
     ClusterStats,
+    PositionStats,
 )
 from app.infrastructure.common.logger import logger
 
@@ -42,6 +43,20 @@ async def get_company_stats():
     logger.info("Get company stats")
     service = get_stats_service()
     return service.get_company_stats()
+
+
+@router.get("/positions", response_model=List[PositionStats])
+async def get_position_stats():
+    """获取岗位统计
+
+    返回所有岗位及其题目数量，按数量降序排列。
+    用于前端动态获取可选岗位列表。
+
+    使用缓存优化，TTL 5 分钟。
+    """
+    logger.info("Get position stats")
+    service = get_stats_service()
+    return service.get_position_stats()
 
 
 @router.get("/entities", response_model=List[EntityStats])

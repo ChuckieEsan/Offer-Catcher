@@ -19,6 +19,7 @@ import type {
   CompanyStats,
   EntityStats,
   ClusterStats,
+  PositionStats,
   ExtractTask,
   ExtractTaskListResponse,
   ExtractTaskSubmitRequest,
@@ -430,6 +431,11 @@ export async function getEntityStats(
 
 export async function getClusterStats(): Promise<ClusterStats[]> {
   const res = await api.get("/stats/clusters");
+  return res.data;
+}
+
+export async function getPositionStats(): Promise<PositionStats[]> {
+  const res = await api.get("/stats/positions");
   return res.data;
 }
 

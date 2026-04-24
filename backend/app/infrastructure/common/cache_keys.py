@@ -38,6 +38,11 @@ class CacheKeys:
         return f"{cls.PREFIX}:stats:entities:{company_key}:{limit}"
 
     @classmethod
+    def stats_positions(cls) -> str:
+        """岗位统计缓存 key"""
+        return f"{cls.PREFIX}:stats:positions"
+
+    @classmethod
     def stats_entities_pattern(cls) -> str:
         return f"{cls.PREFIX}:stats:entities:*"
 

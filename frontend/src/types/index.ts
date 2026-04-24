@@ -76,6 +76,8 @@ export interface SearchResult {
   question_type: string;
   core_entities: string[];
   question_answer?: string;
+  cluster_ids?: string[];
+  metadata?: Record<string, unknown>;
   score: number;
 }
 
@@ -130,6 +132,11 @@ export interface EntityStats {
 
 export interface ClusterStats {
   cluster_id: string;
+  count: number;
+}
+
+export interface PositionStats {
+  position: string;
   count: number;
 }
 

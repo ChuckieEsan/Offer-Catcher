@@ -71,6 +71,13 @@ class ClusterStats(BaseModel):
     count: int = Field(description="题目数")
 
 
+class PositionStats(BaseModel):
+    """岗位统计输出"""
+
+    position: str = Field(description="岗位名称")
+    count: int = Field(description="题目数")
+
+
 # ========== 应用服务 ==========
 
 
@@ -251,6 +258,38 @@ class StatsApplicationService:
             ttl=300,
         )
 
+    def get_position_stats(self) -> list[PositionStats]:
+        """获取岗位统计
+
+        使用缓存，TTL 5 分钟。
+        返回所有岗位及其题目数量，按数量降序排列。
+
+        Returns:
+            PositionStats 列表
+        """
+
+        def fetch() -> list[PositionStats]:
+            questions = self._question_repo.find_all()
+
+            # 按岗位分组统计
+            position_data = defaultdict(int)
+            for q in questions:
+                position_data[q.position] += 1
+
+            # 转换为 PositionStats 并排序
+            stats = [
+                PositionStats(position=position, count=count)
+                for position, count in position_data.items()
+            ]
+
+            return sorted(stats, key=lambda x: x.count, reverse=True)
+
+        return self._cache.get_with_lock(
+            CacheKeys.stats_positions(),
+            fetch,
+            ttl=300,
+        )
+
 
 @singleton
 def get_stats_service() -> StatsApplicationService:
@@ -268,5 +307,6 @@ __all__ = [
     "CompanyStats",
     "EntityStats",
     "ClusterStats",
+    "PositionStats",
     "get_stats_service",
 ]

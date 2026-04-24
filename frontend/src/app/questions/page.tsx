@@ -255,7 +255,7 @@ export default function QuestionsPage() {
         visible: true,
         questionId: id,
         questionText,
-        newAnswer: res.question_answer,
+        newAnswer: res.answer,
       });
     } catch (error) {
       hide();
