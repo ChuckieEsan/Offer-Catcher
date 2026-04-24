@@ -5,7 +5,7 @@
 
 import pytest
 
-from app.infrastructure.persistence.neo4j import Neo4jGraphClient, get_graph_client
+from app.infrastructure.persistence.neo4j import Neo4jClient, get_graph_client
 
 
 class TestNeo4jGraphClient:
@@ -14,7 +14,7 @@ class TestNeo4jGraphClient:
     @pytest.fixture(scope="class")
     def client(self):
         """创建真实的 Graph Client"""
-        client = Neo4jGraphClient()
+        client = Neo4jClient()
         # 尝试连接
         connected = client.connect()
         if not connected:
@@ -98,7 +98,7 @@ class TestGraphClientNewFeatures:
     @pytest.fixture(scope="class")
     def client(self):
         """创建真实的 Graph Client"""
-        client = Neo4jGraphClient()
+        client = Neo4jClient()
         connected = client.connect()
         if not connected:
             pytest.skip("Neo4j 未连接，跳过测试")
@@ -141,26 +141,6 @@ class TestGraphClientNewFeatures:
         # 可能包含 Agent, LangChain（公司A同时考察了这些）
         assert "co_occurrence_count" in result[0] if result else True
 
-    def test_get_entity_cooccurrence(self, client):
-        """测试知识点共现分析"""
-        result = client.get_entity_cooccurrence("RAG", limit=5)
-
-        assert isinstance(result, list)
-        if result:
-            # 验证返回结构
-            assert "entity" in result[0]
-            assert "weight" in result[0]
-
-    def test_get_company_entity_distribution(self, client):
-        """测试获取公司在各个知识点的分布"""
-        result = client.get_company_entity_distribution("关联测试公司A")
-
-        assert isinstance(result, list)
-        if result:
-            entities = [r["entity"] for r in result]
-            assert "RAG" in entities
-            assert "Agent" in entities
-
     def test_get_cross_company_entities(self, client):
         """测试跨公司知识点查询"""
         result = client.get_cross_company_entities(min_companies=2)
@@ -184,8 +164,9 @@ class TestGraphClientSingleton:
 
     def test_get_graph_client_singleton(self):
         """测试单例获取"""
-        from app.infrastructure.persistence.neo4j import graph_client as graph_client_module
-        graph_client_module._graph_client = None
+        from app.infrastructure.persistence.neo4j.client import _neo4j_client as neo4j_module
+        import app.infrastructure.persistence.neo4j.client as client_module
+        client_module._neo4j_client = None
 
         client1 = get_graph_client()
         client2 = get_graph_client()

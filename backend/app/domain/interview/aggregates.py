@@ -28,6 +28,9 @@ class InterviewQuestion(BaseModel):
     score: Optional[int] = Field(default=None, ge=0, le=100, description="评分")
     feedback: Optional[str] = Field(default=None, description="AI 反馈")
 
+    mastery_before: Optional[int] = Field(default=None, description="答题前掌握度等级 (0/1/2)")
+    mastery_after: Optional[int] = Field(default=None, description="答题后掌握度等级 (0/1/2)")
+
     follow_ups: list[str] = Field(default_factory=list, description="追问列表")
     current_follow_up_idx: int = Field(default=0, description="当前追问索引")
     hints_given: list[str] = Field(default_factory=list, description="已给出的提示")
@@ -75,6 +78,8 @@ class InterviewQuestion(BaseModel):
             "user_answer": self.user_answer,
             "score": self.score,
             "feedback": self.feedback,
+            "mastery_before": self.mastery_before,
+            "mastery_after": self.mastery_after,
             "follow_ups": self.follow_ups,
             "current_follow_up_idx": self.current_follow_up_idx,
             "hints_given": self.hints_given,
@@ -104,6 +109,8 @@ class InterviewQuestion(BaseModel):
             user_answer=payload.get("user_answer"),
             score=payload.get("score"),
             feedback=payload.get("feedback"),
+            mastery_before=payload.get("mastery_before"),
+            mastery_after=payload.get("mastery_after"),
             follow_ups=payload.get("follow_ups", []),
             current_follow_up_idx=payload.get("current_follow_up_idx", 0),
             hints_given=payload.get("hints_given", []),

@@ -160,6 +160,7 @@ def get_interview_agent() -> InterviewAgent:
     - LLM (deepseek chat)
     - QuestionRepository
     - EmbeddingAdapter
+    - ScorerAgent
 
     Returns:
         InterviewAgent 实例
@@ -169,10 +170,12 @@ def get_interview_agent() -> InterviewAgent:
         llm = get_llm("deepseek", "chat")
         question_repo = get_question_repository()
         embedding_adapter = get_embedding_adapter()
+        scorer_agent = get_scorer_agent()
         _interview_agent = InterviewAgent(
             llm=llm,
             question_repo=question_repo,
             embedding_adapter=embedding_adapter,
+            scorer_agent=scorer_agent,
             prompts_dir=INTERVIEW_PROMPTS,
         )
     return _interview_agent

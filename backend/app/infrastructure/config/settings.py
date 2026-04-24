@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     memory_context_max_size: int = Field(default=20 * 1024)
     memory_lock_timeout: int = Field(default=30)
 
+    # 面试模块配置
+    interview_max_follow_ups: int = Field(default=3, description="追问次数上限")
+
     # PostgreSQL 配置
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)

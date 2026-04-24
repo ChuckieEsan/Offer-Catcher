@@ -17,6 +17,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.domain.question.repositories import QuestionRepository
+from app.domain.question.aggregates import Question
+from app.domain.shared.enums import MasteryLevel, SessionStatus, QuestionStatus, DifficultyLevel
 from app.infrastructure.adapters.embedding_adapter import EmbeddingAdapter
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.prompt import build_prompt
@@ -24,6 +26,7 @@ from app.domain.shared.enums import SessionStatus, QuestionStatus, DifficultyLev
 from app.domain.interview.aggregates import InterviewSession, InterviewQuestion, InterviewSessionCreate, InterviewReport
 from app.application.agents.shared.base_agent import LLMType
 from app.application.agents.interview.prompts import PROMPTS_DIR
+from app.infrastructure.config.settings import get_settings
 
 
 # 公司类型与面试风格映射
@@ -84,6 +87,8 @@ class InterviewAgent:
     - llm: ChatOpenAI 实例
     - question_repo: QuestionRepository 实例
     - embedding_adapter: EmbeddingAdapter 实例
+    - scorer_agent: ScorerAgent 实例（可选）
+    - max_follow_ups: 追问次数上限（从配置读取）
     """
 
     def __init__(
@@ -91,7 +96,9 @@ class InterviewAgent:
         llm: LLMType,
         question_repo: QuestionRepository,
         embedding_adapter: EmbeddingAdapter,
+        scorer_agent: Optional["ScorerAgent"] = None,
         prompts_dir: Any = PROMPTS_DIR,
+        max_follow_ups: Optional[int] = None,
     ) -> None:
         """初始化 InterviewAgent
 
@@ -99,12 +106,16 @@ class InterviewAgent:
             llm: LLM 实例（依赖注入）
             question_repo: 题目仓库实例（依赖注入）
             embedding_adapter: 嵌入适配器实例（依赖注入）
+            scorer_agent: 评分 Agent 实例（依赖注入，可选）
             prompts_dir: Prompt 目录路径
+            max_follow_ups: 追问次数上限（默认从配置读取）
         """
         self._llm = llm
         self._question_repo = question_repo
         self._embedding_adapter = embedding_adapter
+        self._scorer_agent = scorer_agent
         self._prompts_dir = prompts_dir
+        self._max_follow_ups = max_follow_ups or get_settings().interview_max_follow_ups
         self._sessions: dict[str, InterviewSession] = {}
 
     def _get_system_prompt(self, session: InterviewSession) -> str:
@@ -116,6 +127,60 @@ class InterviewAgent:
             company=session.company,
             position=session.position,
             style=style,
+        )
+
+    def _count_by_mastery(
+        self,
+        company: str,
+        position: str,
+        mastery_level: MasteryLevel,
+    ) -> int:
+        """统计指定公司/岗位/掌握度的题目数量
+
+        Args:
+            company: 公司名称
+            position: 岗位名称
+            mastery_level: 掌握度等级
+
+        Returns:
+            题目数量
+        """
+        query_filter = self._question_repo._client.build_filter(
+            company=company,
+            position=position,
+            mastery_level=mastery_level.value,
+        )
+        return self._question_repo._client.count(query_filter)
+
+    def _fetch_by_mastery(
+        self,
+        company: str,
+        position: str,
+        mastery_level: MasteryLevel,
+        query_vector: list[float],
+        limit: int,
+    ) -> list[Tuple[Question, float]]:
+        """从指定掌握度池中检索题目
+
+        Args:
+            company: 公司名称
+            position: 岗位名称
+            mastery_level: 掌握度等级
+            query_vector: 查询向量
+            limit: 返回数量
+
+        Returns:
+            [(Question, score)] 列表
+        """
+        filter_conditions = {
+            "company": company,
+            "position": position,
+            "mastery_level": mastery_level.value,
+        }
+        return self._question_repo.search(
+            query_vector=query_vector,
+            filter_conditions=filter_conditions,
+            limit=limit,
         )
 
     def create_session(
@@ -131,6 +196,9 @@ class InterviewAgent:
 
         Returns:
             新创建的面试会话
+
+        Raises:
+            ValueError: 题库中没有足够的题目
         """
         session_id = str(uuid.uuid4())
 
@@ -147,9 +215,8 @@ class InterviewAgent:
         # 预加载题目
         self._preload_questions(session)
 
-        # 如果没有预加载到题目，生成默认题目
         if not session.questions:
-            self._generate_default_questions(session)
+            raise ValueError(f"题库中没有足够的题目：公司={request.company}, 岗位={request.position}")
 
         self._sessions[session_id] = session
         logger.info(f"Created interview session: {session_id}, questions: {len(session.questions)}")
@@ -157,30 +224,70 @@ class InterviewAgent:
         return session
 
     def _preload_questions(self, session: InterviewSession) -> None:
-        """预加载面试题目
+        """预加载面试题目（掌握度驱动自适应策略）
 
-        从题库中随机选取题目，确保每次面试有不同的题目组合。
+        算法：
+        1. 统计公司/岗位下各掌握度的题目数量
+        2. 按权重分配题目数量（LEVEL_0: 60%, LEVEL_1: 30%, LEVEL_2: 10%）
+        3. 从各池中检索相关题目（向量相似度）
+        4. 合并并随机打乱
 
         Args:
             session: 面试会话
         """
-        # 构建查询上下文
         context = f"公司：{session.company} | 岗位：{session.position} | 面试题"
         query_vector = self._embedding_adapter.embed(context)
 
-        # 搜索更多候选题目，从中随机选取
-        candidate_limit = session.total_questions * 3
-        search_results = self._question_repo.search(query_vector, limit=candidate_limit)
+        # 统计各掌握度池的题目数量
+        counts = {
+            MasteryLevel.LEVEL_0: self._count_by_mastery(session.company, session.position, MasteryLevel.LEVEL_0),
+            MasteryLevel.LEVEL_1: self._count_by_mastery(session.company, session.position, MasteryLevel.LEVEL_1),
+            MasteryLevel.LEVEL_2: self._count_by_mastery(session.company, session.position, MasteryLevel.LEVEL_2),
+        }
 
-        if not search_results:
-            logger.warning("No candidates found from QuestionRepository")
+        total_available = sum(counts.values())
+        if total_available == 0:
+            logger.warning("No questions found from QuestionRepository")
             return
 
-        # 随机打乱候选题目
-        random.shuffle(search_results)
+        # 按权重分配题目数量
+        weights = {
+            MasteryLevel.LEVEL_0: 0.6,
+            MasteryLevel.LEVEL_1: 0.3,
+            MasteryLevel.LEVEL_2: 0.1,
+        }
 
-        # 选取指定数量的题目
-        selected = search_results[:session.total_questions]
+        allocations = {}
+        remaining = session.total_questions
+
+        for level in [MasteryLevel.LEVEL_0, MasteryLevel.LEVEL_1, MasteryLevel.LEVEL_2]:
+            desired = int(session.total_questions * weights[level])
+            actual = min(desired, counts[level], remaining)
+            allocations[level] = actual
+            remaining -= actual
+
+        # 如果还有剩余（因某些池题目不足），从 LEVEL_0 补充
+        if remaining > 0 and counts[MasteryLevel.LEVEL_0] > allocations[MasteryLevel.LEVEL_0]:
+            extra = min(remaining, counts[MasteryLevel.LEVEL_0] - allocations[MasteryLevel.LEVEL_0])
+            allocations[MasteryLevel.LEVEL_0] += extra
+
+        # 从各池检索题目
+        all_candidates: list[Tuple[Question, float]] = []
+
+        for level, count in allocations.items():
+            if count > 0:
+                candidates = self._fetch_by_mastery(
+                    session.company,
+                    session.position,
+                    level,
+                    query_vector,
+                    limit=count * 2,
+                )
+                all_candidates.extend(candidates)
+
+        # 随机打乱并选取
+        random.shuffle(all_candidates)
+        selected = all_candidates[:session.total_questions]
 
         # 转换为 InterviewQuestion
         for q, _score in selected:
@@ -191,40 +298,16 @@ class InterviewAgent:
                 difficulty=session.difficulty,
                 knowledge_points=q.core_entities or [],
                 status=QuestionStatus.PENDING,
+                mastery_before=q.mastery_level.value,
             )
             session.questions.append(interview_question)
 
-        logger.info(f"Preloaded {len(session.questions)} questions for session {session.session_id}")
-
-    def _generate_default_questions(self, session: InterviewSession) -> None:
-        """当题库为空时生成默认题目
-
-        Args:
-            session: 面试会话
-        """
-        default_questions = [
-            ("请介绍一下你最近做的一个项目，以及你在其中的角色和贡献。", "project"),
-            ("你如何处理工作中遇到的技术难题？请举一个具体的例子。", "behavioral"),
-            ("请描述一下你对微服务架构的理解，以及它的优缺点。", "knowledge"),
-            ("如果系统出现性能问题，你会如何排查和优化？", "scenario"),
-            ("请解释一下数据库索引的原理，以及如何优化查询性能。", "knowledge"),
-        ]
-
-        # 随机打乱默认题目
-        random.shuffle(default_questions)
-
-        for i, (text, q_type) in enumerate(default_questions[:session.total_questions]):
-            question = InterviewQuestion(
-                question_id=f"default_{i}",
-                question_text=text,
-                question_type=q_type,
-                difficulty=session.difficulty,
-                knowledge_points=[],
-                status=QuestionStatus.PENDING,
-            )
-            session.questions.append(question)
-
-        logger.warning(f"Generated {len(session.questions)} default questions for session {session.session_id}")
+        logger.info(
+            f"Preloaded {len(session.questions)} questions for session {session.session_id} "
+            f"(LEVEL_0: {allocations[MasteryLevel.LEVEL_0]}, "
+            f"LEVEL_1: {allocations[MasteryLevel.LEVEL_1]}, "
+            f"LEVEL_2: {allocations[MasteryLevel.LEVEL_2]})"
+        )
 
     def get_session(self, session_id: str) -> Optional[InterviewSession]:
         """获取面试会话
@@ -242,7 +325,7 @@ class InterviewAgent:
         session_id: str,
         answer: str,
     ) -> AsyncIterator[str]:
-        """流式处理用户回答
+        """流式处理用户回答（集成 Scorer Agent）
 
         Args:
             session_id: 会话 ID
@@ -261,12 +344,196 @@ class InterviewAgent:
             yield json.dumps({"type": "error", "message": "No current question"})
             return
 
-        # 更新用户回答
         current_question.user_answer = answer
         current_question.status = QuestionStatus.ANSWERING
         current_question.answered_at = datetime.now()
 
-        # 构建评估 Prompt
+        score: int = 0
+        evaluation: str = ""
+        mastery_before: Optional[MasteryLevel] = None
+        mastery_after: Optional[MasteryLevel] = None
+
+        # 使用 Scorer Agent 进行专业评分
+        if self._scorer_agent:
+            try:
+                # 先查询题目获取原始 mastery_level（用于报告追踪变化）
+                original_question = self._question_repo.find_by_id(current_question.question_id)
+                if original_question:
+                    mastery_before = original_question.mastery_level
+
+                # Scorer Agent 是 async 方法，需要 await
+                score_result = await self._scorer_agent.score(
+                    question_id=current_question.question_id,
+                    user_answer=answer,
+                )
+                score = score_result.score
+                evaluation = score_result.feedback
+                mastery_after = score_result.mastery_level
+                current_question.score = score
+                current_question.feedback = evaluation
+                current_question.mastery_after = mastery_after.value
+
+                logger.info(
+                    f"Scorer evaluated: question={current_question.question_id}, "
+                    f"score={score}, mastery={mastery_before.name if mastery_before else 'N/A'} -> {mastery_after.name}"
+                )
+
+                yield json.dumps({
+                    "type": "score_result",
+                    "score": score,
+                    "mastery_before": mastery_before.name if mastery_before else None,
+                    "mastery_after": mastery_after.name,
+                    "strengths": score_result.strengths,
+                    "improvements": score_result.improvements,
+                    "feedback": evaluation,
+                })
+
+            except Exception as e:
+                logger.error(f"Scorer Agent failed: {e}, falling back to LLM evaluation")
+                score, evaluation = await self._fallback_evaluation_stream(
+                    session, current_question, answer
+                )
+        else:
+            score, evaluation = await self._fallback_evaluation_stream(
+                session, current_question, answer
+            )
+
+        should_continue = score >= 70
+
+        if should_continue:
+            # 回答达标，进入下一题
+            current_question.status = QuestionStatus.SCORED
+            session.current_question_idx += 1
+
+            if session.is_completed():
+                await self._end_session(session)
+                yield json.dumps({
+                    "type": "completed",
+                    "message": "面试已结束。感谢你的参与！",
+                    "session_id": session.session_id,
+                })
+            else:
+                next_question = session.get_current_question()
+                yield json.dumps({
+                    "type": "next_question_ready",
+                    "question_idx": session.current_question_idx,
+                    "next_question": next_question.question_text if next_question else None,
+                    "score": score,
+                })
+        else:
+            # 回答未达标，检查追问次数
+            follow_up_count = len(current_question.follow_ups)
+
+            if follow_up_count >= self._max_follow_ups:
+                # 已达到追问上限（已有 3 次追问），强制进入下一题
+                # 说明用户在问题理解上存在根本性不足
+                current_question.status = QuestionStatus.SCORED
+                session.current_question_idx += 1
+
+                # 先追加本次评估到追问列表
+                current_question.follow_ups.append(evaluation)
+
+                # 生成总结性反馈
+                summary_feedback = self._generate_follow_up_summary(
+                    current_question, score
+                )
+                current_question.feedback = summary_feedback
+
+                logger.info(
+                    f"Follow-up limit reached: question={current_question.question_id}, "
+                    f"follow_ups={len(current_question.follow_ups)}, forcing next question"
+                )
+
+                if session.is_completed():
+                    await self._end_session(session)
+                    yield json.dumps({
+                        "type": "completed",
+                        "message": "面试已结束。感谢你的参与！",
+                        "session_id": session.session_id,
+                    })
+                else:
+                    next_question = session.get_current_question()
+                    yield json.dumps({
+                        "type": "force_next",
+                        "message": f"该题目已追问 {self._max_follow_ups} 次，我们进入下一题。",
+                        "question_idx": session.current_question_idx,
+                        "next_question": next_question.question_text if next_question else None,
+                        "score": score,
+                        "summary_feedback": summary_feedback,
+                        "follow_up_count": follow_up_count + 1,
+                    })
+            else:
+                # 继续追问，先追加本次评估
+                current_question.follow_ups.append(evaluation)
+                new_count = len(current_question.follow_ups)
+
+                # 引导用户深入思考
+                yield json.dumps({
+                    "type": "follow_up",
+                    "question_idx": session.current_question_idx,
+                    "score": score,
+                    "follow_up_count": new_count,
+                    "max_follow_ups": self._max_follow_ups,
+                    "remaining_chances": self._max_follow_ups - new_count,
+                })
+
+    def _generate_follow_up_summary(
+        self,
+        question: InterviewQuestion,
+        final_score: int,
+    ) -> str:
+        """生成追问总结性反馈
+
+        当用户连续多次追问仍未达标时，给出明确的诊断性反馈，
+       指出用户在问题理解上的根本性不足。
+
+        Args:
+            question: 面试题目
+            final_score: 最终评分
+
+        Returns:
+            总结性反馈文本
+        """
+        knowledge_points = ", ".join(question.knowledge_points) if question.knowledge_points else "相关知识"
+
+        if final_score < 40:
+            # 回答质量很低
+            return (
+                f"经过 {self._max_follow_ups} 次追问，你对这道题的掌握程度仍然较低。"
+                f"建议你系统学习 {knowledge_points} 相关内容，"
+                f"理解核心概念后再尝试回答。"
+            )
+        elif final_score < 60:
+            # 回答质量中等偏下
+            return (
+                f"经过 {self._max_follow_ups} 次追问，你对这道题的理解还不够深入。"
+                f"建议加强对 {knowledge_points} 的学习，"
+                f"重点关注核心原理和实际应用场景。"
+            )
+        else:
+            # 回答接近达标但仍有差距
+            return (
+                f"经过 {self._max_follow_ups} 次追问，你的回答已经接近要求。"
+                f"建议进一步巩固 {knowledge_points} 的细节，"
+                f"确保能够清晰、完整地表达核心要点。"
+            )
+
+    async def _fallback_evaluation_stream(
+        self,
+        session: InterviewSession,
+        current_question: InterviewQuestion,
+        answer: str,
+    ) -> Tuple[int, str]:
+        """原有 LLM 流式评估（降级方案）
+
+        Args:
+            session: 面试会话
+            current_question: 当前题目
+            answer: 用户回答
+
+        Returns:
+            (score, evaluation)
+        """
         system_prompt = self._get_system_prompt(session)
         user_prompt = build_prompt(
             "interview_evaluate.md",
@@ -277,64 +544,24 @@ class InterviewAgent:
             answer=answer,
         )
 
-        # 流式生成回复
-        response_chunks = []
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
-        try:
-            async for chunk in self._llm.astream(messages):
-                content = chunk.content
-                if content:
-                    response_chunks.append(content)
-                    yield json.dumps({"type": "text", "content": content})
+        response_chunks = []
+        async for chunk in self._llm.astream(messages):
+            content = chunk.content
+            if content:
+                response_chunks.append(content)
 
-            # 收集完整回复
-            full_response = "".join(response_chunks)
+        full_response = "".join(response_chunks)
+        score, evaluation, _should_continue = parse_evaluation(full_response)
 
-            # 解析评估结果
-            score, evaluation, should_continue = parse_evaluation(full_response)
+        current_question.score = score
+        current_question.feedback = evaluation
 
-            # 更新题目评分
-            current_question.score = score
-            current_question.feedback = evaluation
-
-            if should_continue or score >= 70:
-                # 进入下一题
-                current_question.status = QuestionStatus.SCORED
-                session.current_question_idx += 1
-
-                if session.is_completed():
-                    # 面试结束
-                    await self._end_session(session)
-                    yield json.dumps({
-                        "type": "completed",
-                        "message": "面试已结束。感谢你的参与！",
-                        "session_id": session.session_id,
-                    })
-                else:
-                    # 有下一题，发送信号让前端显示按钮
-                    next_question = session.get_current_question()
-                    yield json.dumps({
-                        "type": "next_question_ready",
-                        "question_idx": session.current_question_idx,
-                        "next_question": next_question.question_text if next_question else None,
-                        "score": score,
-                    })
-            else:
-                # 继续追问，记录追问次数
-                current_question.follow_ups.append(full_response)
-                yield json.dumps({
-                    "type": "follow_up",
-                    "question_idx": session.current_question_idx,
-                    "score": score,
-                })
-
-        except Exception as e:
-            logger.error(f"Stream error: {e}", exc_info=True)
-            yield json.dumps({"type": "error", "message": str(e)})
+        return score, evaluation
 
     async def get_hint_stream(self, session_id: str) -> AsyncIterator[str]:
         """流式获取提示
