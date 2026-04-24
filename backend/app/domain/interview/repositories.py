@@ -3,9 +3,10 @@
 定义 InterviewSession 仓库的 Protocol，供基础设施层实现。
 """
 
-from typing import Protocol, Optional
+from typing import Protocol, Optional, runtime_checkable
 
 
+@runtime_checkable
 class InterviewSessionRepository(Protocol):
     """面试会话仓库接口
 

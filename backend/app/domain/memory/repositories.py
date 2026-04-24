@@ -4,11 +4,12 @@
 遵循依赖倒置原则：领域层定义接口，基础设施层实现。
 """
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.memory.aggregates import Memory, MemoryReference, SessionSummary
 
 
+@runtime_checkable
 class MemoryRepository(Protocol):
     """记忆仓库协议
 
@@ -63,6 +64,7 @@ class MemoryRepository(Protocol):
         ...
 
 
+@runtime_checkable
 class SessionSummaryRepository(Protocol):
     """会话摘要仓库协议
 

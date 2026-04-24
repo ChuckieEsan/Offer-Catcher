@@ -6,11 +6,12 @@
 
 from __future__ import annotations
 
-from typing import Protocol, List, Dict
+from typing import Protocol, List, Dict, runtime_checkable
 
 from app.domain.favorite.aggregates import Favorite
 
 
+@runtime_checkable
 class FavoriteRepository(Protocol):
     """收藏仓库协议
 

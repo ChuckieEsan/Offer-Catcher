@@ -100,15 +100,6 @@ class InterviewSessionCreateRequest(BaseModel):
     total_questions: int = Field(default=10, ge=1, le=50, description="题目总数")
 
 
-class InterviewSessionCreate(BaseModel):
-    """创建面试会话模型（内部使用）"""
-
-    company: str = Field(description="目标公司")
-    position: str = Field(description="目标岗位")
-    difficulty: str = Field(default="medium", description="难度设置")
-    total_questions: int = Field(default=10, ge=1, le=50, description="题目总数")
-
-
 class AnswerSubmitRequest(BaseModel):
     """提交回答请求"""
 
@@ -121,25 +112,6 @@ class AnswerSubmit(BaseModel):
     answer: str = Field(description="用户回答")
 
 
-class InterviewReport(BaseModel):
-    """面试报告模型"""
-
-    session_id: str
-    company: str
-    position: str
-    total_questions: int
-    answered_questions: int
-    correct_count: int
-    average_score: float
-    duration_minutes: float
-    overall_evaluation: str = Field(default="", description="综合评价")
-    strengths: list[str] = Field(default_factory=list)
-    weaknesses: list[str] = Field(default_factory=list)
-    knowledge_gaps: list[str] = Field(default_factory=list)
-    recommendations: list[str] = Field(default_factory=list)
-    question_details: list[dict[str, Any]] = Field(default_factory=list)
-
-
 __all__ = [
     "InterviewQuestionResponse",
     "InterviewSessionResponse",
@@ -148,8 +120,6 @@ __all__ = [
     "AnswerResponse",
     "HintResponse",
     "InterviewSessionCreateRequest",
-    "InterviewSessionCreate",
     "AnswerSubmitRequest",
     "AnswerSubmit",
-    "InterviewReport",
 ]

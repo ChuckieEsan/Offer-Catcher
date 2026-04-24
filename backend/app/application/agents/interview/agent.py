@@ -23,7 +23,7 @@ from app.infrastructure.adapters.embedding_adapter import EmbeddingAdapter
 from app.infrastructure.common.logger import logger
 from app.infrastructure.common.prompt import build_prompt
 from app.domain.shared.enums import SessionStatus, QuestionStatus, DifficultyLevel
-from app.domain.interview.aggregates import InterviewSession, InterviewQuestion, InterviewSessionCreate, InterviewReport
+from app.domain.interview.aggregates import InterviewSession, InterviewQuestion, InterviewReport
 from app.application.agents.shared.base_agent import LLMType
 from app.application.agents.interview.prompts import PROMPTS_DIR
 from app.infrastructure.config.settings import get_settings
@@ -186,13 +186,19 @@ class InterviewAgent:
     def create_session(
         self,
         user_id: str,
-        request: InterviewSessionCreate,
+        company: str,
+        position: str,
+        difficulty: str = "medium",
+        total_questions: int = 10,
     ) -> InterviewSession:
         """创建面试会话
 
         Args:
             user_id: 用户 ID
-            request: 创建请求
+            company: 公司名称
+            position: 岗位名称
+            difficulty: 难度设置
+            total_questions: 题目总数
 
         Returns:
             新创建的面试会话
@@ -205,10 +211,10 @@ class InterviewAgent:
         session = InterviewSession(
             session_id=session_id,
             user_id=user_id,
-            company=request.company,
-            position=request.position,
-            difficulty=DifficultyLevel(request.difficulty),
-            total_questions=request.total_questions,
+            company=company,
+            position=position,
+            difficulty=DifficultyLevel(difficulty),
+            total_questions=total_questions,
             status=SessionStatus.ACTIVE,
         )
 
@@ -216,7 +222,7 @@ class InterviewAgent:
         self._preload_questions(session)
 
         if not session.questions:
-            raise ValueError(f"题库中没有足够的题目：公司={request.company}, 岗位={request.position}")
+            raise ValueError(f"题库中没有足够的题目：公司={company}, 岗位={position}")
 
         self._sessions[session_id] = session
         logger.info(f"Created interview session: {session_id}, questions: {len(session.questions)}")

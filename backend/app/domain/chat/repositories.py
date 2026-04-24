@@ -4,11 +4,12 @@
 遵循依赖倒置原则：领域层定义接口，基础设施层实现。
 """
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.chat.aggregates import Conversation
 
 
+@runtime_checkable
 class ConversationRepository(Protocol):
     """对话仓库协议
 

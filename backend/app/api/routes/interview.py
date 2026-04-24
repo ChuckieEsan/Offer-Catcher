@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.application.agents.factory import get_interview_agent
 from app.domain.shared.enums import SessionStatus
-from app.domain.interview.aggregates import InterviewSession, InterviewSessionCreate, InterviewReport
+from app.domain.interview.aggregates import InterviewSession, InterviewReport
 from app.api.dto.interview_dto import (
     InterviewSessionResponse,
     InterviewSessionListResponse,
@@ -109,16 +109,14 @@ async def create_interview_session(
         f"company={request.company}, position={request.position}"
     )
 
-    # 转换 DTO 到模型（兼容 InterviewManager）
-    create_request = InterviewSessionCreate(
+    agent = get_interview_agent()
+    session = agent.create_session(
+        user_id=user_id,
         company=request.company,
         position=request.position,
         difficulty=request.difficulty,
         total_questions=request.total_questions,
     )
-
-    agent = get_interview_agent()
-    session = agent.create_session(user_id, create_request)
 
     return _session_to_response(session)
 

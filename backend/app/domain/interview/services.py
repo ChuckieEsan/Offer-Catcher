@@ -12,7 +12,7 @@
 
 from typing import Protocol
 
-from app.application.agents.scorer.results import ScoreResult
+from app.domain.interview.aggregates import ScoreResult
 from app.domain.shared.enums import MasteryLevel
 
 

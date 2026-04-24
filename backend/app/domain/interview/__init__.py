@@ -9,12 +9,21 @@
 仓库接口：
 - InterviewSessionRepository: 会话持久化接口
 
+值对象：
+- InterviewReport: 面试报告（Agent 生成的结果）
+- ScoreResult: 评分结果
+
 领域事件：
 - InterviewStarted: 面试开始事件
 - InterviewEnded: 面试结束事件
 """
 
-from app.domain.interview.aggregates import InterviewQuestion, InterviewSession
+from app.domain.interview.aggregates import (
+    InterviewQuestion,
+    InterviewSession,
+    InterviewReport,
+    ScoreResult,
+)
 from app.domain.interview.repositories import InterviewSessionRepository
 from app.domain.interview.events import (
     InterviewStarted,
@@ -29,6 +38,9 @@ __all__ = [
     "InterviewSession",
     # Repository Protocol
     "InterviewSessionRepository",
+    # Value Objects
+    "InterviewReport",
+    "ScoreResult",
     # Events
     "InterviewStarted",
     "InterviewEnded",

@@ -1,10 +1,12 @@
 """面试领域聚合定义
 
 包含面试领域的聚合根：
-- InterviewSession: 试会话聚合根
+- InterviewSession: 面试会话聚合根
 - InterviewQuestion: 面试题目实体
-- InterviewSessionCreate: 创建面试请求
-- InterviewReport: 面试报告
+
+值对象：
+- InterviewReport: 面试报告（Agent 生成的结果）
+- ScoreResult: 评分结果
 """
 
 from datetime import datetime
@@ -12,7 +14,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain.shared.enums import DifficultyLevel, SessionStatus, QuestionStatus
+from app.domain.shared.enums import DifficultyLevel, SessionStatus, QuestionStatus, MasteryLevel
 
 
 class InterviewQuestion(BaseModel):
@@ -243,17 +245,14 @@ class InterviewSession(BaseModel):
         return (datetime.now() - self.started_at).total_seconds() / 60
 
 
-class InterviewSessionCreate(BaseModel):
-    """创建面试会话请求"""
-
-    company: str = Field(description="目标公司")
-    position: str = Field(description="目标岗位")
-    difficulty: str = Field(default="medium", description="难度设置")
-    total_questions: int = Field(default=10, ge=1, le=50, description="题目总数")
+# ============ 值对象（数据传递） ============
 
 
 class InterviewReport(BaseModel):
-    """面试报告"""
+    """面试报告值对象
+
+    Agent 生成的面试结果，包含评分统计和改进建议。
+    """
 
     session_id: str
     company: str
@@ -271,9 +270,26 @@ class InterviewReport(BaseModel):
     question_details: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ScoreResult(BaseModel):
+    """打分结果值对象
+
+    评分器输出的结构化结果，包含评分和反馈。
+    """
+
+    question_id: str = Field(description="题目唯一标识")
+    question_text: str = Field(description="题目文本")
+    standard_answer: Optional[str] = Field(default=None, description="标准答案")
+    user_answer: str = Field(description="用户提交的答案")
+    score: int = Field(ge=0, le=100, description="评分 0-100")
+    mastery_level: MasteryLevel = Field(description="熟练度等级")
+    strengths: list[str] = Field(default_factory=list, description="答案优点")
+    improvements: list[str] = Field(default_factory=list, description="改进建议")
+    feedback: str = Field(description="综合反馈")
+
+
 __all__ = [
     "InterviewQuestion",
     "InterviewSession",
-    "InterviewSessionCreate",
     "InterviewReport",
+    "ScoreResult",
 ]
