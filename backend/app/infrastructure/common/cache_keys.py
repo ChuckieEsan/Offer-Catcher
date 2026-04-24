@@ -85,6 +85,21 @@ class CacheKeys:
         return f"{cls.PREFIX}:tool:web:{query_hash}"
 
     @classmethod
+    def tool_company_topics(cls, company: str) -> str:
+        """公司热门考点工具缓存 key"""
+        return f"{cls.PREFIX}:tool:company_topics:{company}"
+
+    @classmethod
+    def tool_knowledge_relations(cls, entity: str) -> str:
+        """知识点关联工具缓存 key"""
+        return f"{cls.PREFIX}:tool:knowledge_relations:{entity}"
+
+    @classmethod
+    def tool_cross_company_trends(cls, min_companies: int) -> str:
+        """跨公司考点趋势工具缓存 key"""
+        return f"{cls.PREFIX}:tool:cross_company_trends:{min_companies}"
+
+    @classmethod
     def tool_search_pattern(cls) -> str:
         return f"{cls.PREFIX}:tool:search:*"
 

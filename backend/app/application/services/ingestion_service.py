@@ -17,7 +17,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.domain.question.aggregates import ExtractedInterview, Question, QuestionItem
-from app.domain.question.repositories import QuestionRepository
+from app.domain.question.repositories import QuestionRepository, GraphRepository
 from app.domain.shared.enums import QuestionType
 
 from app.infrastructure.persistence.qdrant.question_repository import (
@@ -29,16 +29,7 @@ from app.infrastructure.adapters.embedding_adapter import (
 )
 from app.infrastructure.messaging import get_producer
 from app.infrastructure.messaging.messages import MQTaskMessage
-from app.infrastructure.messaging.messages import MQTaskMessage
-
-from app.infrastructure.persistence.qdrant.question_repository import (
-    get_question_repository,
-)
-from app.infrastructure.adapters.embedding_adapter import (
-    EmbeddingAdapter,
-    get_embedding_adapter,
-)
-from app.infrastructure.messaging import get_producer
+from app.infrastructure.persistence.neo4j import get_graph_client
 from app.infrastructure.common.logger import logger
 
 
@@ -76,15 +67,18 @@ class IngestionApplicationService:
         self,
         question_repo: Optional[QuestionRepository] = None,
         embedding: Optional[EmbeddingAdapter] = None,
+        graph_repo: Optional[GraphRepository] = None,
     ) -> None:
         """初始化应用服务
 
         Args:
             question_repo: Question 仓库（支持依赖注入）
             embedding: Embedding 适配器（支持依赖注入）
+            graph_repo: Graph 仓库（支持依赖注入）
         """
         self._question_repo = question_repo or get_question_repository()
         self._embedding = embedding or get_embedding_adapter()
+        self._graph_repo = graph_repo or get_graph_client()
         self._mq_producer = None
 
     async def _get_producer(self):
@@ -197,6 +191,17 @@ class IngestionApplicationService:
                 result.question_ids.append(question.question_id)
 
             logger.info(f"Saved {result.processed} questions to Qdrant")
+
+            # 3.1 写入 Neo4j 考频关系
+            neo4j_count = 0
+            for question in questions_to_save:
+                if question.core_entities:
+                    self._graph_repo.record_question_entities(
+                        company=question.company,
+                        entities=question.core_entities,
+                    )
+                    neo4j_count += 1
+            logger.info(f"Recorded exam frequency for {neo4j_count} questions in Neo4j")
 
             # 4. 分类熔断 - 发送 MQ 任务
             async_count = await self._send_async_tasks(

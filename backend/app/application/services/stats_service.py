@@ -8,7 +8,7 @@
 
 作为应用层服务，编排：
 - QuestionRepository：获取题目数据
-- Neo4jClient：获取图数据库统计
+- GraphRepository：获取图数据库统计
 - CacheApplicationService：缓存统计结果
 
 输出类型定义在 Application 层，API 层直接使用。
@@ -19,14 +19,11 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from app.domain.question.repositories import QuestionRepository
+from app.domain.question.repositories import QuestionRepository, GraphRepository
 from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,
 )
-from app.infrastructure.persistence.neo4j.client import (
-    Neo4jClient,
-    get_neo4j_client,
-)
+from app.infrastructure.persistence.neo4j import get_graph_client
 from app.application.services.cache_service import (
     CacheApplicationService,
     CacheKeys,
@@ -87,18 +84,18 @@ class StatsApplicationService:
     def __init__(
         self,
         question_repo: Optional[QuestionRepository] = None,
-        neo4j_client: Optional[Neo4jClient] = None,
+        graph_repo: Optional[GraphRepository] = None,
         cache: Optional[CacheApplicationService] = None,
     ) -> None:
         """初始化统计服务
 
         Args:
             question_repo: Question 仓库（支持依赖注入）
-            neo4j_client: Neo4j 客户端（支持依赖注入）
+            graph_repo: Graph 仓库（支持依赖注入）
             cache: 缓存服务（支持依赖注入）
         """
         self._question_repo = question_repo or get_question_repository()
-        self._neo4j_client = neo4j_client or get_neo4j_client()
+        self._graph_repo = graph_repo or get_graph_client()
         self._cache = cache or get_cache_service()
 
     def get_overview(self) -> OverviewStats:
@@ -209,7 +206,7 @@ class StatsApplicationService:
         cache_key = CacheKeys.stats_entities(company, limit)
 
         def fetch() -> list[EntityStats]:
-            top_entities = self._neo4j_client.get_top_entities(
+            top_entities = self._graph_repo.get_top_entities(
                 company=company,
                 limit=limit,
             )

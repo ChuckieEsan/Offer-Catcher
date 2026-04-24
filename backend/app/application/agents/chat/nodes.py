@@ -217,6 +217,7 @@ def store_and_mq_node(state: AgentState) -> AgentState:
     """存储并发送 MQ
 
     将提取的题目存储到 Qdrant，并根据类型决定是否发送 MQ。
+    同时写入 Neo4j 考频关系。
 
     Note:
         当前实现仅存储题目，未发送 MQ。
@@ -224,6 +225,8 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         MQ 异步答案生成功能在 `app/pipelines/ingestion.py` 中实现。
     """
     from app.infrastructure.persistence.qdrant import get_question_repository
+    from app.infrastructure.persistence.neo4j import get_graph_client
+    from app.domain.question.repositories import GraphRepository
     from app.domain.question.aggregates import Question
     from app.domain.shared.enums import QuestionType
 
@@ -232,8 +235,10 @@ def store_and_mq_node(state: AgentState) -> AgentState:
         return {"response_to_user": "没有可存储的数据"}
 
     repo = get_question_repository()
+    graph_repo: GraphRepository = get_graph_client()  # 组装代码获取实现
     stored_count = 0
     mq_count = 0
+    neo4j_count = 0
 
     for q in interview.questions:
         try:
@@ -253,6 +258,14 @@ def store_and_mq_node(state: AgentState) -> AgentState:
             repo.save(question)
             stored_count += 1
 
+            # 写入 Neo4j 考频关系
+            if q.core_entities:
+                graph_repo.record_question_entities(
+                    company=q.company or interview.company,
+                    entities=q.core_entities,
+                )
+                neo4j_count += 1
+
             # 分类熔断：knowledge/scenario 需要发 MQ 异步生成答案
             # 注：MQ 发送功能请使用 IngestionPipeline.ingest() 完成
             if q.question_type in [QuestionType.KNOWLEDGE, QuestionType.SCENARIO]:
@@ -264,6 +277,8 @@ def store_and_mq_node(state: AgentState) -> AgentState:
     result = f"已存储 {stored_count} 道题目"
     if mq_count > 0:
         result += f"，其中 {mq_count} 道题目将异步生成答案"
+    if neo4j_count > 0:
+        result += f"，已记录 {neo4j_count} 条考频关系"
 
     return {
         "response_to_user": result,

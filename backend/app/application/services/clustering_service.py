@@ -14,15 +14,12 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
 from app.domain.question.aggregates import Question, Cluster
-from app.domain.question.repositories import QuestionRepository, ClusterRepository
+from app.domain.question.repositories import QuestionRepository, ClusterRepository, GraphRepository
 
 from app.infrastructure.persistence.qdrant.question_repository import (
     get_question_repository,
 )
-from app.infrastructure.persistence.neo4j.client import (
-    Neo4jClient,
-    get_neo4j_client,
-)
+from app.infrastructure.persistence.neo4j import get_graph_client
 from app.infrastructure.adapters.embedding_adapter import (
     EmbeddingAdapter,
     get_embedding_adapter,
@@ -58,7 +55,7 @@ class ClusteringApplicationService:
     def __init__(
         self,
         question_repo: Optional[QuestionRepository] = None,
-        neo4j_client: Optional[Neo4jClient] = None,
+        graph_repo: Optional[GraphRepository] = None,
         embedding: Optional[EmbeddingAdapter] = None,
         min_cluster_size: int = 5,
         max_clusters: int = 30,
@@ -68,14 +65,14 @@ class ClusteringApplicationService:
 
         Args:
             question_repo: Question 仓库（支持依赖注入）
-            neo4j_client: Neo4j 客户端（支持依赖注入）
+            graph_repo: Graph 仓库（支持依赖注入）
             embedding: Embedding 适配器（支持依赖注入）
             min_cluster_size: 最小簇大小
             max_clusters: 最大簇数量
             auto_k: 是否自动选择最优 K
         """
         self._question_repo = question_repo or get_question_repository()
-        self._neo4j_client = neo4j_client or get_neo4j_client()
+        self._graph_repo = graph_repo or get_graph_client()
         self._embedding = embedding or get_embedding_adapter()
         self.min_cluster_size = min_cluster_size
         self.max_clusters = max_clusters
@@ -266,7 +263,7 @@ class ClusteringApplicationService:
             )
 
             # 8. 创建 Neo4j Cluster 节点（Cluster 只存图数据库，不存 Qdrant）
-            self._neo4j_client.create_cluster_node(
+            self._graph_repo.create_cluster_node(
                 cluster_id=cluster_id,
                 cluster_name=knowledge_points[0] if knowledge_points else "未命名",
                 summary=f"包含 {len(cluster_indices)} 道题目",
@@ -274,7 +271,7 @@ class ClusteringApplicationService:
 
             # 创建簇与知识点的关联关系
             for kp in knowledge_points:
-                self._neo4j_client.create_related_to_relationship(
+                self._graph_repo.create_related_to_relationship(
                     cluster_id=cluster_id,
                     knowledge_point=kp,
                 )
@@ -293,7 +290,7 @@ class ClusteringApplicationService:
             clustered_count += 1
 
             # 创建题目归属 Neo4j 关系
-            self._neo4j_client.create_belongs_to_relationship(
+            self._graph_repo.create_belongs_to_relationship(
                 question_id=question.question_id,
                 cluster_id=cluster_id,
             )

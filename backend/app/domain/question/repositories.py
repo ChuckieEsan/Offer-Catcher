@@ -396,4 +396,215 @@ __all__ = [
     "QuestionRepository",
     "ClusterRepository",
     "ExtractTaskRepository",
+    "GraphRepository",
 ]
+
+
+@runtime_checkable
+class GraphRepository(Protocol):
+    """图数据库仓库协议
+
+    定义考频关系、知识点关联等图数据的持久化接口。
+    Neo4jClient 实现此 Protocol。
+
+    核心功能：
+    1. 考频关系写入（Company → Entity）
+    2. 知识点关联查询（Entity 共现）
+    3. 跨公司考点分析
+    4. Cluster 节点管理
+    """
+
+    def create_company_node(self, company: str) -> bool:
+        """创建公司节点
+
+        Args:
+            company: 公司名称
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def create_entity_node(self, entity: str) -> bool:
+        """创建考点实体节点
+
+        Args:
+            entity: 知识点名称
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def create_exam_frequency_relationship(
+        self,
+        company: str,
+        entity: str,
+        question_count: int = 1,
+    ) -> bool:
+        """创建或更新考频关系
+
+        Args:
+            company: 公司名称
+            entity: 知识点名称
+            question_count: 题目数量（累加）
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def record_question_entities(
+        self,
+        company: str,
+        entities: list[str],
+    ) -> bool:
+        """记录题目的考点信息
+
+        批量创建考频关系，每个 entity 增加 1 次。
+
+        Args:
+            company: 公司名称
+            entities: 知识点列表
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def get_top_entities(
+        self,
+        company: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """获取热门考点
+
+        Args:
+            company: 公司名称（可选，不传则返回全局热门）
+            limit: 返回数量
+
+        Returns:
+            [{"entity": str, "count": int}] 列表
+        """
+        ...
+
+    def get_company_stats(self, company: str) -> dict:
+        """获取公司统计信息
+
+        Args:
+            company: 公司名称
+
+        Returns:
+            {"entity_count": int, "total_questions": int}
+        """
+        ...
+
+    def get_related_entities(
+        self,
+        entity: str,
+        limit: int = 5,
+    ) -> list[dict]:
+        """获取与给定知识点相关的其他知识点
+
+        Args:
+            entity: 知识点名称
+            limit: 返回数量
+
+        Returns:
+            [{"related_entity": str, "co_occurrence_count": int}] 列表
+        """
+        ...
+
+    def get_cross_company_entities(self, min_companies: int = 2) -> list[dict]:
+        """获取跨多家公司考察的知识点
+
+        Args:
+            min_companies: 最少被多少家公司考察过
+
+        Returns:
+            [{"entity": str, "companies": list[str], "total_count": int}] 列表
+        """
+        ...
+
+    def create_cluster_node(
+        self,
+        cluster_id: str,
+        cluster_name: str,
+        summary: str = "",
+    ) -> bool:
+        """创建考点簇节点
+
+        Args:
+            cluster_id: 簇 ID
+            cluster_name: 簇名称
+            summary: 簇摘要
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def create_related_to_relationship(
+        self,
+        cluster_id: str,
+        knowledge_point: str,
+    ) -> bool:
+        """创建簇与知识点的关联关系
+
+        Args:
+            cluster_id: 簇 ID
+            knowledge_point: 知识点名称
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def create_belongs_to_relationship(
+        self,
+        question_id: str,
+        cluster_id: str,
+    ) -> bool:
+        """创建题目归属簇的关系
+
+        Args:
+            question_id: 题目 ID
+            cluster_id: 簇 ID
+
+        Returns:
+            是否成功
+        """
+        ...
+
+    def get_cluster_by_id(self, cluster_id: str) -> dict | None:
+        """根据 ID 获取考点簇
+
+        Args:
+            cluster_id: 簇 ID
+
+        Returns:
+            簇信息字典或 None
+        """
+        ...
+
+    def get_all_clusters(self, limit: int = 50) -> list[dict]:
+        """获取所有考点簇
+
+        Args:
+            limit: 返回数量
+
+        Returns:
+            簇信息列表
+        """
+        ...
+
+    def delete_companies(self, companies: list[str]) -> bool:
+        """删除指定的公司节点及其关联关系
+
+        Args:
+            companies: 公司名称列表
+
+        Returns:
+            是否成功
+        """
+        ...

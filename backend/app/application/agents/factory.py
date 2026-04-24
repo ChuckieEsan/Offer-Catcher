@@ -26,7 +26,13 @@ from app.infrastructure.adapters.web_search_adapter import get_web_search_adapte
 from app.infrastructure.adapters.ocr_adapter import get_ocr_adapter
 from app.infrastructure.adapters.embedding_adapter import get_embedding_adapter
 from app.infrastructure.persistence.qdrant.question_repository import get_question_repository
-from app.infrastructure.tools import search_questions, search_web, query_graph
+from app.infrastructure.tools import (
+    search_questions,
+    search_web,
+    get_company_hot_topics,
+    get_knowledge_relations,
+    get_cross_company_trends,
+)
 from app.infrastructure.tools.memory_tools import (
     load_memory_reference,
     search_session_history,
@@ -198,7 +204,9 @@ def get_react_tools() -> list:
     工具列表：
     - search_questions: 搜索本地题库
     - search_web: Web 搜索
-    - query_graph: 图数据库查询
+    - get_company_hot_topics: 公司热门考点查询
+    - get_knowledge_relations: 知识点关联查询
+    - get_cross_company_trends: 跨公司考点趋势查询
     - load_memory_reference: 加载用户偏好/行为详情
     - search_session_history: 语义检索历史会话
     - load_skill: 加载用户自定义 Skill
@@ -211,7 +219,9 @@ def get_react_tools() -> list:
     return [
         search_questions,
         search_web,
-        query_graph,
+        get_company_hot_topics,
+        get_knowledge_relations,
+        get_cross_company_trends,
         load_memory_reference,
         search_session_history,
         load_skill,
