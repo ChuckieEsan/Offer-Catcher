@@ -6,6 +6,8 @@
     # 在 FastAPI lifespan 中调用
     from app.infrastructure.bootstrap import warmup
     warmup()
+
+注意：Monkey Patch 已在 langchain_patches.py 中处理，必须在 main.py 最开始导入。
 """
 
 from app.infrastructure.common.logger import logger

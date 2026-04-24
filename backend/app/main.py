@@ -3,6 +3,9 @@
 Offer-Catcher API 服务。
 """
 
+# 必须在所有其他导入之前应用 Monkey Patch
+from app.infrastructure.bootstrap.langchain_patches import apply_deepseek_reasoning_patch  # noqa: F401
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
