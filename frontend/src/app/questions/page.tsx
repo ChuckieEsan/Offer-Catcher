@@ -31,7 +31,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MainLayout from "@/components/MainLayout";
-import { getQuestions, getCompanyStats, getClusterStats, getOverviewStats, updateQuestion, deleteQuestion, regenerateAnswer, addFavorite, removeFavorite, checkFavorites } from "@/lib/api";
+import { getQuestions, getCompanyStats, getClusterStats, getOverviewStats, updateQuestion, deleteQuestion, regenerateAnswer, addFavorite, removeFavoriteByQuestionId, checkFavorites } from "@/lib/api";
 import type { Question, CompanyStats, ClusterStats, OverviewStats } from "@/types";
 
 const { Title, Paragraph } = Typography;
@@ -144,28 +144,28 @@ export default function QuestionsPage() {
     try {
       const res = await getQuestions({
         company: filterCompany,
-        question_type: filterType,
-        mastery_level: filterMastery,
-        cluster_id: filterCluster,
+        questionType: filterType,
+        masteryLevel: filterMastery,
+        clusterId: filterCluster,
         keyword: searchKeyword,
         page,
-        page_size: pageSize,
+        pageSize,
       });
 
       // 如果有收藏过滤，只显示收藏的题目
-      let filteredItems = res.items;
+      let filteredItems = res.questions;
       if (filterFavorite) {
         // 先检查所有题目的收藏状态
-        const questionIds = res.items.map((q) => q.question_id);
-        const { status } = await checkFavorites(questionIds);
-        filteredItems = res.items.filter((q) => status[q.question_id]);
-        setFavoriteStatus(status);
+        const questionIds = res.questions.map((q) => q.questionId);
+        const { favorited } = await checkFavorites(questionIds);
+        filteredItems = res.questions.filter((q) => favorited[q.questionId]);
+        setFavoriteStatus(favorited);
       } else {
         // 检查当前页题目的收藏状态
-        if (res.items.length > 0) {
-          const questionIds = res.items.map((q) => q.question_id);
-          const { status } = await checkFavorites(questionIds);
-          setFavoriteStatus(status);
+        if (res.questions.length > 0) {
+          const questionIds = res.questions.map((q) => q.questionId);
+          const { favorited } = await checkFavorites(questionIds);
+          setFavoriteStatus(favorited);
         }
       }
 
@@ -181,12 +181,12 @@ export default function QuestionsPage() {
   const handleToggleFavorite = async (questionId: string) => {
     try {
       if (favoriteStatus[questionId]) {
-        await removeFavorite(questionId);
+        await removeFavoriteByQuestionId(questionId);
         setFavoriteStatus((prev) => ({ ...prev, [questionId]: false }));
         message.success("已取消收藏");
         // 如果在收藏过滤模式下，从列表移除
         if (filterFavorite) {
-          setQuestions((prev) => prev.filter((q) => q.question_id !== questionId));
+          setQuestions((prev) => prev.filter((q) => q.questionId !== questionId));
         }
       } else {
         await addFavorite(questionId);
@@ -206,19 +206,19 @@ export default function QuestionsPage() {
     setEditModal({
       visible: true,
       question,
-      editText: question.question_text,
-      editAnswer: question.question_answer || "",
-      editMastery: question.mastery_level,
+      editText: question.questionText,
+      editAnswer: question.questionAnswer || "",
+      editMastery: question.masteryLevel,
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editModal.question) return;
     try {
-      await updateQuestion(editModal.question.question_id, {
-        question_text: editModal.editText,
-        question_answer: editModal.editAnswer,
-        mastery_level: editModal.editMastery,
+      await updateQuestion(editModal.question.questionId, {
+        questionText: editModal.editText,
+        answer: editModal.editAnswer,
+        masteryLevel: editModal.editMastery,
       });
       message.success("保存成功");
       setEditModal({ visible: false, question: null, editText: "", editAnswer: "", editMastery: 0 });
@@ -247,15 +247,15 @@ export default function QuestionsPage() {
       hide();
 
       // 获取题目文本用于显示
-      const question = questions.find(q => q.question_id === id);
-      const questionText = question?.question_text || viewDrawer.question?.question_text || "";
+      const question = questions.find(q => q.questionId === id);
+      const questionText = question?.questionText || viewDrawer.question?.questionText || "";
 
       // 显示预览 Modal
       setPreviewModal({
         visible: true,
         questionId: id,
         questionText,
-        newAnswer: res.answer,
+        newAnswer: res.questionAnswer || "",
       });
     } catch (error) {
       hide();
@@ -269,18 +269,18 @@ export default function QuestionsPage() {
   const handleConfirmAnswer = async () => {
     const { questionId, newAnswer } = previewModal;
     try {
-      await updateQuestion(questionId, { question_answer: newAnswer });
+      await updateQuestion(questionId, { answer: newAnswer });
       message.success("答案已保存");
 
       // 更新当前查看的内容
-      if (viewDrawer.question?.question_id === questionId) {
+      if (viewDrawer.question?.questionId === questionId) {
         setViewDrawer({
           visible: true,
-          question: { ...viewDrawer.question, question_answer: newAnswer },
+          question: { ...viewDrawer.question, questionAnswer: newAnswer },
         });
       }
       // 更新编辑弹窗的内容
-      if (editModal.question?.question_id === questionId) {
+      if (editModal.question?.questionId === questionId) {
         setEditModal({
           ...editModal,
           editAnswer: newAnswer,
@@ -319,8 +319,8 @@ export default function QuestionsPage() {
     },
     {
       title: "题目",
-      dataIndex: "question_text",
-      key: "question_text",
+      dataIndex: "questionText",
+      key: "questionText",
       ellipsis: {
         showTitle: true,
       },
@@ -332,8 +332,8 @@ export default function QuestionsPage() {
     },
     {
       title: "类型",
-      dataIndex: "question_type",
-      key: "question_type",
+      dataIndex: "questionType",
+      key: "questionType",
       width: 100,
       ellipsis: {
         showTitle: false,
@@ -342,8 +342,8 @@ export default function QuestionsPage() {
     },
     {
       title: "熟练度",
-      dataIndex: "mastery_level",
-      key: "mastery_level",
+      dataIndex: "masteryLevel",
+      key: "masteryLevel",
       width: 100,
       ellipsis: {
         showTitle: false,
@@ -352,8 +352,8 @@ export default function QuestionsPage() {
     },
     {
       title: "答案",
-      dataIndex: "question_answer",
-      key: "question_answer",
+      dataIndex: "questionAnswer",
+      key: "questionAnswer",
       width: 80,
       ellipsis: {
         showTitle: false,
@@ -369,8 +369,8 @@ export default function QuestionsPage() {
       render: (_: unknown, record: Question) => (
         <Button
           type="text"
-          icon={favoriteStatus[record.question_id] ? <StarFilled style={{ color: "#faad14" }} /> : <StarOutlined />}
-          onClick={() => handleToggleFavorite(record.question_id)}
+          icon={favoriteStatus[record.questionId] ? <StarFilled style={{ color: "#faad14" }} /> : <StarOutlined />}
+          onClick={() => handleToggleFavorite(record.questionId)}
         />
       ),
     },
@@ -387,7 +387,7 @@ export default function QuestionsPage() {
           <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.question_id)}>
+          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.questionId)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -406,13 +406,13 @@ export default function QuestionsPage() {
             <Statistic title="聚类总数" value={clusters.length} />
           </Col>
           <Col span={6}>
-            <Statistic title="题目总数" value={overviewStats?.total_questions ?? 0} suffix="道" />
+            <Statistic title="题目总数" value={overviewStats?.totalQuestions ?? 0} suffix="道" />
           </Col>
           <Col span={6}>
             <Statistic
               title="有答案题目"
-              value={overviewStats?.has_answer ?? 0}
-              suffix={`/ ${overviewStats?.total_questions ?? 0}`}
+              value={overviewStats?.hasAnswer ?? 0}
+              suffix={`/ ${overviewStats?.totalQuestions ?? 0}`}
             />
           </Col>
           <Col span={6}>
@@ -432,8 +432,8 @@ export default function QuestionsPage() {
             value={filterCluster}
             onChange={setFilterCluster}
             options={clusters.map((c) => ({
-              value: c.cluster_id,
-              label: `${formatClusterName(c.cluster_id)} (${c.count})`
+              value: c.clusterId,
+              label: `${formatClusterName(c.clusterId)} (${c.count})`
             }))}
           />
           <Select
@@ -490,7 +490,7 @@ export default function QuestionsPage() {
       <Table
         dataSource={questions}
         columns={columns}
-        rowKey="question_id"
+        rowKey="questionId"
         loading={loading}
         scroll={{ x: 780 }}
         pagination={{
@@ -521,18 +521,18 @@ export default function QuestionsPage() {
               <Descriptions.Item label="公司">{viewDrawer.question.company}</Descriptions.Item>
               <Descriptions.Item label="岗位">{viewDrawer.question.position}</Descriptions.Item>
               <Descriptions.Item label="类型">
-                <Tag>{viewDrawer.question.question_type}</Tag>
+                <Tag>{viewDrawer.question.questionType}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="熟练度">
-                {getMasteryTag(viewDrawer.question.mastery_level)}
+                {getMasteryTag(viewDrawer.question.masteryLevel)}
               </Descriptions.Item>
             </Descriptions>
 
-            {viewDrawer.question.core_entities && viewDrawer.question.core_entities.length > 0 && (
+            {viewDrawer.question.coreEntities && viewDrawer.question.coreEntities.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <Title level={5}>知识点</Title>
                 <div>
-                  {viewDrawer.question.core_entities.map((e) => (
+                  {viewDrawer.question.coreEntities.map((e) => (
                     <Tag key={e} color="geekblue" style={{ margin: 4 }}>
                       {e}
                     </Tag>
@@ -544,13 +544,13 @@ export default function QuestionsPage() {
             <div style={{ marginTop: 16 }}>
               <Title level={5}>题目内容</Title>
               <Paragraph style={{ background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
-                {viewDrawer.question.question_text}
+                {viewDrawer.question.questionText}
               </Paragraph>
             </div>
 
             <div style={{ marginTop: 16 }}>
               <Title level={5}>答案</Title>
-              {viewDrawer.question.question_answer ? (
+              {viewDrawer.question.questionAnswer ? (
                 <div
                   style={{
                     background: "#f5f5f5",
@@ -561,7 +561,7 @@ export default function QuestionsPage() {
                   }}
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {viewDrawer.question.question_answer}
+                    {viewDrawer.question.questionAnswer}
                   </ReactMarkdown>
                 </div>
               ) : (
@@ -572,12 +572,12 @@ export default function QuestionsPage() {
             <div style={{ marginTop: 24, textAlign: "right" }}>
               <Space>
                 <Button
-                    type={viewDrawer.question.question_answer ? "default" : "primary"}
+                    type={viewDrawer.question.questionAnswer ? "default" : "primary"}
                     icon={<ReloadOutlined />}
-                    loading={regenerating === viewDrawer.question?.question_id}
-                    onClick={() => handleRegenerate(viewDrawer.question!.question_id)}
+                    loading={regenerating === viewDrawer.question?.questionId}
+                    onClick={() => handleRegenerate(viewDrawer.question!.questionId)}
                   >
-                    {viewDrawer.question.question_answer ? "重新生成" : "生成答案"}
+                    {viewDrawer.question.questionAnswer ? "重新生成" : "生成答案"}
                   </Button>
                 <Button icon={<EditOutlined />} onClick={() => handleEdit(viewDrawer.question!)}>
                   编辑
@@ -585,7 +585,7 @@ export default function QuestionsPage() {
                 <Popconfirm
                   title="确定删除这道题目？"
                   onConfirm={() => {
-                    handleDelete(viewDrawer.question!.question_id);
+                    handleDelete(viewDrawer.question!.questionId);
                     setViewDrawer({ visible: false, question: null });
                   }}
                 >

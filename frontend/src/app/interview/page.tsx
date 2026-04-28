@@ -12,7 +12,7 @@ import {
   Spin,
   Progress,
   Tag,
-  message,
+  App,
   Divider,
   Empty,
 } from "antd";
@@ -26,10 +26,19 @@ import {
   LoadingOutlined,
 } from "@ant-design/icons";
 import { XMarkdown } from "@ant-design/x-markdown";
-import { useRouter } from "next/navigation";
 import MainLayout from "@/components/MainLayout";
 import VoiceInput from "@/components/VoiceInput";
-import { getPositionStats } from "@/lib/api";
+import {
+  getPositionStats,
+  createInterviewSession,
+  getInterviewSession,
+  skipInterviewQuestion,
+  pauseInterviewSession,
+  endInterviewSession,
+  getInterviewReport,
+  getUserId,
+} from "@/lib/api";
+import type { InterviewSession, InterviewReport, PositionStats } from "@/types";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -55,36 +64,18 @@ const DIFFICULTIES = [
   { value: "hard", label: "困难" },
 ];
 
-interface QuestionData {
-  question_id: string;
-  question_text: string;
-  question_type: string;
-  difficulty?: string;
-  knowledge_points?: string[];
-}
-
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  question?: string | QuestionData;
+  question?: string;
   isStreaming?: boolean;
-}
-
-interface SessionInfo {
-  session_id: string;
-  company: string;
-  position: string;
-  status: string;
-  total_questions: number;
-  current_question_idx: number;
-  current_question?: string | QuestionData;
 }
 
 // 流式数据处理函数
 function processSSELine(
   line: string,
-  onChunk: (chunk: { type: string; content?: string; [key: string]: any }) => void,
+  onChunk: (chunk: { type: string; content?: string }) => void,
   onDone: () => void
 ): void {
   if (line.startsWith("data: ")) {
@@ -120,10 +111,10 @@ function ThinkingIndicator() {
 }
 
 export default function InterviewPage() {
-  const router = useRouter();
+  const { message } = App.useApp();
 
   // 岗位列表（动态获取）
-  const [positions, setPositions] = useState<string[]>([]);
+  const [positions, setPositions] = useState<PositionStats[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(true);
 
   // 面试配置
@@ -133,7 +124,7 @@ export default function InterviewPage() {
   const [questionCount, setQuestionCount] = useState<number | null>(10);
 
   // 会话状态
-  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [session, setSession] = useState<InterviewSession | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -141,10 +132,10 @@ export default function InterviewPage() {
 
   // 下一题按钮状态
   const [showNextButton, setShowNextButton] = useState(false);
-  const [nextQuestionText, setNextQuestionText] = useState<string | QuestionData | null>(null);
+  const [nextQuestionText, setNextQuestionText] = useState<string | null>(null);
 
   // 面试报告
-  const [report, setReport] = useState<any>(null);
+  const [report, setReport] = useState<InterviewReport | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -153,7 +144,7 @@ export default function InterviewPage() {
     const fetchPositions = async () => {
       try {
         const stats = await getPositionStats();
-        setPositions(stats.map((s) => s.position));
+        setPositions(stats);
       } catch (error) {
         message.error("获取岗位列表失败");
       } finally {
@@ -175,37 +166,24 @@ export default function InterviewPage() {
       return;
     }
 
-    if (!questionCount || questionCount < 1 || questionCount > 20) {
-      message.error("题目数量必须在 1-20 之间");
+    if (!questionCount || questionCount < 1 || questionCount > 50) {
+      message.error("题目数量必须在 1-50 之间");
       return;
     }
 
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      const response = await fetch(`${apiUrl}/interview/sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-User-ID": "default_user",
-        },
-        body: JSON.stringify({
-          company,
-          position,
-          difficulty,
-          total_questions: questionCount,
-        }),
+      const data = await createInterviewSession({
+        company,
+        position,
+        difficulty,
+        totalQuestions: questionCount,
       });
-
-      if (!response.ok) {
-        throw new Error("创建面试失败");
-      }
-
-      const data = await response.json();
       setSession(data);
 
       // 添加 AI 开场白
+      const currentQuestion = data.questions[data.currentQuestionIdx];
       setMessages([
         {
           id: `ai_0`,
@@ -217,7 +195,7 @@ export default function InterviewPage() {
           id: `q_0`,
           role: "assistant",
           content: "",
-          question: data.current_question,
+          question: currentQuestion?.questionText || "题目加载中...",
           isStreaming: false,
         },
       ]);
@@ -248,10 +226,9 @@ export default function InterviewPage() {
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-    // 在函数内部定义回调，使用局部变量 aiMsgId，避免 state 依赖问题
-    const processChunk = (chunk: { type: string; content?: string; next_question?: string; [key: string]: any }) => {
-      if (chunk.type === "text" && chunk.content) {
-        // 使用局部变量 aiMsgId，确保正确更新
+    // 在函数内部定义回调，使用局部变量 aiMsgId
+    const processChunk = (chunk: { type: string; content?: string }) => {
+      if (chunk.type === "token" && chunk.content) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
@@ -259,32 +236,11 @@ export default function InterviewPage() {
               : msg
           )
         );
-      } else if (chunk.type === "next_question_ready") {
-        setShowNextButton(true);
-        setNextQuestionText(chunk.next_question || null);
-        if (chunk.question_idx !== undefined) {
-          setSession((prev) =>
-            prev ? { ...prev, current_question_idx: chunk.question_idx } : null
-          );
-        }
-      } else if (chunk.type === "follow_up") {
-        if (chunk.question_idx !== undefined) {
-          setSession((prev) =>
-            prev ? { ...prev, current_question_idx: chunk.question_idx } : null
-          );
-        }
-      } else if (chunk.type === "completed") {
-        setShowNextButton(false);
-        setNextQuestionText(null);
-        fetchReport(session!.session_id);
-      } else if (chunk.type === "error") {
-        message.error(chunk.message || "发生错误");
       }
     };
 
     const processDone = () => {
       setStreaming(false);
-      // 将消息的 isStreaming 设置为 false
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMsgId
@@ -295,11 +251,11 @@ export default function InterviewPage() {
     };
 
     try {
-      const response = await fetch(`${apiUrl}/interview/sessions/${session.session_id}/answer`, {
+      const response = await fetch(`${apiUrl}/interview/sessions/${session.sessionId}/answer`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-ID": "default_user",
+          "X-User-Id": getUserId(),
         },
         body: JSON.stringify({ answer }),
       });
@@ -337,12 +293,22 @@ export default function InterviewPage() {
         }
       }
 
-      processDone();
+      // 更新 session 状态
+      const updatedSession = await getInterviewSession(session.sessionId);
+      setSession(updatedSession);
+
+      // 检查是否有下一题
+      if (updatedSession.status === "completed") {
+        await fetchReport(session.sessionId);
+      } else if (updatedSession.currentQuestionIdx < updatedSession.totalQuestions) {
+        setShowNextButton(true);
+        const nextQ = updatedSession.questions[updatedSession.currentQuestionIdx];
+        setNextQuestionText(nextQ?.questionText || null);
+      }
 
     } catch (error) {
       message.error("提交回答失败");
       setStreaming(false);
-      // 移除占位消息
       setMessages((prev) => prev.filter((msg) => msg.id !== aiMsgId));
     }
   }, [input, session, streaming]);
@@ -366,9 +332,8 @@ export default function InterviewPage() {
       ]);
       setNextQuestionText(null);
     } else {
-      // 没有更多题目，结束面试
       message.info("面试结束");
-      fetchReport(session.session_id);
+      await fetchReport(session.sessionId);
     }
   };
 
@@ -376,7 +341,6 @@ export default function InterviewPage() {
   const handleRequestHint = useCallback(async () => {
     if (!session || streaming) return;
 
-    // 添加 AI 消息占位
     const aiMsgId = `hint_${Date.now()}`;
     setMessages((prev) => [
       ...prev,
@@ -386,9 +350,8 @@ export default function InterviewPage() {
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-    // 在函数内部定义回调，使用局部变量 aiMsgId
     const processChunk = (chunk: { type: string; content?: string }) => {
-      if (chunk.type === "text" && chunk.content) {
+      if (chunk.type === "token" && chunk.content) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
@@ -400,9 +363,9 @@ export default function InterviewPage() {
     };
 
     try {
-      const response = await fetch(`${apiUrl}/interview/sessions/${session.session_id}/hint`, {
+      const response = await fetch(`${apiUrl}/interview/sessions/${session.sessionId}/hint`, {
         method: "POST",
-        headers: { "X-User-ID": "default_user" },
+        headers: { "X-User-Id": getUserId() },
       });
 
       if (!response.ok) {
@@ -436,7 +399,6 @@ export default function InterviewPage() {
       }
 
       setStreaming(false);
-      // 将消息的 isStreaming 设置为 false
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === aiMsgId
@@ -459,30 +421,19 @@ export default function InterviewPage() {
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      const response = await fetch(`${apiUrl}/interview/sessions/${session.session_id}/skip`, {
-        method: "POST",
-        headers: { "X-User-ID": "default_user" },
-      });
+      const updatedSession = await skipInterviewQuestion(session.sessionId);
+      setSession(updatedSession);
 
-      if (!response.ok) {
-        throw new Error("跳过题目失败");
-      }
-
-      const data = await response.json();
-
-      if (data.type === "completed") {
+      if (updatedSession.status === "completed") {
         setMessages((prev) => [...prev, { id: `skip_${Date.now()}`, role: "assistant", content: "面试已结束！" }]);
-        await fetchReport(session.session_id);
+        await fetchReport(session.sessionId);
       } else {
+        const nextQ = updatedSession.questions[updatedSession.currentQuestionIdx];
         setMessages((prev) => [
           ...prev,
           { id: `skip_${Date.now()}`, role: "assistant", content: "好的，跳过这道题。" },
-          { id: `q_${Date.now()}`, role: "assistant", content: "", question: data.question },
+          { id: `q_${Date.now()}`, role: "assistant", content: "", question: nextQ?.questionText },
         ]);
-        setSession((prev) =>
-          prev ? { ...prev, current_question_idx: data.question_idx } : null
-        );
       }
     } catch (error) {
       message.error("跳过题目失败");
@@ -498,13 +449,8 @@ export default function InterviewPage() {
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      await fetch(`${apiUrl}/interview/sessions/${session.session_id}/end`, {
-        method: "POST",
-        headers: { "X-User-ID": "default_user" },
-      });
-
-      await fetchReport(session.session_id);
+      await endInterviewSession(session.sessionId);
+      await fetchReport(session.sessionId);
     } catch (error) {
       message.error("结束面试失败");
     } finally {
@@ -513,18 +459,9 @@ export default function InterviewPage() {
   };
 
   // 获取面试报告
-  const fetchReport = async (sessionId: string) => {
+  const fetchReport = async (sessionId: number) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-      const response = await fetch(`${apiUrl}/interview/sessions/${sessionId}/report`, {
-        headers: { "X-User-ID": "default_user" },
-      });
-
-      if (!response.ok) {
-        throw new Error("获取报告失败");
-      }
-
-      const data = await response.json();
+      const data = await getInterviewReport(sessionId);
       setReport(data);
     } catch (error) {
       message.error("获取面试报告失败");
@@ -561,7 +498,7 @@ export default function InterviewPage() {
               </div>
               <div>
                 <Text strong>面试时长：</Text>
-                <Text>{report.duration_minutes?.toFixed(1) || 0} 分钟</Text>
+                <Text>{report.durationMinutes.toFixed(1)} 分钟</Text>
               </div>
 
               <Divider />
@@ -573,58 +510,32 @@ export default function InterviewPage() {
                     <Text type="secondary">题目总数</Text>
                     <br />
                     <Text strong style={{ fontSize: 24 }}>
-                      {report.total_questions}
+                      {report.totalQuestions}
                     </Text>
                   </div>
                   <div>
-                    <Text type="secondary">回答正确</Text>
+                    <Text type="secondary">回答数量</Text>
+                    <br />
+                    <Text strong style={{ fontSize: 24 }}>
+                      {report.answeredCount}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text type="secondary">正确数量</Text>
                     <br />
                     <Text strong style={{ fontSize: 24, color: "#52c41a" }}>
-                      {report.correct_count}
+                      {report.correctCount}
                     </Text>
                   </div>
                   <div>
                     <Text type="secondary">平均得分</Text>
                     <br />
                     <Text strong style={{ fontSize: 24 }}>
-                      {report.average_score?.toFixed(1) || 0}
+                      {report.averageScore.toFixed(1)}
                     </Text>
                   </div>
                 </Space>
               </div>
-
-              {report.strengths?.length > 0 && (
-                <div>
-                  <Title level={5}>优势</Title>
-                  {report.strengths.map((s: string, i: number) => (
-                    <Tag key={i} color="green">
-                      {s}
-                    </Tag>
-                  ))}
-                </div>
-              )}
-
-              {report.weaknesses?.length > 0 && (
-                <div>
-                  <Title level={5}>薄弱点</Title>
-                  {report.weaknesses.map((w: string, i: number) => (
-                    <Tag key={i} color="red">
-                      {w}
-                    </Tag>
-                  ))}
-                </div>
-              )}
-
-              {report.recommendations?.length > 0 && (
-                <div>
-                  <Title level={5}>改进建议</Title>
-                  <ul>
-                    {report.recommendations.map((r: string, i: number) => (
-                      <li key={i}>{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
 
               <Divider />
 
@@ -674,7 +585,7 @@ export default function InterviewPage() {
                   placeholder={positionsLoading ? "加载中..." : "选择目标岗位"}
                   value={position}
                   onChange={setPosition}
-                  options={positions.map((p) => ({ value: p, label: p }))}
+                  options={positions.map((p) => ({ value: p.position, label: `${p.position} (${p.count})` }))}
                   loading={positionsLoading}
                   disabled={positionsLoading}
                 />
@@ -695,10 +606,10 @@ export default function InterviewPage() {
                 <InputNumber
                   style={{ width: "100%", marginTop: 8 }}
                   min={1}
-                  max={20}
+                  max={50}
                   value={questionCount}
                   onChange={(value) => setQuestionCount(value)}
-                  placeholder="输入题目数量 (1-20)"
+                  placeholder="输入题目数量 (1-50)"
                 />
               </div>
 
@@ -734,11 +645,11 @@ export default function InterviewPage() {
             </Space>
             <Space>
               <Progress
-                percent={((session.current_question_idx + 1) / session.total_questions) * 100}
+                percent={((session.currentQuestionIdx + 1) / session.totalQuestions) * 100}
                 size="small"
                 style={{ width: 120 }}
                 format={() =>
-                  `${session.current_question_idx + 1}/${session.total_questions}`
+                  `${session.currentQuestionIdx + 1}/${session.totalQuestions}`
                 }
               />
               <Button danger size="small" onClick={handleEndInterview}>
@@ -774,27 +685,22 @@ export default function InterviewPage() {
                       msg.content === "" && !msg.question ? (
                         <ThinkingIndicator />
                       ) : msg.question ? (
-                        // 题目卡片
                         <div>
                           <Text strong style={{ fontSize: 16 }}>
-                            {typeof msg.question === "string"
-                              ? msg.question
-                              : msg.question.question_text}
+                            {msg.question}
                           </Text>
                         </div>
                       ) : msg.isStreaming ? (
-                        // 流式输出
                         <XMarkdown
                           content={msg.content}
                           streaming={{
                             hasNextChunk: true,
-                            enableAnimation: true,
+                            enableAnimation: false,
                             tail: true,
                           }}
                           className="markdown-body"
                         />
                       ) : (
-                        // 已完成
                         <XMarkdown content={msg.content} className="markdown-body" />
                       )
                     ) : (
