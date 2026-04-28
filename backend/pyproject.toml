@@ -36,6 +36,8 @@ dependencies = [
     "psycopg[binary,pool]>=3.2.0",
     # Agent 评估框架
     "agentevals>=0.0.9",
+    # DeepEval LLM 评测框架
+    "deepeval>=2.0.0",
     # FastAPI
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -63,6 +65,12 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-v --tb=short"
+markers = [
+    "eval: Memory Agent evaluation tests",
+    "llm_judge: LLM-as-Judge evaluation tests",
+    "deepeval: DeepEval SDK evaluation tests",
+    "slow: Slow running tests",
+]
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"

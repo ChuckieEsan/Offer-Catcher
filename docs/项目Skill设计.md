@@ -4,6 +4,40 @@
 
 ---
 
+## 实现状态
+
+**已实现 Skills（13个）**：位于 `.claude/skills/<name>/SKILL.md`
+
+| Skill | 状态 | 分类 |
+|-------|------|------|
+| `/ddd-check` | ✅ 已实现 | 代码质量 |
+| `/review-pr` | ✅ 已实现 | 代码质量 |
+| `/prompt-check` | ✅ 已实现 | 代码质量 |
+| `/qdrant-sync` | ✅ 已实现 | 代码质量 |
+| `/security-scan` | ✅ 已实现 | 代码质量 |
+| `/gen-tests` | ✅ 已实现 | 测试自动化 |
+| `/agent-test` | ✅ 已实现 | 测试自动化 |
+| `/deploy-check` | ✅ 已实现 | 部署运维 |
+| `/mq-check` | ✅ 已实现 | 部署运维 |
+| `/agent-debug` | ✅ 已实现 | 部署运维 |
+| `/pitfall-learn` | ✅ 已实现 | 知识管理 |
+| `/quick-fix` | ✅ 已实现 | 效率提升 |
+| `/new-agent` | ✅ 已实现 | 效率提升 |
+
+**待实现 Skills**：可在后续需要时添加
+
+| Skill | 状态 | 分类 |
+|-------|------|------|
+| `/audit-pipeline` | 待实现 | 代码质量 |
+| `/test-selector` | 待实现 | 测试自动化 |
+| `/rollback-plan` | 待实现 | 部署运维 |
+| `/health-check` | 待实现 | 部署运维 |
+| `/update-docs` | 待实现 | 知识管理 |
+| `/triage-issue` | 待实现 | 任务管理 |
+| `/estimate-task` | 待实现 | 任务管理 |
+
+---
+
 ## 设计原则
 
 Skills 应遵循以下原则：
