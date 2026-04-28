@@ -116,7 +116,7 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
   // 记录已完成的消息 ID，用于切换渲染模式
-  const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
+  const [completedMessageIds, setCompletedMessageIds] = useState<Set<number>>(new Set());
 
   // 缓存 streaming 配置，避免每次渲染创建新对象导致 XMarkdown 无限循环
   // 注意：禁用 enableAnimation 以避免动画触发无限循环

@@ -73,8 +73,8 @@ export default function PracticePage() {
     setLoading(true);
     try {
       // 使用 getQuestions API 获取所有题目（带答案）
-      const res = await getQuestions({ page: 1, page_size: 1000 });
-      const withAnswer = res.items.filter((q) => q.question_answer);
+      const res = await getQuestions({ page: 1, pageSize: 1000 });
+      const withAnswer = res.questions.filter((q) => q.questionAnswer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("加载失败");
@@ -92,19 +92,24 @@ export default function PracticePage() {
         query: searchQuery,
         k: 50,
       });
-      const withAnswer = res.results.filter((r) => r.question_answer);
+      const withAnswer = res.results.filter((r) => r.questionAnswer);
       // 转换为 Question 类型
       setQuestions(withAnswer.map((r) => ({
-        question_id: r.question_id,
-        question_text: r.question_text,
+        id: Number(r.questionId),
+        questionHash: "",
+        questionText: r.questionText,
         company: r.company,
         position: r.position,
-        question_type: r.question_type,
-        mastery_level: r.mastery_level,
-        core_entities: r.core_entities,
-        question_answer: r.question_answer,
-        cluster_ids: r.cluster_ids,
+        questionType: r.questionType,
+        masteryLevel: Number(r.masteryLevel),
+        coreEntities: r.coreEntities,
+        questionAnswer: r.questionAnswer,
+        clusterIds: r.clusterIds,
         metadata: r.metadata,
+        visibility: "PRIVATE",
+        sourceType: "EXTRACTED",
+        createdAt: "",
+        updatedAt: "",
       })));
     } catch (error) {
       console.error("搜索失败");
@@ -116,8 +121,8 @@ export default function PracticePage() {
   const handleFilterByCompany = async () => {
     setLoading(true);
     try {
-      const res = await getQuestions({ company: selectedCompany, page: 1, page_size: 500 });
-      const withAnswer = res.items.filter((q) => q.question_answer);
+      const res = await getQuestions({ company: selectedCompany, page: 1, pageSize: 500 });
+      const withAnswer = res.questions.filter((q) => q.questionAnswer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("搜索失败");
@@ -132,18 +137,23 @@ export default function PracticePage() {
       // 知识点过滤仍需要语义搜索
       const { search } = await import("@/lib/api");
       const res = await search({ query: selectedEntity || "", k: 100 });
-      const withAnswer = res.results.filter((r) => r.question_answer);
+      const withAnswer = res.results.filter((r) => r.questionAnswer);
       setQuestions(withAnswer.map((r) => ({
-        question_id: r.question_id,
-        question_text: r.question_text,
+        id: Number(r.questionId),
+        questionHash: "",
+        questionText: r.questionText,
         company: r.company,
         position: r.position,
-        question_type: r.question_type,
-        mastery_level: r.mastery_level,
-        core_entities: r.core_entities,
-        question_answer: r.question_answer,
-        cluster_ids: r.cluster_ids,
+        questionType: r.questionType,
+        masteryLevel: Number(r.masteryLevel),
+        coreEntities: r.coreEntities,
+        questionAnswer: r.questionAnswer,
+        clusterIds: r.clusterIds,
         metadata: r.metadata,
+        visibility: "PRIVATE",
+        sourceType: "EXTRACTED",
+        createdAt: "",
+        updatedAt: "",
       })));
     } catch (error) {
       console.error("搜索失败");
@@ -155,8 +165,8 @@ export default function PracticePage() {
   const handleFilterByMastery = async () => {
     setLoading(true);
     try {
-      const res = await getQuestions({ mastery_level: selectedMastery ?? 0, page: 1, page_size: 500 });
-      const withAnswer = res.items.filter((q) => q.question_answer);
+      const res = await getQuestions({ masteryLevel: selectedMastery ?? 0, page: 1, pageSize: 500 });
+      const withAnswer = res.questions.filter((q) => q.questionAnswer);
       setQuestions(withAnswer);
     } catch (error) {
       console.error("搜索失败");
@@ -182,8 +192,8 @@ export default function PracticePage() {
     setScoring(true);
     try {
       const result = await scoreAnswer({
-        question_id: selectedQuestion.question_id,
-        user_answer: userAnswer,
+        questionId: String(selectedQuestion.id),
+        userAnswer: userAnswer,
       });
       setScoreResult(result);
     } catch (error) {
@@ -327,16 +337,21 @@ export default function PracticePage() {
                   const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results.map((r) => ({
-                    question_id: r.question_id,
-                    question_text: r.question_text,
+                    id: Number(r.questionId),
+                    questionHash: "",
+                    questionText: r.questionText,
                     company: r.company,
                     position: r.position,
-                    question_type: r.question_type,
-                    mastery_level: r.mastery_level,
-                    core_entities: r.core_entities,
-                    question_answer: r.question_answer,
-                    cluster_ids: r.cluster_ids,
+                    questionType: r.questionType,
+                    masteryLevel: Number(r.masteryLevel),
+                    coreEntities: r.coreEntities,
+                    questionAnswer: r.questionAnswer,
+                    clusterIds: r.clusterIds,
                     metadata: r.metadata,
+                    visibility: "PRIVATE",
+                    sourceType: "EXTRACTED",
+                    createdAt: "",
+                    updatedAt: "",
                   })));
                 } catch (error) {
                   console.error("搜索失败");
@@ -355,16 +370,21 @@ export default function PracticePage() {
                   const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results.map((r) => ({
-                    question_id: r.question_id,
-                    question_text: r.question_text,
+                    id: Number(r.questionId),
+                    questionHash: "",
+                    questionText: r.questionText,
                     company: r.company,
                     position: r.position,
-                    question_type: r.question_type,
-                    mastery_level: r.mastery_level,
-                    core_entities: r.core_entities,
-                    question_answer: r.question_answer,
-                    cluster_ids: r.cluster_ids,
+                    questionType: r.questionType,
+                    masteryLevel: Number(r.masteryLevel),
+                    coreEntities: r.coreEntities,
+                    questionAnswer: r.questionAnswer,
+                    clusterIds: r.clusterIds,
                     metadata: r.metadata,
+                    visibility: "PRIVATE",
+                    sourceType: "EXTRACTED",
+                    createdAt: "",
+                    updatedAt: "",
                   })));
                 } catch (error) {
                   console.error("搜索失败");
@@ -380,7 +400,7 @@ export default function PracticePage() {
             <div style={{ marginTop: 16 }}>
               {questions.map((q) => (
                 <div
-                  key={q.question_id}
+                  key={q.id}
                   style={{
                     padding: "12px 0",
                     borderBottom: "1px solid #f0f0f0",
@@ -392,12 +412,12 @@ export default function PracticePage() {
                   <div style={{ flex: 1 }}>
                     <div>
                       <Tag color="blue">{q.company}</Tag>
-                      {q.question_text.slice(0, 50)}...
+                      {q.questionText.slice(0, 50)}...
                     </div>
                     <Space style={{ marginTop: 4 }}>
-                      <Tag>{q.question_type}</Tag>
-                      <span style={{ color: q.question_answer ? "#52c41a" : "#999", fontSize: 12 }}>
-                        {q.question_answer ? "有答案" : "待生成"}
+                      <Tag>{q.questionType}</Tag>
+                      <span style={{ color: q.questionAnswer ? "#52c41a" : "#999", fontSize: 12 }}>
+                        {q.questionAnswer ? "有答案" : "待生成"}
                       </span>
                     </Space>
                   </div>
@@ -435,14 +455,14 @@ export default function PracticePage() {
           <Card title="题目">
             <div style={{ marginBottom: 16 }}>
               <Tag color="blue">{selectedQuestion.company}</Tag>
-              <Tag>{selectedQuestion.question_type}</Tag>
+              <Tag>{selectedQuestion.questionType}</Tag>
               <span style={{ marginLeft: 8, color: "#666" }}>{selectedQuestion.position}</span>
             </div>
-            <Paragraph style={{ fontSize: 16, fontWeight: 500 }}>{selectedQuestion.question_text}</Paragraph>
-            {selectedQuestion.core_entities && selectedQuestion.core_entities.length > 0 && (
+            <Paragraph style={{ fontSize: 16, fontWeight: 500 }}>{selectedQuestion.questionText}</Paragraph>
+            {selectedQuestion.coreEntities && selectedQuestion.coreEntities.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <span style={{ marginRight: 8, color: "#666" }}>知识点：</span>
-                {selectedQuestion.core_entities.map((e) => (
+                {selectedQuestion.coreEntities.map((e) => (
                   <Tag key={e} color="geekblue">
                     {e}
                   </Tag>
@@ -489,7 +509,7 @@ export default function PracticePage() {
                     suffix="/ 100"
                     valueStyle={{ color: scoreResult.score >= 60 ? "#3f8600" : "#cf1322" }}
                   />
-                  <Statistic title="熟练度" value={getMasteryText(scoreResult.mastery_level)} />
+                  <Statistic title="熟练度" value={getMasteryText(scoreResult.masteryLevel)} />
                 </div>
 
                 {scoreResult.strengths.length > 0 && (
@@ -521,7 +541,7 @@ export default function PracticePage() {
                   </div>
                 )}
 
-                {scoreResult.standard_answer && (
+                {scoreResult.standardAnswer && (
                   <div style={{ marginTop: 16 }}>
                     <Title level={5}>标准答案</Title>
                     <div
@@ -533,7 +553,7 @@ export default function PracticePage() {
                         overflow: "auto",
                       }}
                     >
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{scoreResult.standard_answer}</ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{scoreResult.standardAnswer}</ReactMarkdown>
                     </div>
                   </div>
                 )}
@@ -547,7 +567,7 @@ export default function PracticePage() {
         <Card title={`可选题目 (${questions.length})`}>
           {questions.slice(0, 20).map((q) => (
             <div
-              key={q.question_id}
+              key={q.id}
               style={{
                 padding: "12px 0",
                 borderBottom: "1px solid #f0f0f0",
@@ -559,11 +579,11 @@ export default function PracticePage() {
               <div style={{ flex: 1 }}>
                 <div>
                   <Tag color="blue">{q.company}</Tag>
-                  {q.question_text.slice(0, 40)}...
+                  {q.questionText.slice(0, 40)}...
                 </div>
                 <Space style={{ marginTop: 4 }}>
-                  <Tag>{q.question_type}</Tag>
-                  {q.core_entities?.slice(0, 3).map((e) => (
+                  <Tag>{q.questionType}</Tag>
+                  {q.coreEntities?.slice(0, 3).map((e) => (
                     <Tag key={e} color="geekblue">{e}</Tag>
                   ))}
                 </Space>
@@ -586,17 +606,17 @@ export default function PracticePage() {
       >
         {answerDrawer.question && (
           <div>
-            <Paragraph style={{ fontWeight: 500 }}>{answerDrawer.question.question_text}</Paragraph>
+            <Paragraph style={{ fontWeight: 500 }}>{answerDrawer.question.questionText}</Paragraph>
             <Space style={{ marginBottom: 16 }}>
               <Tag color="blue">{answerDrawer.question.company}</Tag>
-              <Tag>{answerDrawer.question.question_type}</Tag>
+              <Tag>{answerDrawer.question.questionType}</Tag>
             </Space>
-            {answerDrawer.question.question_answer ? (
+            {answerDrawer.question.questionAnswer ? (
               <div>
                 <Title level={5}>答案</Title>
                 <div style={{ background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {answerDrawer.question.question_answer}
+                    {answerDrawer.question.questionAnswer}
                   </ReactMarkdown>
                 </div>
               </div>

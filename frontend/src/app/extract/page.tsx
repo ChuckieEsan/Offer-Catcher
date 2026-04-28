@@ -112,7 +112,7 @@ export default function ExtractPage() {
       const res = await getExtractTasks({
         status: statusFilter,
         page,
-        page_size: pageSize,
+        pageSize,
       });
       setTasks(res.items);
       setTasksTotal(res.total);
@@ -145,8 +145,8 @@ export default function ExtractPage() {
     setSubmitting(true);
     try {
       const res = await submitExtractTask({
-        source_type: "text",
-        source_content: text,
+        sourceType: "text",
+        sourceContent: text,
       });
       message.success(res.message);
       setText("");
@@ -179,8 +179,8 @@ export default function ExtractPage() {
       );
 
       const res = await submitExtractTask({
-        source_type: "image",
-        source_images: base64Images,
+        sourceType: "image",
+        sourceImages: base64Images,
       });
       message.success(res.message);
       setFiles([]);
@@ -194,7 +194,7 @@ export default function ExtractPage() {
   };
 
   // 查看任务详情
-  const handleViewTask = async (taskId: string) => {
+  const handleViewTask = async (taskId: number) => {
     setDetailLoading(true);
     setAnswersMap({});
     try {
@@ -202,13 +202,16 @@ export default function ExtractPage() {
       setDetailDrawer({ visible: true, task });
 
       // 如果任务已入库，批量获取答案
-      if (task.status === "confirmed" && task.result?.questions?.length && task.result.questions.length > 0) {
-        const questionIds = task.result.questions.map((q) => q.question_id);
-        try {
-          const { answers } = await getBatchAnswers(questionIds);
-          setAnswersMap(answers);
-        } catch (error) {
-          console.error("Failed to fetch answers:", error);
+      if (task.status === "confirmed" && task.result) {
+        const questions = task.result.questions as Array<{ questionId?: number; question_id?: number }> | undefined;
+        if (questions && questions.length > 0) {
+          const questionIds = questions.map((q) => q.questionId || q.question_id || 0);
+          try {
+            const { answers } = await getBatchAnswers(questionIds);
+            setAnswersMap(answers);
+          } catch (error) {
+            console.error("Failed to fetch answers:", error);
+          }
         }
       }
     } catch (error) {
@@ -219,7 +222,7 @@ export default function ExtractPage() {
   };
 
   // 确认入库
-  const handleConfirm = async (taskId: string) => {
+  const handleConfirm = async (taskId: number) => {
     try {
       const res = await confirmExtractTask(taskId);
       message.success(`入库成功：处理 ${res.processed} 条题目`);
@@ -231,7 +234,7 @@ export default function ExtractPage() {
   };
 
   // 删除任务
-  const handleDelete = async (taskId: string) => {
+  const handleDelete = async (taskId: number) => {
     try {
       await deleteExtractTask(taskId);
       message.success("删除成功");
@@ -244,11 +247,12 @@ export default function ExtractPage() {
   // 编辑题目
   const handleEditQuestion = (index: number) => {
     const task = detailDrawer.task;
-    if (!task?.result?.questions[index]) return;
+    const questions = task?.result?.questions as Array<{ question_text?: string; questionText?: string }> | undefined;
+    if (!questions || !questions[index]) return;
     setEditModal({
       visible: true,
       questionIndex: index,
-      questionText: task.result.questions[index].question_text,
+      questionText: questions[index].question_text || questions[index].questionText || "",
     });
   };
 
@@ -257,14 +261,15 @@ export default function ExtractPage() {
     const task = detailDrawer.task;
     if (!task?.result) return;
 
-    const newQuestions = [...task.result.questions];
+    const questions = task.result.questions as Array<Record<string, unknown>>;
+    const newQuestions = [...questions];
     newQuestions[editModal.questionIndex] = {
       ...newQuestions[editModal.questionIndex],
-      question_text: editModal.questionText,
+      questionText: editModal.questionText,
     };
 
     try {
-      const updated = await updateExtractTask(task.task_id, {
+      const updated = await updateExtractTask(task.taskId, {
         questions: newQuestions,
       });
       setDetailDrawer({ visible: true, task: updated });
@@ -281,10 +286,11 @@ export default function ExtractPage() {
     const task = detailDrawer.task;
     if (!task?.result) return;
 
-    const newQuestions = task.result.questions.filter((_, i) => i !== index);
+    const questions = task.result.questions as Array<Record<string, unknown>>;
+    const newQuestions = questions.filter((_, i) => i !== index);
 
     try {
-      const updated = await updateExtractTask(task.task_id, {
+      const updated = await updateExtractTask(task.taskId, {
         questions: newQuestions,
       });
       setDetailDrawer({ visible: true, task: updated });
@@ -347,8 +353,8 @@ export default function ExtractPage() {
     },
     {
       title: "来源",
-      dataIndex: "source_type",
-      key: "source_type",
+      dataIndex: "sourceType",
+      key: "sourceType",
       width: 80,
       render: (type: string) => (
         <Tag icon={type === "text" ? <FileTextOutlined /> : <FileImageOutlined />}>
@@ -382,8 +388,8 @@ export default function ExtractPage() {
     },
     {
       title: "题目数",
-      dataIndex: "question_count",
-      key: "question_count",
+      dataIndex: "questionCount",
+      key: "questionCount",
       width: 80,
       render: (count: number, record: ExtractTaskListItem) => {
         if (count > 0) return count;
@@ -395,8 +401,8 @@ export default function ExtractPage() {
     },
     {
       title: "时间",
-      dataIndex: "created_at",
-      key: "created_at",
+      dataIndex: "createdAt",
+      key: "createdAt",
       width: 150,
       render: (text: string) => new Date(text).toLocaleString(),
     },
@@ -406,11 +412,11 @@ export default function ExtractPage() {
       width: 180,
       render: (_: unknown, record: ExtractTaskListItem) => (
         <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewTask(record.task_id)}>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewTask(record.taskId)}>
             查看
           </Button>
           {record.status !== "pending" && record.status !== "processing" && (
-            <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.task_id)}>
+            <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.taskId)}>
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
           )}
@@ -561,7 +567,7 @@ export default function ExtractPage() {
         <Table
           dataSource={tasks}
           columns={columns}
-          rowKey="task_id"
+          rowKey="taskId"
           loading={tasksLoading}
           pagination={{
             current: page,
@@ -601,13 +607,13 @@ export default function ExtractPage() {
                 <Col span={8}>
                   <Statistic
                     title="来源"
-                    value={detailDrawer.task.source_type === "text" ? "文本" : "图片"}
+                    value={detailDrawer.task.sourceType === "text" ? "文本" : "图片"}
                   />
                 </Col>
                 <Col span={8}>
                   <Statistic
                     title="题目数"
-                    value={detailDrawer.task.result?.questions?.length || 0}
+                    value={(detailDrawer.task.result?.questions as Array<unknown> | undefined)?.length || 0}
                   />
                 </Col>
               </Row>
@@ -619,16 +625,16 @@ export default function ExtractPage() {
                 <div style={{ marginBottom: 16 }}>
                   <Title level={5}>公司 / 岗位</Title>
                   <Text>
-                    {detailDrawer.task.result.company || "未识别"} /{" "}
-                    {detailDrawer.task.result.position || "未识别"}
+                    {(detailDrawer.task.result as Record<string, unknown>)?.company as string || "未识别"} /{" "}
+                    {(detailDrawer.task.result as Record<string, unknown>)?.position as string || "未识别"}
                   </Text>
                 </div>
 
                 <Title level={5}>题目列表</Title>
                 <List
-                  dataSource={detailDrawer.task.result.questions}
+                  dataSource={(detailDrawer.task.result?.questions as Question[]) || []}
                   renderItem={(q: Question, index: number) => {
-                    const answer = answersMap[q.question_id];
+                    const answer = answersMap[q.id];
                     return (
                       <List.Item
                         actions={
@@ -659,7 +665,7 @@ export default function ExtractPage() {
                                     onClick={() =>
                                       setAnswerModal({
                                         visible: true,
-                                        questionText: q.question_text,
+                                        questionText: q.questionText,
                                         answer: answer,
                                       })
                                     }
@@ -672,16 +678,16 @@ export default function ExtractPage() {
                       >
                         <List.Item.Meta
                           avatar={
-                            <Tag color={questionTypeColor[q.question_type] || "default"}>
-                              {q.question_type}
+                            <Tag color={questionTypeColor[q.questionType] || "default"}>
+                              {q.questionType}
                             </Tag>
                           }
-                          title={`${index + 1}. ${q.question_text}`}
+                          title={`${index + 1}. ${q.questionText}`}
                           description={
                             <div>
-                              {q.core_entities?.length > 0 && (
+                              {q.coreEntities?.length > 0 && (
                                 <Space size={[4, 8]} wrap style={{ marginBottom: 4 }}>
-                                  {q.core_entities.map((e) => (
+                                  {q.coreEntities.map((e) => (
                                     <Tag key={e} color="geekblue" style={{ fontSize: 12 }}>
                                       {e}
                                     </Tag>
@@ -715,7 +721,7 @@ export default function ExtractPage() {
                   <div style={{ marginTop: 24, textAlign: "right" }}>
                     <Popconfirm
                       title="确认入库到题库？"
-                      onConfirm={() => handleConfirm(detailDrawer.task!.task_id)}
+                      onConfirm={() => handleConfirm(detailDrawer.task!.taskId)}
                     >
                       <Button type="primary" icon={<CheckOutlined />}>
                         确认入库
@@ -727,9 +733,9 @@ export default function ExtractPage() {
             )}
 
             {/* 错误信息 */}
-            {detailDrawer.task.status === "failed" && detailDrawer.task.error_message && (
+            {detailDrawer.task.status === "failed" && (
               <Card size="small" style={{ marginTop: 16, borderColor: "#ff4d4f" }}>
-                <Text type="danger">错误: {detailDrawer.task.error_message}</Text>
+                <Text type="danger">错误: 任务处理失败</Text>
               </Card>
             )}
 

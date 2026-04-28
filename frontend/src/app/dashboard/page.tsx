@@ -19,19 +19,14 @@ import {
 } from "@ant-design/icons";
 import MainLayout from "@/components/MainLayout";
 import { getOverviewStats, getCompanyStats, getEntityStats } from "@/lib/api";
-import type { CompanyStats, EntityStats } from "@/types";
+import type { CompanyStats, EntityStats, OverviewStats } from "@/types";
 
 const { Title } = Typography;
 
 export default function DashboardPage() {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
-  const [overview, setOverview] = useState<{
-    total_questions: number;
-    total_companies: number;
-    has_answer: number;
-    no_answer: number;
-  } | null>(null);
+  const [overview, setOverview] = useState<OverviewStats | null>(null);
   const [companies, setCompanies] = useState<CompanyStats[]>([]);
   const [entities, setEntities] = useState<EntityStats[]>([]);
 
@@ -61,7 +56,7 @@ export default function DashboardPage() {
     { title: "公司", dataIndex: "company", key: "company" },
     { title: "题目数", dataIndex: "count", key: "count" },
     { title: "已掌握", dataIndex: "mastered", key: "mastered" },
-    { title: "已生成答案", dataIndex: "has_answer", key: "has_answer" },
+    { title: "已生成答案", dataIndex: "hasAnswer", key: "hasAnswer" },
   ];
 
   const entityColumns = [
@@ -88,7 +83,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="总题目数"
-              value={overview?.total_questions || 0}
+              value={overview?.totalQuestions || 0}
               prefix={<FileTextOutlined />}
             />
           </Card>
@@ -97,7 +92,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="公司数"
-              value={overview?.total_companies || 0}
+              value={overview?.totalCompanies || 0}
               prefix={<BankOutlined />}
             />
           </Card>
@@ -106,7 +101,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="已生成答案"
-              value={overview?.has_answer || 0}
+              value={overview?.hasAnswer || 0}
               prefix={<RobotOutlined />}
               valueStyle={{ color: "#3f8600" }}
             />
@@ -116,7 +111,7 @@ export default function DashboardPage() {
           <Card>
             <Statistic
               title="待生成答案"
-              value={overview?.no_answer || 0}
+              value={overview?.noAnswer || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: "#cf1322" }}
             />

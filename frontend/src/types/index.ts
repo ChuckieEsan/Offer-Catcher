@@ -31,7 +31,8 @@ export interface ChatRequest {
 // ========== Question ==========
 
 export interface Question {
-  questionId: string;
+  id: number;  // Long，后端返回的字段名是 id
+  questionHash: string;
   questionText: string;
   company: string;
   position: string;
@@ -41,10 +42,10 @@ export interface Question {
   questionAnswer?: string;
   clusterIds?: string[];
   metadata?: Record<string, unknown>;
-  visibility: string;  // 新增: PRIVATE/PUBLIC
-  sourceType: string;  // 新增: EXTRACTED/MANUAL
-  createdAt: string;   // 新增
-  updatedAt: string;   // 新增
+  visibility: string;
+  sourceType: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface QuestionListResponse {
@@ -177,7 +178,7 @@ export interface ExtractTaskConfirmResponse {
 export interface FavoriteItem {
   favoriteId: number;  // Long
   userId: string;
-  questionId: string;
+  questionId: number;  // Long
   createdAt: string;
 }
 
@@ -186,7 +187,7 @@ export interface FavoriteListResponse {
 }
 
 export interface CheckFavoritesResponse {
-  favorited: Record<string, boolean>;
+  favorited: Record<string, boolean>;  // key 是 string (由 Long 序列化而来)
 }
 
 // ========== Interview ==========

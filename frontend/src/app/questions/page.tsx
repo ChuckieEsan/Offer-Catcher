@@ -156,14 +156,14 @@ export default function QuestionsPage() {
       let filteredItems = res.questions;
       if (filterFavorite) {
         // 先检查所有题目的收藏状态
-        const questionIds = res.questions.map((q) => q.questionId);
+        const questionIds = res.questions.map((q) => String(q.id));
         const { favorited } = await checkFavorites(questionIds);
-        filteredItems = res.questions.filter((q) => favorited[q.questionId]);
+        filteredItems = res.questions.filter((q) => favorited[String(q.id)]);
         setFavoriteStatus(favorited);
       } else {
         // 检查当前页题目的收藏状态
         if (res.questions.length > 0) {
-          const questionIds = res.questions.map((q) => q.questionId);
+          const questionIds = res.questions.map((q) => String(q.id));
           const { favorited } = await checkFavorites(questionIds);
           setFavoriteStatus(favorited);
         }
@@ -186,7 +186,7 @@ export default function QuestionsPage() {
         message.success("已取消收藏");
         // 如果在收藏过滤模式下，从列表移除
         if (filterFavorite) {
-          setQuestions((prev) => prev.filter((q) => q.questionId !== questionId));
+          setQuestions((prev) => prev.filter((q) => String(q.id) !== questionId));
         }
       } else {
         await addFavorite(questionId);
@@ -215,7 +215,7 @@ export default function QuestionsPage() {
   const handleSaveEdit = async () => {
     if (!editModal.question) return;
     try {
-      await updateQuestion(editModal.question.questionId, {
+      await updateQuestion(String(editModal.question.id), {
         questionText: editModal.editText,
         answer: editModal.editAnswer,
         masteryLevel: editModal.editMastery,
@@ -228,9 +228,9 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     try {
-      await deleteQuestion(id);
+      await deleteQuestion(String(id));
       message.success("删除成功");
       loadQuestions();
     } catch (error) {
@@ -238,22 +238,22 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleRegenerate = async (id: string) => {
-    setRegenerating(id);
+  const handleRegenerate = async (id: number) => {
+    setRegenerating(String(id));
     const hide = message.loading("正在生成新答案...", 0);
     try {
       // preview=true 只生成不保存
-      const res = await regenerateAnswer(id, true);
+      const res = await regenerateAnswer(String(id), true);
       hide();
 
       // 获取题目文本用于显示
-      const question = questions.find(q => q.questionId === id);
+      const question = questions.find(q => q.id === id);
       const questionText = question?.questionText || viewDrawer.question?.questionText || "";
 
       // 显示预览 Modal
       setPreviewModal({
         visible: true,
-        questionId: id,
+        questionId: String(id),
         questionText,
         newAnswer: res.questionAnswer || "",
       });
@@ -273,14 +273,14 @@ export default function QuestionsPage() {
       message.success("答案已保存");
 
       // 更新当前查看的内容
-      if (viewDrawer.question?.questionId === questionId) {
+      if (viewDrawer.question && String(viewDrawer.question.id) === questionId) {
         setViewDrawer({
           visible: true,
           question: { ...viewDrawer.question, questionAnswer: newAnswer },
         });
       }
       // 更新编辑弹窗的内容
-      if (editModal.question?.questionId === questionId) {
+      if (editModal.question && String(editModal.question.id) === questionId) {
         setEditModal({
           ...editModal,
           editAnswer: newAnswer,
@@ -369,8 +369,8 @@ export default function QuestionsPage() {
       render: (_: unknown, record: Question) => (
         <Button
           type="text"
-          icon={favoriteStatus[record.questionId] ? <StarFilled style={{ color: "#faad14" }} /> : <StarOutlined />}
-          onClick={() => handleToggleFavorite(record.questionId)}
+          icon={favoriteStatus[String(record.id)] ? <StarFilled style={{ color: "#faad14" }} /> : <StarOutlined />}
+          onClick={() => handleToggleFavorite(String(record.id))}
         />
       ),
     },
@@ -387,7 +387,7 @@ export default function QuestionsPage() {
           <Button size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.questionId)}>
+          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -490,7 +490,7 @@ export default function QuestionsPage() {
       <Table
         dataSource={questions}
         columns={columns}
-        rowKey="questionId"
+        rowKey="id"
         loading={loading}
         scroll={{ x: 780 }}
         pagination={{
@@ -574,8 +574,8 @@ export default function QuestionsPage() {
                 <Button
                     type={viewDrawer.question.questionAnswer ? "default" : "primary"}
                     icon={<ReloadOutlined />}
-                    loading={regenerating === viewDrawer.question?.questionId}
-                    onClick={() => handleRegenerate(viewDrawer.question!.questionId)}
+                    loading={regenerating === String(viewDrawer.question?.id)}
+                    onClick={() => handleRegenerate(viewDrawer.question!.id)}
                   >
                     {viewDrawer.question.questionAnswer ? "重新生成" : "生成答案"}
                   </Button>
@@ -585,7 +585,7 @@ export default function QuestionsPage() {
                 <Popconfirm
                   title="确定删除这道题目？"
                   onConfirm={() => {
-                    handleDelete(viewDrawer.question!.questionId);
+                    handleDelete(viewDrawer.question!.id);
                     setViewDrawer({ visible: false, question: null });
                   }}
                 >
