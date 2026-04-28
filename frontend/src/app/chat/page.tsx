@@ -105,18 +105,22 @@ export default function ChatPage() {
   // 会话列表
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalConversations, setTotalConversations] = useState(0);
+  const pageSize = 20;
 
   // 当前会话
-  const [activeConversation, setActiveConversation] = useState<number | null>(null);
+  const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   // 输入状态
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   // 记录已完成的消息 ID，用于切换渲染模式
-  const [completedMessageIds, setCompletedMessageIds] = useState<Set<number>>(new Set());
+  const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
 
   // 缓存 streaming 配置，避免每次渲染创建新对象导致 XMarkdown 无限循环
   // 注意：禁用 enableAnimation 以避免动画触发无限循环
@@ -130,11 +134,12 @@ export default function ChatPage() {
   );
 
   // 标题编辑状态
-  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
 
   // Refs
   const listRef = useRef<HTMLDivElement>(null);
+  const conversationsListRef = useRef<HTMLDivElement>(null);
   const conversationsRef = useRef<Conversation[]>(conversations);
   const messagesRef = useRef<Message[]>(messages);
 
@@ -146,7 +151,7 @@ export default function ChatPage() {
 
   // 加载会话列表
   useEffect(() => {
-    loadConversations();
+    loadConversations(1);
   }, []);
 
   // 自动滚动
@@ -156,11 +161,30 @@ export default function ChatPage() {
     }
   }, [messages]);
 
-  const loadConversations = async () => {
+  // 加载更多会话（滚动到底部时触发）
+  const handleLoadMore = async () => {
+    if (loadingMore || conversations.length >= totalConversations) return;
+
+    setLoadingMore(true);
+    const nextPage = currentPage + 1;
+    try {
+      const res = await getConversations({ page: nextPage, pageSize });
+      setConversations((prev) => [...prev, ...res.conversations]);
+      setCurrentPage(nextPage);
+    } catch (error) {
+      console.error("加载更多失败");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const loadConversations = async (page: number = 1) => {
     setLoadingConversations(true);
     try {
-      const res = await getConversations();
+      const res = await getConversations({ page, pageSize });
       setConversations(res.conversations);
+      setTotalConversations(res.total);
+      setCurrentPage(page);
 
       // 如果有会话，自动选择第一个
       if (res.conversations.length > 0 && !activeConversation) {
@@ -173,7 +197,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleSelectConversation = async (id: number) => {
+  const handleSelectConversation = async (id: string) => {
     if (id === activeConversation) return;
 
     setActiveConversation(id);
@@ -210,10 +234,11 @@ export default function ChatPage() {
     }
   };
 
-  const handleDeleteConversation = async (id: number) => {
+  const handleDeleteConversation = async (id: string) => {
     try {
       await deleteConversation(id);
       setConversations((prev) => prev.filter((c) => c.conversationId !== id));
+      setTotalConversations((prev) => prev - 1);
 
       if (activeConversation === id) {
         const remaining = conversations.filter((c) => c.conversationId !== id);
@@ -236,7 +261,7 @@ export default function ChatPage() {
     setEditingTitle(conv.title);
   };
 
-  const handleSaveTitle = async (id: number) => {
+  const handleSaveTitle = async (id: string) => {
     if (!editingTitle.trim()) {
       setEditingConversationId(null);
       return;
@@ -261,7 +286,7 @@ export default function ChatPage() {
   const handleSend = useCallback(async () => {
     if (!input.trim() || streaming || !activeConversation) return;
 
-    const userMessageId = Date.now();
+    const userMessageId = String(Date.now());
     const userMessage: Message = {
       messageId: userMessageId,
       role: "user",
@@ -270,7 +295,7 @@ export default function ChatPage() {
     };
 
     // 添加 AI 消息（流式输出时持续更新）
-    const aiMessageId = Date.now() + 1;
+    const aiMessageId = String(Date.now() + 1);
     const aiMessage: Message = {
       messageId: aiMessageId,
       role: "assistant",
@@ -374,7 +399,18 @@ export default function ChatPage() {
           ) : conversations.length === 0 ? (
             <Empty description="暂无对话" style={{ padding: 40 }} />
           ) : (
-            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 240px)" }}>
+            <div
+              ref={conversationsListRef}
+              style={{ overflow: "auto", maxHeight: "calc(100vh - 240px)" }}
+              onScroll={(e) => {
+                const target = e.target as HTMLDivElement;
+                const { scrollTop, scrollHeight, clientHeight } = target;
+                // 滚动到底部时加载更多
+                if (scrollHeight - scrollTop - clientHeight < 50 && !loadingMore) {
+                  handleLoadMore();
+                }
+              }}
+            >
               {conversations.map((conv) => (
                 <div
                   key={conv.conversationId}
@@ -460,6 +496,17 @@ export default function ChatPage() {
                   </div>
                 </div>
               ))}
+              {/* 加载更多指示器 */}
+              {loadingMore && (
+                <div style={{ textAlign: "center", padding: 16 }}>
+                  <Spin size="small" />
+                </div>
+              )}
+              {conversations.length >= totalConversations && totalConversations > 0 && (
+                <div style={{ textAlign: "center", padding: 8, color: "#999", fontSize: 12 }}>
+                  已加载全部 {totalConversations} 个对话
+                </div>
+              )}
             </div>
           )}
         </Sider>

@@ -67,9 +67,12 @@ export const api = axios.create({
 
 // ========== Conversation API ==========
 
-export async function getConversations(limit: number = 50): Promise<ConversationListResponse> {
+export async function getConversations(params?: {
+  page?: number;
+  pageSize?: number;
+}): Promise<ConversationListResponse> {
   const res = await api.get("/conversations", {
-    params: { limit },
+    params: { page: params?.page ?? 1, pageSize: params?.pageSize ?? 20 },
     headers: { "X-User-Id": getUserId() },
   });
   return res.data;
@@ -82,27 +85,27 @@ export async function createConversation(title: string = "新对话"): Promise<C
   return res.data;
 }
 
-export async function getConversation(id: number): Promise<Conversation> {
+export async function getConversation(id: string): Promise<Conversation> {
   const res = await api.get(`/conversations/${id}`, {
     headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function updateConversationTitle(id: number, title: string): Promise<void> {
+export async function updateConversationTitle(id: string, title: string): Promise<void> {
   await api.put(`/conversations/${id}/title`, { title }, {
     headers: { "X-User-Id": getUserId() },
   });
 }
 
-export async function generateTitle(id: number): Promise<Conversation> {
+export async function generateTitle(id: string): Promise<Conversation> {
   const res = await api.post(`/conversations/${id}/generate-title`, {}, {
     headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function deleteConversation(id: number): Promise<void> {
+export async function deleteConversation(id: string): Promise<void> {
   await api.delete(`/conversations/${id}`, {
     headers: { "X-User-Id": getUserId() },
   });

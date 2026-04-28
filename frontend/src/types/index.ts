@@ -3,14 +3,14 @@
 // ========== Conversation ==========
 
 export interface Message {
-  messageId: number;  // Long
+  messageId: string;  // Long 序列化为 String
   role: "user" | "assistant";
   content: string;
   createdAt: string;
 }
 
 export interface Conversation {
-  conversationId: number;  // Long
+  conversationId: string;  // Long 序列化为 String
   title: string;
   status: string;
   messageCount: number;
@@ -21,11 +21,14 @@ export interface Conversation {
 
 export interface ConversationListResponse {
   conversations: Conversation[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface ChatRequest {
   message: string;
-  conversationId?: number;  // Long, optional for new conversation
+  conversationId?: string;  // Long 序列化为 String
 }
 
 // ========== Question ==========
