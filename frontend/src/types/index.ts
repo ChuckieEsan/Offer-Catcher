@@ -1,128 +1,291 @@
 // API 类型定义
 
+// ========== Conversation ==========
+
 export interface Message {
-  id: string;
+  messageId: number;  // Long
   role: "user" | "assistant";
   content: string;
-  reasoning_content?: string;  // DeepSeek thinking mode 思考过程
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Conversation {
-  id: string;
+  conversationId: number;  // Long
   title: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ConversationDetail {
-  conversation: Conversation;
-  messages: Message[];
+  status: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  messages?: Message[];
 }
 
 export interface ConversationListResponse {
-  items: Conversation[];
-  total: number;
+  conversations: Conversation[];
 }
 
 export interface ChatRequest {
   message: string;
-  conversation_id: string;
-  user_id: string;  // 用户 ID，用于长期记忆
+  conversationId?: number;  // Long, optional for new conversation
 }
 
-export interface ChatResponse {
-  response: string;
-}
+// ========== Question ==========
 
 export interface Question {
-  question_id: string;
-  question_text: string;
+  questionId: string;
+  questionText: string;
   company: string;
   position: string;
-  question_type: string;
-  mastery_level: number;
-  core_entities: string[];
-  question_answer?: string;
-  cluster_ids?: string[];
+  questionType: string;
+  masteryLevel: number;
+  coreEntities: string[];
+  questionAnswer?: string;
+  clusterIds?: string[];
   metadata?: Record<string, unknown>;
+  visibility: string;  // 新增: PRIVATE/PUBLIC
+  sourceType: string;  // 新增: EXTRACTED/MANUAL
+  createdAt: string;   // 新增
+  updatedAt: string;   // 新增
 }
 
 export interface QuestionListResponse {
-  items: Question[];
+  questions: Question[];
   total: number;
   page: number;
-  page_size: number;
+  pageSize: number;
 }
+
+export interface QuestionCreateRequest {
+  questionText: string;
+  company: string;
+  position: string;
+  questionType: string;
+  coreEntities?: string[];
+  visibility?: string;
+}
+
+export interface QuestionUpdateRequest {
+  answer?: string;
+  masteryLevel?: number;
+  questionText?: string;
+  coreEntities?: string[];
+}
+
+// ========== Search ==========
 
 export interface SearchRequest {
   query: string;
   company?: string;
   position?: string;
-  mastery_level?: number;
-  question_type?: string;
-  core_entities?: string[];
-  cluster_ids?: string[];
+  masteryLevel?: number;
+  questionType?: string;
+  coreEntities?: string[];
+  clusterIds?: string[];
   k?: number;
-  score_threshold?: number;
+  scoreThreshold?: number;
 }
 
 export interface SearchResult {
-  question_id: string;
-  question_text: string;
+  questionId: string;
+  questionText: string;
   company: string;
   position: string;
-  mastery_level: number;
-  question_type: string;
-  core_entities: string[];
-  question_answer?: string;
-  cluster_ids?: string[];
+  masteryLevel: string;  // 注意：搜索返回的是 string
+  questionType: string;
+  coreEntities: string[];
+  clusterIds?: string[];
+  questionAnswer?: string;
   metadata?: Record<string, unknown>;
   score: number;
 }
 
 export interface SearchResponse {
   results: SearchResult[];
+  total: number;
 }
+
+// ========== Extract ==========
 
 export interface ExtractResponse {
   company: string;
   position: string;
-  questions: Question[];
+  questions: ExtractedQuestion[];
 }
 
+export interface ExtractedQuestion {
+  questionId: string;
+  questionText: string;
+  questionType: string;
+  coreEntities: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ExtractTask {
+  taskId: number;  // Long
+  userId: string;
+  sourceType: "image" | "text";
+  sourceContent?: string;
+  sourceImages?: string[];
+  status: "pending" | "processing" | "completed" | "failed" | "confirmed" | "cancelled";
+  result?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExtractTaskListItem {
+  taskId: number;  // Long
+  status: string;
+  sourceType: string;
+  company: string;
+  position: string;
+  questionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExtractTaskListResponse {
+  items: ExtractTaskListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ExtractTaskSubmitRequest {
+  sourceType: "image" | "text";
+  sourceContent?: string;
+  sourceImages?: string[];
+}
+
+export interface ExtractTaskSubmitResponse {
+  taskId: number;  // Long
+  message: string;
+}
+
+export interface ExtractTaskUpdateRequest {
+  company?: string;
+  position?: string;
+  questions?: Record<string, unknown>[];  // Map 格式
+}
+
+export interface ExtractTaskConfirmResponse {
+  processed: number;
+  failed: number;
+  questionIds: string[];
+}
+
+// ========== Favorite ==========
+
+export interface FavoriteItem {
+  favoriteId: number;  // Long
+  userId: string;
+  questionId: string;
+  createdAt: string;
+}
+
+export interface FavoriteListResponse {
+  favorites: FavoriteItem[];
+}
+
+export interface CheckFavoritesResponse {
+  favorited: Record<string, boolean>;
+}
+
+// ========== Interview ==========
+
+export interface InterviewSession {
+  sessionId: number;  // Long
+  company: string;
+  position: string;
+  difficulty: string;
+  totalQuestions: number;
+  status: "created" | "in_progress" | "paused" | "completed" | "abandoned";
+  currentQuestionIdx: number;
+  correctCount: number;
+  totalScore: number;
+  createdAt: string;
+  updatedAt: string;
+  questions: InterviewQuestionItem[];
+}
+
+export interface InterviewQuestionItem {
+  questionId: string;
+  questionText: string;
+  questionType: string;
+  difficulty: string;
+  coreEntities: string[];
+  answer?: string;
+  score?: number;
+  feedback?: string;
+  status: "pending" | "answered" | "skipped";
+  followUpCount: number;
+}
+
+export interface InterviewReport {
+  sessionId: number;
+  company: string;
+  position: string;
+  difficulty: string;
+  status: string;
+  totalQuestions: number;
+  answeredCount: number;
+  correctCount: number;
+  totalScore: number;
+  averageScore: number;
+  durationMinutes: number;
+  questions: InterviewQuestionItem[];
+}
+
+export interface CreateInterviewSessionRequest {
+  company: string;
+  position: string;
+  difficulty: string;
+  totalQuestions: number;
+}
+
+export interface SubmitAnswerRequest {
+  answer: string;
+}
+
+// ========== Score ==========
+
 export interface ScoreRequest {
-  question_id: string;
-  user_answer: string;
+  questionId: string;
+  userAnswer: string;
 }
 
 export interface ScoreResult {
-  question_id: string;
-  question_text: string;
-  standard_answer?: string;
-  user_answer: string;
+  questionId: string;
+  questionText: string;
+  standardAnswer?: string;
+  userAnswer: string;
   score: number;
-  mastery_level: number;
+  masteryLevel: number;
   strengths: string[];
   improvements: string[];
   feedback: string;
 }
 
+// ========== Stats ==========
+
 export interface OverviewStats {
-  total_questions: number;
-  total_companies: number;
-  total_positions: number;
-  by_type: Record<string, number>;
-  by_mastery: Record<number, number>;
-  has_answer: number;
-  no_answer: number;
+  totalQuestions: number;
+  totalCompanies: number;
+  totalPositions: number;
+  byType: Record<string, number>;
+  byMastery: Record<number, number>;
+  hasAnswer: number;
+  noAnswer: number;
 }
 
 export interface CompanyStats {
   company: string;
   count: number;
   mastered: number;
-  has_answer: number;
+  hasAnswer: number;
+}
+
+export interface PositionStats {
+  position: string;
+  count: number;
 }
 
 export interface EntityStats {
@@ -131,84 +294,15 @@ export interface EntityStats {
 }
 
 export interface ClusterStats {
-  cluster_id: string;
+  clusterId: string;
   count: number;
 }
 
-export interface PositionStats {
-  position: string;
-  count: number;
-}
+// ========== Memory ==========
 
-// ========== Extract Task Types ==========
-
-export interface ExtractTask {
-  task_id: string;
-  user_id: string;
-  source_type: "image" | "text";
-  status: "pending" | "processing" | "completed" | "failed" | "confirmed";
-  error_message?: string;
-  created_at: string;
-  updated_at: string;
-  result?: ExtractedInterview;
-}
-
-export interface ExtractedInterview {
-  company: string;
-  position: string;
-  questions: Question[];
-}
-
-export interface ExtractTaskListItem {
-  task_id: string;
-  status: string;
-  source_type: string;
-  company: string;
-  position: string;
-  question_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ExtractTaskListResponse {
-  items: ExtractTaskListItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface ExtractTaskSubmitRequest {
-  source_type: "image" | "text";
-  source_content?: string;
-  source_images?: string[];
-}
-
-export interface ExtractTaskSubmitResponse {
-  task_id: string;
-  message: string;
-}
-
-export interface ExtractTaskUpdateRequest {
-  company?: string;
-  position?: string;
-  questions?: Question[];
-}
-
-// ========== Favorites Types ==========
-
-export interface FavoriteItem {
-  id: string;
-  question_id: string;
-  created_at: string;
-}
-
-export interface FavoriteListResponse {
-  items: FavoriteItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface CheckFavoritesResponse {
-  status: Record<string, boolean>;
+export interface MemoryResponse {
+  userId: string;
+  content: string;
+  preferences: string;
+  behaviors: string;
 }

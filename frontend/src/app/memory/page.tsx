@@ -22,8 +22,6 @@ export default function MemoryPage() {
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>("");
 
-  const userId = "default_user";
-
   useEffect(() => {
     fetchMemoryData();
   }, []);
@@ -32,14 +30,15 @@ export default function MemoryPage() {
     setLoading(true);
     try {
       const [memoryRes, prefsRes, behaviorsRes] = await Promise.all([
-        getMemoryContent(userId),
-        getPreferences(userId),
-        getBehaviors(userId),
+        getMemoryContent(),
+        getPreferences(),
+        getBehaviors(),
       ]);
 
-      setMemoryContent(memoryRes.content);
-      setPreferences(prefsRes.content);
-      setBehaviors(behaviorsRes.content);
+      // API 直接返回字符串
+      setMemoryContent(memoryRes);
+      setPreferences(prefsRes);
+      setBehaviors(behaviorsRes);
     } catch (error) {
       message.error("加载记忆数据失败");
     } finally {
@@ -64,11 +63,11 @@ export default function MemoryPage() {
     setSaving(true);
     try {
       if (editingTab === "preferences") {
-        await updatePreferences(userId, editContent);
+        await updatePreferences(editContent);
         setPreferences(editContent);
         message.success("偏好设置已保存");
       } else if (editingTab === "behaviors") {
-        await updateBehaviors(userId, editContent);
+        await updateBehaviors(editContent);
         setBehaviors(editContent);
         message.success("行为模式已保存");
       }

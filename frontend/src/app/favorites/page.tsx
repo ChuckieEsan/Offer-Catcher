@@ -35,7 +35,6 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [questions, setQuestions] = useState<Record<string, Question>>({});
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -52,18 +51,17 @@ export default function FavoritesPage() {
   const loadFavorites = async () => {
     setLoading(true);
     try {
-      const res = await getFavorites({ page, page_size: pageSize });
-      setFavorites(res.items);
-      setTotal(res.total);
+      const res = await getFavorites();
+      setFavorites(res.favorites);
 
       // 批量获取题目详情
       const questionDetails: Record<string, Question> = {};
-      for (const item of res.items) {
+      for (const item of res.favorites) {
         try {
-          const question = await getQuestion(item.question_id);
-          questionDetails[item.question_id] = question;
+          const question = await getQuestion(item.questionId);
+          questionDetails[item.questionId] = question;
         } catch (error) {
-          console.error(`Failed to load question ${item.question_id}`);
+          console.error(`Failed to load question ${item.questionId}`);
         }
       }
       setQuestions(questionDetails);
@@ -74,17 +72,16 @@ export default function FavoritesPage() {
     }
   };
 
-  const handleRemoveFavorite = async (questionId: string) => {
+  const handleRemoveFavorite = async (favoriteId: number, questionId: string) => {
     try {
-      await removeFavorite(questionId);
+      await removeFavorite(favoriteId);
       message.success("已取消收藏");
-      setFavorites((prev) => prev.filter((f) => f.question_id !== questionId));
+      setFavorites((prev) => prev.filter((f) => f.favoriteId !== favoriteId));
       setQuestions((prev) => {
         const next = { ...prev };
         delete next[questionId];
         return next;
       });
-      setTotal((prev) => prev - 1);
     } catch (error) {
       message.error("操作失败");
     }
@@ -109,7 +106,7 @@ export default function FavoritesPage() {
   const columns = [
     {
       title: "公司",
-      dataIndex: "question_id",
+      dataIndex: "questionId",
       key: "company",
       width: 140,
       render: (questionId: string) => {
@@ -123,14 +120,14 @@ export default function FavoritesPage() {
     },
     {
       title: "题目",
-      dataIndex: "question_id",
-      key: "question_text",
+      dataIndex: "questionId",
+      key: "questionText",
       ellipsis: true,
       render: (questionId: string) => {
         const question = questions[questionId];
         return question ? (
           <a onClick={() => handleView(questionId)} style={{ color: "#1890ff" }}>
-            {question.question_text}
+            {question.questionText}
           </a>
         ) : (
           "加载中..."
@@ -139,28 +136,28 @@ export default function FavoritesPage() {
     },
     {
       title: "类型",
-      dataIndex: "question_id",
-      key: "question_type",
+      dataIndex: "questionId",
+      key: "questionType",
       width: 100,
       render: (questionId: string) => {
         const question = questions[questionId];
-        return question ? <Tag>{question.question_type}</Tag> : null;
+        return question ? <Tag>{question.questionType}</Tag> : null;
       },
     },
     {
       title: "熟练度",
-      dataIndex: "question_id",
-      key: "mastery_level",
+      dataIndex: "questionId",
+      key: "masteryLevel",
       width: 100,
       render: (questionId: string) => {
         const question = questions[questionId];
-        return question ? getMasteryTag(question.mastery_level) : null;
+        return question ? getMasteryTag(question.masteryLevel) : null;
       },
     },
     {
       title: "收藏时间",
-      dataIndex: "created_at",
-      key: "created_at",
+      dataIndex: "createdAt",
+      key: "createdAt",
       width: 180,
       render: (createdAt: string) => new Date(createdAt).toLocaleString(),
     },
@@ -174,14 +171,14 @@ export default function FavoritesPage() {
           <Button
             size="small"
             icon={<EyeOutlined />}
-            onClick={() => handleView(record.question_id)}
-            disabled={!questions[record.question_id]}
+            onClick={() => handleView(record.questionId)}
+            disabled={!questions[record.questionId]}
           >
             查看
           </Button>
           <Popconfirm
             title="确定取消收藏？"
-            onConfirm={() => handleRemoveFavorite(record.question_id)}
+            onConfirm={() => handleRemoveFavorite(record.favoriteId, record.questionId)}
           >
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -201,18 +198,18 @@ export default function FavoritesPage() {
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={24}>
           <Col span={8}>
-            <Statistic title="收藏总数" value={total} suffix="道题目" />
+            <Statistic title="收藏总数" value={favorites.length} suffix="道题目" />
           </Col>
           <Col span={8}>
             <Statistic
               title="有答案"
-              value={Object.values(questions).filter((q) => q.question_answer).length}
+              value={Object.values(questions).filter((q) => q.questionAnswer).length}
             />
           </Col>
           <Col span={8}>
             <Statistic
               title="未掌握"
-              value={Object.values(questions).filter((q) => q.mastery_level === 0).length}
+              value={Object.values(questions).filter((q) => q.masteryLevel === 0).length}
             />
           </Col>
         </Row>
@@ -230,21 +227,9 @@ export default function FavoritesPage() {
           <Table
             dataSource={favorites}
             columns={columns}
-            rowKey="id"
+            rowKey="favoriteId"
             loading={loading}
             scroll={{ x: 800 }}
-            pagination={{
-              current: page,
-              pageSize,
-              total,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条`,
-              onChange: (p, ps) => {
-                setPage(p);
-                setPageSize(ps);
-              },
-            }}
           />
         )}
       </Card>
@@ -261,15 +246,15 @@ export default function FavoritesPage() {
           <div>
             <Space style={{ marginBottom: 16 }}>
               <Tag color="blue">{viewDrawer.question.company}</Tag>
-              <Tag>{viewDrawer.question.question_type}</Tag>
-              {getMasteryTag(viewDrawer.question.mastery_level)}
+              <Tag>{viewDrawer.question.questionType}</Tag>
+              {getMasteryTag(viewDrawer.question.masteryLevel)}
             </Space>
 
-            {viewDrawer.question.core_entities && viewDrawer.question.core_entities.length > 0 && (
+            {viewDrawer.question.coreEntities && viewDrawer.question.coreEntities.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <Title level={5}>知识点</Title>
                 <div>
-                  {viewDrawer.question.core_entities.map((e) => (
+                  {viewDrawer.question.coreEntities.map((e) => (
                     <Tag key={e} color="geekblue" style={{ margin: 4 }}>
                       {e}
                     </Tag>
@@ -281,13 +266,13 @@ export default function FavoritesPage() {
             <div style={{ marginBottom: 16 }}>
               <Title level={5}>题目内容</Title>
               <Paragraph style={{ background: "#f5f5f5", padding: 12, borderRadius: 4 }}>
-                {viewDrawer.question.question_text}
+                {viewDrawer.question.questionText}
               </Paragraph>
             </div>
 
             <div>
               <Title level={5}>答案</Title>
-              {viewDrawer.question.question_answer ? (
+              {viewDrawer.question.questionAnswer ? (
                 <div
                   style={{
                     background: "#f5f5f5",
@@ -298,7 +283,7 @@ export default function FavoritesPage() {
                   }}
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {viewDrawer.question.question_answer}
+                    {viewDrawer.question.questionAnswer}
                   </ReactMarkdown>
                 </div>
               ) : (

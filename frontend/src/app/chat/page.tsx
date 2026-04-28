@@ -11,7 +11,6 @@ import {
   Spin,
   Popconfirm,
   App,
-  Collapse,
 } from "antd";
 import {
   PlusOutlined,
@@ -19,7 +18,6 @@ import {
   DeleteOutlined,
   LoadingOutlined,
   EditOutlined,
-  BulbOutlined,
 } from "@ant-design/icons";
 import { XMarkdown } from "@ant-design/x-markdown";
 import MainLayout from "@/components/MainLayout";
@@ -29,68 +27,15 @@ import {
   createConversation,
   getConversation,
   deleteConversation,
-  updateConversation,
+  updateConversationTitle,
   generateTitle,
   chatStream,
-  getUserId,
 } from "@/lib/api";
 import type { Conversation, Message } from "@/types";
 
 const { Sider, Content } = Layout;
 const { TextArea } = Input;
 const { Title, Text, Paragraph } = Typography;
-
-// 思考过程展示组件
-function ThinkingBlock({
-  reasoning,
-  isStreaming,
-}: {
-  reasoning: string;
-  isStreaming: boolean;
-}) {
-  if (!reasoning) return null;
-
-  // 截取预览文本
-  const previewLength = 100;
-  const preview = reasoning.length > previewLength
-    ? reasoning.slice(0, previewLength) + "..."
-    : reasoning;
-
-  return (
-    <Collapse
-      size="small"
-      style={{ marginBottom: 8 }}
-      items={[
-        {
-          key: "1",
-          label: (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <BulbOutlined style={{ color: "#722ed1" }} />
-              <Text type="secondary">
-                {isStreaming ? "思考中..." : `思考过程 (${reasoning.length} 字符)`}
-              </Text>
-            </div>
-          ),
-          children: (
-            <div
-              style={{
-                background: "#f9f0ff",
-                padding: 12,
-                borderRadius: 4,
-                fontSize: 13,
-                lineHeight: 1.6,
-                whiteSpace: "pre-wrap",
-                color: "#595959",
-              }}
-            >
-              {reasoning}
-            </div>
-          ),
-        },
-      ]}
-    />
-  );
-}
 
 // 思考中提示组件
 function ThinkingIndicator() {
@@ -131,16 +76,9 @@ const MessageItem = React.memo(function MessageItem({
       >
         {msg.role === "assistant" ? (
           <>
-            {/* 思考过程展示 */}
-            {msg.reasoning_content && (
-              <ThinkingBlock
-                reasoning={msg.reasoning_content}
-                isStreaming={isStreaming && !isCompleted}
-              />
-            )}
             {/* 最终回答 */}
             {msg.content === "" ? (
-              !msg.reasoning_content && <ThinkingIndicator />
+              <ThinkingIndicator />
             ) : isStreaming && !isCompleted ? (
               <XMarkdown
                 content={msg.content}
@@ -169,14 +107,14 @@ export default function ChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(true);
 
   // 当前会话
-  const [activeConversation, setActiveConversation] = useState<string | null>(null);
+  const [activeConversation, setActiveConversation] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
   // 输入状态
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
   // 记录已完成的消息 ID，用于切换渲染模式
   const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
 
@@ -192,7 +130,7 @@ export default function ChatPage() {
   );
 
   // 标题编辑状态
-  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
 
   // Refs
@@ -222,11 +160,11 @@ export default function ChatPage() {
     setLoadingConversations(true);
     try {
       const res = await getConversations();
-      setConversations(res.items);
+      setConversations(res.conversations);
 
       // 如果有会话，自动选择第一个
-      if (res.items.length > 0 && !activeConversation) {
-        handleSelectConversation(res.items[0].id);
+      if (res.conversations.length > 0 && !activeConversation) {
+        handleSelectConversation(res.conversations[0].conversationId);
       }
     } catch (error) {
       message.error("加载会话列表失败");
@@ -235,7 +173,7 @@ export default function ChatPage() {
     }
   };
 
-  const handleSelectConversation = async (id: string) => {
+  const handleSelectConversation = async (id: number) => {
     if (id === activeConversation) return;
 
     setActiveConversation(id);
@@ -245,11 +183,12 @@ export default function ChatPage() {
     setCompletedMessageIds(new Set());
 
     try {
-      const res = await getConversation(id);
+      const conversation = await getConversation(id);
+      const msgs = conversation.messages || [];
       // 历史消息全部标记为已完成
-      const completedIds = new Set(res.messages.map((m) => m.id));
+      const completedIds = new Set(msgs.map((m) => m.messageId));
       setCompletedMessageIds(completedIds);
-      setMessages(res.messages);
+      setMessages(msgs);
     } catch (error) {
       message.error("加载消息失败");
     } finally {
@@ -261,7 +200,7 @@ export default function ChatPage() {
     try {
       const conv = await createConversation();
       setConversations((prev) => [conv, ...prev]);
-      setActiveConversation(conv.id);
+      setActiveConversation(conv.conversationId);
       setMessages([]);
       setStreamingMessageId(null);
       setCompletedMessageIds(new Set());
@@ -271,15 +210,15 @@ export default function ChatPage() {
     }
   };
 
-  const handleDeleteConversation = async (id: string) => {
+  const handleDeleteConversation = async (id: number) => {
     try {
       await deleteConversation(id);
-      setConversations((prev) => prev.filter((c) => c.id !== id));
+      setConversations((prev) => prev.filter((c) => c.conversationId !== id));
 
       if (activeConversation === id) {
-        const remaining = conversations.filter((c) => c.id !== id);
+        const remaining = conversations.filter((c) => c.conversationId !== id);
         if (remaining.length > 0) {
-          handleSelectConversation(remaining[0].id);
+          handleSelectConversation(remaining[0].conversationId);
         } else {
           setActiveConversation(null);
           setMessages([]);
@@ -293,19 +232,19 @@ export default function ChatPage() {
 
   // 标题编辑相关
   const handleStartEditTitle = (conv: Conversation) => {
-    setEditingConversationId(conv.id);
+    setEditingConversationId(conv.conversationId);
     setEditingTitle(conv.title);
   };
 
-  const handleSaveTitle = async (id: string) => {
+  const handleSaveTitle = async (id: number) => {
     if (!editingTitle.trim()) {
       setEditingConversationId(null);
       return;
     }
     try {
-      const updated = await updateConversation(id, editingTitle.trim());
+      await updateConversationTitle(id, editingTitle.trim());
       setConversations((prev) =>
-        prev.map((c) => c.id === updated.id ? updated : c)
+        prev.map((c) => c.conversationId === id ? { ...c, title: editingTitle.trim() } : c)
       );
       message.success("标题已更新");
     } catch (error) {
@@ -322,22 +261,21 @@ export default function ChatPage() {
   const handleSend = useCallback(async () => {
     if (!input.trim() || streaming || !activeConversation) return;
 
-    const userMessageId = `temp_${Date.now()}`;
+    const userMessageId = Date.now();
     const userMessage: Message = {
-      id: userMessageId,
+      messageId: userMessageId,
       role: "user",
       content: input,
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     };
 
     // 添加 AI 消息（流式输出时持续更新）
-    const aiMessageId = `ai_${Date.now()}`;
+    const aiMessageId = Date.now() + 1;
     const aiMessage: Message = {
-      id: aiMessageId,
+      messageId: aiMessageId,
       role: "assistant",
       content: "",
-      reasoning_content: "",  // 初始化思考内容
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, userMessage, aiMessage]);
@@ -349,25 +287,16 @@ export default function ChatPage() {
     await chatStream(
       {
         message: currentInput,
-        conversation_id: activeConversation,
-        user_id: getUserId(),
+        conversationId: activeConversation,
       },
       {
-        // 处理思考内容
         onReasoning: (reasoning) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === aiMessageId
-                ? { ...msg, reasoning_content: (msg.reasoning_content || "") + reasoning }
-                : msg
-            )
-          );
+          // DeepSeek thinking mode - 如果需要可以处理
         },
-        // 处理最终回答
         onChunk: (chunk) => {
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === aiMessageId
+              msg.messageId === aiMessageId
                 ? { ...msg, content: msg.content + chunk }
                 : msg
             )
@@ -376,19 +305,17 @@ export default function ChatPage() {
         onDone: () => {
           setStreaming(false);
           setStreamingMessageId(null);
-          // 标记消息已完成，触发从 streaming 模式切换到 complete 模式
           setCompletedMessageIds((prev) => new Set([...prev, aiMessageId]));
 
           // 自动生成标题（消息数达到 6 条且标题为"新对话"）
-          const currentConv = conversationsRef.current.find((c) => c.id === activeConversation);
+          const currentConv = conversationsRef.current.find((c) => c.conversationId === activeConversation);
           if (currentConv && currentConv.title === "新对话") {
-            // 计算消息总数（包括刚添加的 2 条消息）
             const totalMessages = messagesRef.current.length + 2;
             if (totalMessages >= 6) {
               generateTitle(activeConversation)
                 .then((updated) => {
                   setConversations((prev) =>
-                    prev.map((c) => c.id === updated.id ? updated : c)
+                    prev.map((c) => c.conversationId === updated.conversationId ? updated : c)
                   );
                 })
                 .catch((err) => {
@@ -400,7 +327,7 @@ export default function ChatPage() {
         onError: (error) => {
           setStreaming(false);
           setStreamingMessageId(null);
-          setMessages((prev) => prev.filter((msg) => msg.id !== aiMessageId));
+          setMessages((prev) => prev.filter((msg) => msg.messageId !== aiMessageId));
           message.error(`错误: ${error}`);
         },
       }
@@ -450,11 +377,11 @@ export default function ChatPage() {
             <div style={{ overflow: "auto", maxHeight: "calc(100vh - 240px)" }}>
               {conversations.map((conv) => (
                 <div
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv.id)}
+                  key={conv.conversationId}
+                  onClick={() => handleSelectConversation(conv.conversationId)}
                   style={{
                     cursor: "pointer",
-                    background: activeConversation === conv.id ? "#e6f7ff" : "transparent",
+                    background: activeConversation === conv.conversationId ? "#e6f7ff" : "transparent",
                     padding: "12px 16px",
                     borderBottom: "1px solid #f0f0f0",
                     display: "flex",
@@ -463,14 +390,14 @@ export default function ChatPage() {
                   }}
                 >
                   <div style={{ flex: 1, overflow: "hidden", marginRight: 8 }}>
-                    {editingConversationId === conv.id ? (
+                    {editingConversationId === conv.conversationId ? (
                       <Input
                         value={editingTitle}
                         onChange={(e) => setEditingTitle(e.target.value)}
-                        onBlur={() => handleSaveTitle(conv.id)}
+                        onBlur={() => handleSaveTitle(conv.conversationId)}
                         onPressEnter={(e) => {
                           e.preventDefault();
-                          handleSaveTitle(conv.id);
+                          handleSaveTitle(conv.conversationId);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Escape") {
@@ -485,7 +412,7 @@ export default function ChatPage() {
                     ) : (
                       <div
                         style={{
-                          fontWeight: activeConversation === conv.id ? 600 : 400,
+                          fontWeight: activeConversation === conv.conversationId ? 600 : 400,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -499,11 +426,11 @@ export default function ChatPage() {
                       </div>
                     )}
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      {formatDate(conv.updated_at)}
+                      {formatDate(conv.updatedAt)}
                     </Text>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    {editingConversationId !== conv.id && (
+                    {editingConversationId !== conv.conversationId && (
                       <Button
                         type="text"
                         size="small"
@@ -518,7 +445,7 @@ export default function ChatPage() {
                       title="确定删除此对话？"
                       onConfirm={(e) => {
                         e?.stopPropagation();
-                        handleDeleteConversation(conv.id);
+                        handleDeleteConversation(conv.conversationId);
                       }}
                       onCancel={(e) => e?.stopPropagation()}
                     >
@@ -579,10 +506,10 @@ export default function ChatPage() {
                   <>
                     {messages.map((msg) => (
                       <MessageItem
-                        key={msg.id}
+                        key={msg.messageId}
                         msg={msg}
-                        isStreaming={msg.id === streamingMessageId}
-                        isCompleted={completedMessageIds.has(msg.id)}
+                        isStreaming={msg.messageId === streamingMessageId}
+                        isCompleted={completedMessageIds.has(msg.messageId)}
                         streamingConfig={streamingConfig}
                       />
                     ))}

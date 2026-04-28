@@ -6,13 +6,20 @@ import axios from "axios";
 import type {
   ChatRequest,
   Conversation,
-  ConversationDetail,
   ConversationListResponse,
   Question,
   QuestionListResponse,
+  QuestionCreateRequest,
+  QuestionUpdateRequest,
   SearchRequest,
   SearchResponse,
   ExtractResponse,
+  ExtractTask,
+  ExtractTaskListResponse,
+  ExtractTaskSubmitRequest,
+  ExtractTaskSubmitResponse,
+  ExtractTaskUpdateRequest,
+  ExtractTaskConfirmResponse,
   ScoreRequest,
   ScoreResult,
   OverviewStats,
@@ -20,14 +27,14 @@ import type {
   EntityStats,
   ClusterStats,
   PositionStats,
-  ExtractTask,
-  ExtractTaskListResponse,
-  ExtractTaskSubmitRequest,
-  ExtractTaskSubmitResponse,
-  ExtractTaskUpdateRequest,
   FavoriteItem,
   FavoriteListResponse,
   CheckFavoritesResponse,
+  InterviewSession,
+  InterviewReport,
+  CreateInterviewSessionRequest,
+  SubmitAnswerRequest,
+  MemoryResponse,
 } from "@/types";
 
 // 默认使用相对路径（通过 Next.js rewrites 代理）
@@ -37,24 +44,20 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const USER_ID_KEY = "offer_catcher_user_id";
 
 /**
- * 获取用户 ID（用于长期记忆和会话管理）
- * 如果不存在则自动生成
- *
- * TODO: 测试完成后，移除下面的 "return 'default_user'" 行，
- * 启用后续的 UUID 生成逻辑以支持多用户
+ * 获取用户 ID（用于多用户数据隔离）
+ * 如果不存在则自动生成 UUID
  */
 export function getUserId(): string {
-  return "default_user";
-  // if (typeof window === "undefined") {
-  //   return "default_user";
-  // }
-  //
-  // let userId = localStorage.getItem(USER_ID_KEY);
-  // if (!userId) {
-  //   userId = crypto.randomUUID();
-  //   localStorage.setItem(USER_ID_KEY, userId);
-  // }
-  // return userId;
+  if (typeof window === "undefined") {
+    return "default_user";
+  }
+
+  let userId = localStorage.getItem(USER_ID_KEY);
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem(USER_ID_KEY, userId);
+  }
+  return userId;
 }
 
 export const api = axios.create({
@@ -67,43 +70,42 @@ export const api = axios.create({
 export async function getConversations(limit: number = 50): Promise<ConversationListResponse> {
   const res = await api.get("/conversations", {
     params: { limit },
-    headers: { "X-User-ID": getUserId() },
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
 export async function createConversation(title: string = "新对话"): Promise<Conversation> {
   const res = await api.post("/conversations", { title }, {
-    headers: { "X-User-ID": getUserId() },
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function getConversation(id: string): Promise<ConversationDetail> {
+export async function getConversation(id: number): Promise<Conversation> {
   const res = await api.get(`/conversations/${id}`, {
-    headers: { "X-User-ID": getUserId() },
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function updateConversation(id: string, title: string): Promise<Conversation> {
-  const res = await api.put(`/conversations/${id}`, { title }, {
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function deleteConversation(id: string): Promise<void> {
-  await api.delete(`/conversations/${id}`, {
-    headers: { "X-User-ID": getUserId() },
+export async function updateConversationTitle(id: number, title: string): Promise<void> {
+  await api.put(`/conversations/${id}/title`, { title }, {
+    headers: { "X-User-Id": getUserId() },
   });
 }
 
-export async function generateTitle(id: string): Promise<Conversation> {
+export async function generateTitle(id: number): Promise<Conversation> {
   const res = await api.post(`/conversations/${id}/generate-title`, {}, {
-    headers: { "X-User-ID": getUserId() },
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
+}
+
+export async function deleteConversation(id: number): Promise<void> {
+  await api.delete(`/conversations/${id}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
 }
 
 // ========== Chat API ==========
@@ -111,15 +113,12 @@ export async function generateTitle(id: string): Promise<Conversation> {
 /**
  * 流式聊天 API
  * 使用 Fetch API 处理 SSE 流式响应
- *
- * 注意：直接调用后端，绕过 Next.js rewrites 代理
- * Next.js 代理对 SSE 流式响应支持不完善，会导致流被缓冲
  */
 export async function chatStream(
-  request: ChatRequest & { user_id?: string },
+  request: ChatRequest,
   callbacks: {
     onChunk: (chunk: string) => void;
-    onReasoning?: (reasoning: string) => void;  // DeepSeek thinking mode
+    onReasoning?: (reasoning: string) => void;
     onDone: () => void;
     onError: (error: string) => void;
   }
@@ -134,9 +133,8 @@ export async function chatStream(
     }
   };
 
-  // 直接调用后端，绕过 Next.js rewrites 代理
-  // SSE 流式响应需要直接连接后端
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const userId = getUserId();
 
   try {
     const response = await fetch(`${apiUrl}/chat/stream`, {
@@ -144,6 +142,7 @@ export async function chatStream(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        "X-User-Id": userId,
       },
       body: JSON.stringify(request),
     });
@@ -214,18 +213,14 @@ function processSSELine(
     }
 
     try {
-      // Backend now sends json.dumps(chunk) to preserve newlines
       const parsedChunk: StreamEvent = JSON.parse(data);
 
-      // 根据事件类型分发
       if (parsedChunk.type === "reasoning" && onReasoning) {
         onReasoning(parsedChunk.content);
       } else if (parsedChunk.type === "token") {
         onChunk(parsedChunk.content);
       }
-      // 其他事件类型（update, final, error）暂时忽略
     } catch (e) {
-      // Fallback in case backend sends raw strings not json encoded
       onChunk(data);
     }
   }
@@ -233,12 +228,6 @@ function processSSELine(
 
 // ========== Extract API ==========
 
-/**
- * 从文本提取面经
- *
- * OCR + LLM 结构化提取耗时较长（可能超过 60 秒）
- * 直接调用后端，绕过 Next.js rewrites 代理
- */
 export async function extractText(text: string): Promise<ExtractResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
@@ -248,9 +237,7 @@ export async function extractText(text: string): Promise<ExtractResponse> {
   try {
     const res = await fetch(`${apiUrl}/extract/text`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
       signal: controller.signal,
     });
@@ -265,23 +252,13 @@ export async function extractText(text: string): Promise<ExtractResponse> {
   }
 }
 
-/**
- * 从图片提取面经（OCR + LLM 结构化）
- *
- * OCR 识别 + LLM 结构化提取耗时较长（可能超过 60 秒）
- * 直接调用后端，绕过 Next.js rewrites 代理
- */
-export async function extractImage(
-  files: FileList,
-  useOcr: boolean = false
-): Promise<ExtractResponse> {
+export async function extractImage(files: FileList): Promise<ExtractResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const formData = new FormData();
   Array.from(files).forEach((file) => {
     formData.append("images", file);
   });
-  formData.append("use_ocr", String(useOcr));
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
@@ -303,35 +280,80 @@ export async function extractImage(
   }
 }
 
-export async function confirmIngest(
-  interview: ExtractResponse
-): Promise<{ processed: number; async_tasks: number }> {
-  const res = await api.post("/extract/confirm", {
-    interview,
-    confirmed: true,
+// ========== Extract Task API ==========
+
+export async function submitExtractTask(
+  request: ExtractTaskSubmitRequest
+): Promise<ExtractTaskSubmitResponse> {
+  const res = await api.post("/extract/submit", request, {
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-// ========== Score API ==========
-
-export async function scoreAnswer(request: ScoreRequest): Promise<ScoreResult> {
-  const res = await api.post("/score", request);
+export async function getExtractTasks(params?: {
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<ExtractTaskListResponse> {
+  const res = await api.get("/extract/tasks", {
+    params,
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
+}
+
+export async function getExtractTask(taskId: number): Promise<ExtractTask> {
+  const res = await api.get(`/extract/tasks/${taskId}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function updateExtractTask(
+  taskId: number,
+  request: ExtractTaskUpdateRequest
+): Promise<ExtractTask> {
+  const res = await api.put(`/extract/tasks/${taskId}`, request, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function confirmExtractTask(taskId: number): Promise<ExtractTaskConfirmResponse> {
+  const res = await api.post(`/extract/tasks/${taskId}/confirm`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function cancelExtractTask(taskId: number): Promise<void> {
+  await api.post(`/extract/tasks/${taskId}/cancel`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+}
+
+export async function deleteExtractTask(taskId: number): Promise<void> {
+  await api.delete(`/extract/tasks/${taskId}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
 }
 
 // ========== Questions API ==========
 
 export async function getQuestions(params: {
   company?: string;
-  question_type?: string;
-  mastery_level?: number;
-  cluster_id?: string;
+  questionType?: string;
+  masteryLevel?: number;
+  clusterId?: string;
   keyword?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }): Promise<QuestionListResponse> {
-  const res = await api.get("/questions", { params });
+  const res = await api.get("/questions", {
+    params,
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
@@ -340,53 +362,34 @@ export async function getQuestion(id: string): Promise<Question> {
   return res.data;
 }
 
-export async function createQuestion(data: {
-  question_text: string;
-  company: string;
-  position: string;
-  question_type?: string;
-  core_entities?: string[];
-}): Promise<Question> {
-  const res = await api.post("/questions", data);
+export async function createQuestion(data: QuestionCreateRequest): Promise<Question> {
+  const res = await api.post("/questions", data, {
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
-export async function updateQuestion(
-  id: string,
-  data: Partial<Question>
-): Promise<Question> {
+export async function updateQuestion(id: string, data: QuestionUpdateRequest): Promise<Question> {
   const res = await api.put(`/questions/${id}`, data);
   return res.data;
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
-  await api.delete(`/questions/${id}`);
+  await api.delete(`/questions/${id}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
 }
 
-/**
- * 重新生成答案
- *
- * TODO: 改用 SSE 流式返回，避免长时间等待
- *   - 后端改为 StreamingResponse，实时返回生成内容
- *   - 前端使用 EventSource 或 fetch + ReadableStream 接收
- */
-export async function regenerateAnswer(
-  id: string,
-  preview: boolean = true
-): Promise<{ answer: string }> {
-  // LLM + Web Search 耗时较长（可能超过 60 秒）
+export async function regenerateAnswer(id: string, preview: boolean = true): Promise<Question> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
-  // 使用 AbortController 实现超时（3 分钟）
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
 
   try {
     const res = await fetch(`${apiUrl}/questions/${id}/regenerate?preview=${preview}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       signal: controller.signal,
     });
 
@@ -400,10 +403,33 @@ export async function regenerateAnswer(
   }
 }
 
+export async function publishQuestion(id: string): Promise<Question> {
+  const res = await api.post(`/questions/${id}/publish`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getBatchAnswers(
+  questionIds: string[]
+): Promise<{ answers: Record<string, string | null> }> {
+  const res = await api.post("/questions/batch/answers", { questionIds });
+  return res.data;
+}
+
 // ========== Search API ==========
 
 export async function search(request: SearchRequest): Promise<SearchResponse> {
-  const res = await api.post("/search", request);
+  const res = await api.post("/search", request, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+// ========== Score API ==========
+
+export async function scoreAnswer(request: ScoreRequest): Promise<ScoreResult> {
+  const res = await api.post("/score", request);
   return res.data;
 }
 
@@ -419,13 +445,13 @@ export async function getCompanyStats(): Promise<CompanyStats[]> {
   return res.data;
 }
 
-export async function getEntityStats(
-  company?: string,
-  limit?: number
-): Promise<EntityStats[]> {
-  const res = await api.get("/stats/entities", {
-    params: { company, limit },
-  });
+export async function getPositionStats(): Promise<PositionStats[]> {
+  const res = await api.get("/stats/positions");
+  return res.data;
+}
+
+export async function getEntityStats(company?: string, limit?: number): Promise<EntityStats[]> {
+  const res = await api.get("/stats/entities", { params: { company, limit } });
   return res.data;
 }
 
@@ -434,137 +460,173 @@ export async function getClusterStats(): Promise<ClusterStats[]> {
   return res.data;
 }
 
-export async function getPositionStats(): Promise<PositionStats[]> {
-  const res = await api.get("/stats/positions");
-  return res.data;
-}
-
-// ========== Extract Task API ==========
-
-export async function submitExtractTask(
-  request: ExtractTaskSubmitRequest
-): Promise<ExtractTaskSubmitResponse> {
-  const res = await api.post("/extract/submit", request, {
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function getExtractTasks(params?: {
-  status?: string;
-  page?: number;
-  page_size?: number;
-}): Promise<ExtractTaskListResponse> {
-  const res = await api.get("/extract/tasks", {
-    params,
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function getExtractTask(taskId: string): Promise<ExtractTask> {
-  const res = await api.get(`/extract/tasks/${taskId}`, {
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function updateExtractTask(
-  taskId: string,
-  request: ExtractTaskUpdateRequest
-): Promise<ExtractTask> {
-  const res = await api.put(`/extract/tasks/${taskId}`, request, {
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function confirmExtractTask(taskId: string): Promise<{
-  processed: number;
-  async_tasks: number;
-  question_ids: string[];
-}> {
-  const res = await api.post(`/extract/tasks/${taskId}/confirm`, {}, {
-    headers: { "X-User-ID": getUserId() },
-  });
-  return res.data;
-}
-
-export async function deleteExtractTask(taskId: string): Promise<void> {
-  await api.delete(`/extract/tasks/${taskId}`, {
-    headers: { "X-User-ID": getUserId() },
-  });
-}
-
-/**
- * 批量获取题目答案
- * 用于导入记录详情页显示答案
- */
-export async function getBatchAnswers(
-  questionIds: string[]
-): Promise<{ answers: Record<string, string | null> }> {
-  const res = await api.post("/questions/batch/answers", { question_ids: questionIds });
-  return res.data;
-}
-
 // ========== Favorites API ==========
 
 export async function addFavorite(questionId: string): Promise<FavoriteItem> {
-  const res = await api.post("/favorites", { question_id: questionId }, {
-    headers: { "X-User-ID": getUserId() },
+  const res = await api.post("/favorites", { questionId }, {
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function removeFavorite(questionId: string): Promise<void> {
-  await api.delete(`/favorites/${questionId}`, {
-    headers: { "X-User-ID": getUserId() },
+export async function removeFavorite(favoriteId: number): Promise<void> {
+  await api.delete(`/favorites/${favoriteId}`, {
+    headers: { "X-User-Id": getUserId() },
   });
 }
 
-export async function getFavorites(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<FavoriteListResponse> {
+export async function removeFavoriteByQuestionId(questionId: string): Promise<void> {
+  await api.delete(`/favorites/by-question/${questionId}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
+}
+
+export async function getFavorites(): Promise<FavoriteListResponse> {
   const res = await api.get("/favorites", {
-    params,
-    headers: { "X-User-ID": getUserId() },
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
 }
 
-export async function checkFavorites(
-  questionIds: string[]
-): Promise<CheckFavoritesResponse> {
-  const res = await api.post("/favorites/check", { question_ids: questionIds }, {
-    headers: { "X-User-ID": getUserId() },
+export async function checkFavorites(questionIds: string[]): Promise<CheckFavoritesResponse> {
+  const res = await api.post("/favorites/check", { questionIds }, {
+    headers: { "X-User-Id": getUserId() },
   });
   return res.data;
+}
+
+// ========== Interview API ==========
+
+export async function createInterviewSession(
+  request: CreateInterviewSessionRequest
+): Promise<InterviewSession> {
+  const res = await api.post("/interview/sessions", request, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getInterviewSessions(params?: {
+  limit?: number;
+  status?: string;
+}): Promise<InterviewSession[]> {
+  const res = await api.get("/interview/sessions", {
+    params,
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getInterviewSession(sessionId: number): Promise<InterviewSession> {
+  const res = await api.get(`/interview/sessions/${sessionId}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function submitInterviewAnswer(
+  sessionId: number,
+  request: SubmitAnswerRequest
+): Promise<void> {
+  // 流式回答，不等待完整响应
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  await fetch(`${apiUrl}/interview/sessions/${sessionId}/answer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": getUserId(),
+    },
+    body: JSON.stringify(request),
+  });
+}
+
+export async function getInterviewHint(sessionId: number): Promise<void> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  await fetch(`${apiUrl}/interview/sessions/${sessionId}/hint`, {
+    method: "POST",
+    headers: { "X-User-Id": getUserId() },
+  });
+}
+
+export async function skipInterviewQuestion(sessionId: number): Promise<InterviewSession> {
+  const res = await api.post(`/interview/sessions/${sessionId}/skip`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function pauseInterviewSession(sessionId: number): Promise<InterviewSession> {
+  const res = await api.post(`/interview/sessions/${sessionId}/pause`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function resumeInterviewSession(sessionId: number): Promise<InterviewSession> {
+  const res = await api.post(`/interview/sessions/${sessionId}/resume`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function endInterviewSession(sessionId: number): Promise<InterviewSession> {
+  const res = await api.post(`/interview/sessions/${sessionId}/end`, {}, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function getInterviewReport(sessionId: number): Promise<InterviewReport> {
+  const res = await api.get(`/interview/sessions/${sessionId}/report`, {
+    headers: { "X-User-Id": getUserId() },
+  });
+  return res.data;
+}
+
+export async function deleteInterviewSession(sessionId: number): Promise<void> {
+  await api.delete(`/interview/sessions/${sessionId}`, {
+    headers: { "X-User-Id": getUserId() },
+  });
 }
 
 // ========== Memory API ==========
 
-export async function getMemoryContent(userId: string): Promise<{ content: string }> {
-  const res = await api.get(`/memory/${userId}/content`);
+export async function getMemory(): Promise<MemoryResponse> {
+  const res = await api.get("/memory/me", {
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
-export async function getPreferences(userId: string): Promise<{ content: string }> {
-  const res = await api.get(`/memory/${userId}/preferences`);
+export async function getMemoryContent(): Promise<string> {
+  const res = await api.get("/memory/me/content", {
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
-export async function getBehaviors(userId: string): Promise<{ content: string }> {
-  const res = await api.get(`/memory/${userId}/behaviors`);
+export async function getPreferences(): Promise<string> {
+  const res = await api.get("/memory/me/preferences", {
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
-export async function updatePreferences(userId: string, content: string): Promise<{ success: boolean }> {
-  const res = await api.put(`/memory/${userId}/preferences`, { content });
+export async function getBehaviors(): Promise<string> {
+  const res = await api.get("/memory/me/behaviors", {
+    headers: { "X-User-Id": getUserId() },
+  });
   return res.data;
 }
 
-export async function updateBehaviors(userId: string, content: string): Promise<{ success: boolean }> {
-  const res = await api.put(`/memory/${userId}/behaviors`, { content });
-  return res.data;
+export async function updatePreferences(content: string): Promise<void> {
+  await api.put("/memory/me/preferences", { content }, {
+    headers: { "X-User-Id": getUserId() },
+  });
+}
+
+export async function updateBehaviors(content: string): Promise<void> {
+  await api.put("/memory/me/behaviors", { content }, {
+    headers: { "X-User-Id": getUserId() },
+  });
 }
