@@ -357,7 +357,7 @@ export async function getQuestions(params: {
   return res.data;
 }
 
-export async function getQuestion(id: number): Promise<Question> {
+export async function getQuestion(id: string): Promise<Question> {
   const res = await api.get(`/questions/${id}`);
   return res.data;
 }
@@ -369,18 +369,18 @@ export async function createQuestion(data: QuestionCreateRequest): Promise<Quest
   return res.data;
 }
 
-export async function updateQuestion(id: string | number, data: QuestionUpdateRequest): Promise<Question> {
+export async function updateQuestion(id: string, data: QuestionUpdateRequest): Promise<Question> {
   const res = await api.put(`/questions/${id}`, data);
   return res.data;
 }
 
-export async function deleteQuestion(id: string | number): Promise<void> {
+export async function deleteQuestion(id: string): Promise<void> {
   await api.delete(`/questions/${id}`, {
     headers: { "X-User-Id": getUserId() },
   });
 }
 
-export async function regenerateAnswer(id: string | number, preview: boolean = true): Promise<Question> {
+export async function regenerateAnswer(id: string, preview: boolean = true): Promise<Question> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const controller = new AbortController();
@@ -403,7 +403,7 @@ export async function regenerateAnswer(id: string | number, preview: boolean = t
   }
 }
 
-export async function publishQuestion(id: string | number): Promise<Question> {
+export async function publishQuestion(id: string): Promise<Question> {
   const res = await api.post(`/questions/${id}/publish`, {}, {
     headers: { "X-User-Id": getUserId() },
   });
@@ -411,7 +411,7 @@ export async function publishQuestion(id: string | number): Promise<Question> {
 }
 
 export async function getBatchAnswers(
-  questionIds: (string | number)[]
+  questionIds: string[]
 ): Promise<{ answers: Record<string, string | null> }> {
   const res = await api.post("/questions/batch/answers", { questionIds });
   return res.data;
@@ -462,8 +462,8 @@ export async function getClusterStats(): Promise<ClusterStats[]> {
 
 // ========== Favorites API ==========
 
-export async function addFavorite(questionId: number | string): Promise<FavoriteItem> {
-  const res = await api.post("/favorites", { questionId: Number(questionId) }, {
+export async function addFavorite(questionId: string): Promise<FavoriteItem> {
+  const res = await api.post("/favorites", { questionId }, {
     headers: { "X-User-Id": getUserId() },
   });
   return res.data;
@@ -475,7 +475,7 @@ export async function removeFavorite(favoriteId: number): Promise<void> {
   });
 }
 
-export async function removeFavoriteByQuestionId(questionId: number | string): Promise<void> {
+export async function removeFavoriteByQuestionId(questionId: string): Promise<void> {
   await api.delete(`/favorites/by-question/${questionId}`, {
     headers: { "X-User-Id": getUserId() },
   });
@@ -488,10 +488,10 @@ export async function getFavorites(): Promise<FavoriteListResponse> {
   return res.data;
 }
 
-export async function checkFavorites(questionIds: (number | string)[]): Promise<CheckFavoritesResponse> {
-  // 转换为 number 数组，后端期望 Long[]
-  const numericIds = questionIds.map(id => Number(id));
-  const res = await api.post("/favorites/check", { questionIds: numericIds }, {
+export async function checkFavorites(questionIds: string[]): Promise<CheckFavoritesResponse> {
+  // 去重，后端期望 String[] (Long 序列化后)
+  const uniqueIds = [...new Set(questionIds)];
+  const res = await api.post("/favorites/check", { questionIds: uniqueIds }, {
     headers: { "X-User-Id": getUserId() },
   });
   // 后端返回 Map<Long, Boolean>，转换为 Record<string, boolean>

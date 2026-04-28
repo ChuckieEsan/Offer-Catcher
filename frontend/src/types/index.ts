@@ -31,7 +31,7 @@ export interface ChatRequest {
 // ========== Question ==========
 
 export interface Question {
-  id: number;  // Long，后端返回的字段名是 id
+  id: string;  // Long 序列化为 String，避免 JS 精度丢失
   questionHash: string;
   questionText: string;
   company: string;
@@ -178,7 +178,7 @@ export interface ExtractTaskConfirmResponse {
 export interface FavoriteItem {
   favoriteId: number;  // Long
   userId: string;
-  questionId: number;  // Long
+  questionId: string;  // Long 序列化为 String
   createdAt: string;
 }
 

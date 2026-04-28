@@ -34,7 +34,7 @@ export default function FavoritesPage() {
   const { message } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
-  const [questions, setQuestions] = useState<Record<number, Question>>({});
+  const [questions, setQuestions] = useState<Record<string, Question>>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -55,7 +55,7 @@ export default function FavoritesPage() {
       setFavorites(res.favorites);
 
       // 批量获取题目详情
-      const questionDetails: Record<number, Question> = {};
+      const questionDetails: Record<string, Question> = {};
       for (const item of res.favorites) {
         try {
           const question = await getQuestion(item.questionId);
@@ -72,7 +72,7 @@ export default function FavoritesPage() {
     }
   };
 
-  const handleRemoveFavorite = async (favoriteId: number, questionId: number) => {
+  const handleRemoveFavorite = async (favoriteId: number, questionId: string) => {
     try {
       await removeFavorite(favoriteId);
       message.success("已取消收藏");
@@ -87,7 +87,7 @@ export default function FavoritesPage() {
     }
   };
 
-  const handleView = (questionId: number) => {
+  const handleView = (questionId: string) => {
     const question = questions[questionId];
     if (question) {
       setViewDrawer({ visible: true, question });
@@ -109,7 +109,7 @@ export default function FavoritesPage() {
       dataIndex: "questionId",
       key: "company",
       width: 140,
-      render: (questionId: number) => {
+      render: (questionId: string) => {
         const question = questions[questionId];
         return question ? (
           <Tag color="blue">{question.company}</Tag>
@@ -123,7 +123,7 @@ export default function FavoritesPage() {
       dataIndex: "questionId",
       key: "questionText",
       ellipsis: true,
-      render: (questionId: number) => {
+      render: (questionId: string) => {
         const question = questions[questionId];
         return question ? (
           <a onClick={() => handleView(questionId)} style={{ color: "#1890ff" }}>
@@ -139,7 +139,7 @@ export default function FavoritesPage() {
       dataIndex: "questionId",
       key: "questionType",
       width: 100,
-      render: (questionId: number) => {
+      render: (questionId: string) => {
         const question = questions[questionId];
         return question ? <Tag>{question.questionType}</Tag> : null;
       },
@@ -149,7 +149,7 @@ export default function FavoritesPage() {
       dataIndex: "questionId",
       key: "masteryLevel",
       width: 100,
-      render: (questionId: number) => {
+      render: (questionId: string) => {
         const question = questions[questionId];
         return question ? getMasteryTag(question.masteryLevel) : null;
       },

@@ -203,9 +203,9 @@ export default function ExtractPage() {
 
       // 如果任务已入库，批量获取答案
       if (task.status === "confirmed" && task.result) {
-        const questions = task.result.questions as Array<{ questionId?: number; question_id?: number }> | undefined;
+        const questions = task.result.questions as Array<{ questionId?: string; question_id?: string }> | undefined;
         if (questions && questions.length > 0) {
-          const questionIds = questions.map((q) => q.questionId || q.question_id || 0);
+          const questionIds = questions.map((q) => q.questionId || q.question_id || "");
           try {
             const { answers } = await getBatchAnswers(questionIds);
             setAnswersMap(answers);

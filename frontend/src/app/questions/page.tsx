@@ -56,6 +56,12 @@ export default function QuestionsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  // 过滤器变化时重置到第一页
+  const handleFilterChange = (setter: (value: any) => void) => (value: any) => {
+    setter(value);
+    setPage(1);
+  };
+
   // 公司列表
   const [companies, setCompanies] = useState<CompanyStats[]>([]);
 
@@ -152,20 +158,17 @@ export default function QuestionsPage() {
         pageSize,
       });
 
-      // 如果有收藏过滤，只显示收藏的题目
+      // 去重后的题目 ID 列表
+      const uniqueIds = [...new Set(res.questions.map((q) => q.id))];
+
       let filteredItems = res.questions;
-      if (filterFavorite) {
-        // 先检查所有题目的收藏状态
-        const questionIds = res.questions.map((q) => String(q.id));
-        const { favorited } = await checkFavorites(questionIds);
-        filteredItems = res.questions.filter((q) => favorited[String(q.id)]);
+      if (uniqueIds.length > 0) {
+        const { favorited } = await checkFavorites(uniqueIds);
         setFavoriteStatus(favorited);
-      } else {
-        // 检查当前页题目的收藏状态
-        if (res.questions.length > 0) {
-          const questionIds = res.questions.map((q) => String(q.id));
-          const { favorited } = await checkFavorites(questionIds);
-          setFavoriteStatus(favorited);
+
+        // 如果有收藏过滤，使用刚获取的 favorited 结果过滤
+        if (filterFavorite) {
+          filteredItems = res.questions.filter((q) => favorited[q.id]);
         }
       }
 
@@ -186,7 +189,7 @@ export default function QuestionsPage() {
         message.success("已取消收藏");
         // 如果在收藏过滤模式下，从列表移除
         if (filterFavorite) {
-          setQuestions((prev) => prev.filter((q) => String(q.id) !== questionId));
+          setQuestions((prev) => prev.filter((q) => q.id !== questionId));
         }
       } else {
         await addFavorite(questionId);
@@ -228,9 +231,9 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
-      await deleteQuestion(String(id));
+      await deleteQuestion(id);
       message.success("删除成功");
       loadQuestions();
     } catch (error) {
@@ -238,12 +241,12 @@ export default function QuestionsPage() {
     }
   };
 
-  const handleRegenerate = async (id: number) => {
-    setRegenerating(String(id));
+  const handleRegenerate = async (id: string) => {
+    setRegenerating(id);
     const hide = message.loading("正在生成新答案...", 0);
     try {
       // preview=true 只生成不保存
-      const res = await regenerateAnswer(String(id), true);
+      const res = await regenerateAnswer(id, true);
       hide();
 
       // 获取题目文本用于显示
@@ -253,7 +256,7 @@ export default function QuestionsPage() {
       // 显示预览 Modal
       setPreviewModal({
         visible: true,
-        questionId: String(id),
+        questionId: id,
         questionText,
         newAnswer: res.questionAnswer || "",
       });
@@ -430,7 +433,7 @@ export default function QuestionsPage() {
             showSearch
             style={{ width: 220 }}
             value={filterCluster}
-            onChange={setFilterCluster}
+            onChange={handleFilterChange(setFilterCluster)}
             options={clusters.map((c) => ({
               value: c.clusterId,
               label: `${formatClusterName(c.clusterId)} (${c.count})`
@@ -442,7 +445,7 @@ export default function QuestionsPage() {
             showSearch
             style={{ width: 180 }}
             value={filterCompany}
-            onChange={setFilterCompany}
+            onChange={handleFilterChange(setFilterCompany)}
             options={companies.map((c) => ({ value: c.company, label: `${c.company} (${c.count})` }))}
           />
           <Select
@@ -450,7 +453,7 @@ export default function QuestionsPage() {
             allowClear
             style={{ width: 120 }}
             value={filterType}
-            onChange={setFilterType}
+            onChange={handleFilterChange(setFilterType)}
             options={[
               { value: "knowledge", label: "知识题" },
               { value: "project", label: "项目题" },
@@ -463,7 +466,7 @@ export default function QuestionsPage() {
             allowClear
             style={{ width: 120 }}
             value={filterMastery}
-            onChange={setFilterMastery}
+            onChange={handleFilterChange(setFilterMastery)}
             options={[
               { value: 0, label: "未掌握" },
               { value: 1, label: "熟悉" },
@@ -473,7 +476,10 @@ export default function QuestionsPage() {
           <Button
             type={filterFavorite ? "primary" : "default"}
             icon={filterFavorite ? <StarFilled /> : <StarOutlined />}
-            onClick={() => setFilterFavorite(filterFavorite ? undefined : true)}
+            onClick={() => {
+              setFilterFavorite(filterFavorite ? undefined : true);
+              setPage(1);
+            }}
           >
             仅看收藏
           </Button>
@@ -482,7 +488,10 @@ export default function QuestionsPage() {
             allowClear
             style={{ width: 240 }}
             defaultValue={searchKeyword}
-            onSearch={(value) => setSearchKeyword(value || undefined)}
+            onSearch={(value) => {
+              setSearchKeyword(value || undefined);
+              setPage(1);
+            }}
           />
         </Space>
       </Card>

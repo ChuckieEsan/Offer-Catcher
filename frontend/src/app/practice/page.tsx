@@ -95,7 +95,7 @@ export default function PracticePage() {
       const withAnswer = res.results.filter((r) => r.questionAnswer);
       // 转换为 Question 类型
       setQuestions(withAnswer.map((r) => ({
-        id: Number(r.questionId),
+        id: r.questionId,
         questionHash: "",
         questionText: r.questionText,
         company: r.company,
@@ -139,7 +139,7 @@ export default function PracticePage() {
       const res = await search({ query: selectedEntity || "", k: 100 });
       const withAnswer = res.results.filter((r) => r.questionAnswer);
       setQuestions(withAnswer.map((r) => ({
-        id: Number(r.questionId),
+        id: r.questionId,
         questionHash: "",
         questionText: r.questionText,
         company: r.company,
@@ -337,7 +337,7 @@ export default function PracticePage() {
                   const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results.map((r) => ({
-                    id: Number(r.questionId),
+                    id: r.questionId,
                     questionHash: "",
                     questionText: r.questionText,
                     company: r.company,
@@ -370,7 +370,7 @@ export default function PracticePage() {
                   const { search } = await import("@/lib/api");
                   const res = await search({ query: searchQuery, k: 20 });
                   setQuestions(res.results.map((r) => ({
-                    id: Number(r.questionId),
+                    id: r.questionId,
                     questionHash: "",
                     questionText: r.questionText,
                     company: r.company,
