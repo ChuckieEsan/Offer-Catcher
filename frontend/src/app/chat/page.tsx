@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Layout,
   Button,
@@ -37,28 +37,94 @@ const { Sider, Content } = Layout;
 const { TextArea } = Input;
 const { Title, Text, Paragraph } = Typography;
 
-// 思考中提示组件
-function ThinkingIndicator() {
+// 思考过程显示组件（可折叠）
+function ReasoningBlock({ content }: { content: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <LoadingOutlined spin style={{ color: "#1890ff" }} />
-      <Text type="secondary">AI 正在思考中...</Text>
+    <div
+      style={{
+        background: "#f5f5f5",
+        borderRadius: 4,
+        padding: 8,
+        marginBottom: 8,
+        fontSize: 12,
+        color: "#8c8c8c",
+        maxHeight: 120,
+        overflow: "auto",
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      <div style={{ marginBottom: 4, fontWeight: 500 }}>💭 思考过程</div>
+      {content}
     </div>
   );
 }
 
-// 消息项组件 - 使用 React.memo 避免不必要的重渲染
+// 工具调用提示组件（流式输出时显示）
+function ToolCallIndicator({ info }: { info: string }) {
+  return (
+    <div
+      style={{
+        background: "#e6f7ff",
+        borderRadius: 4,
+        padding: 4,
+        marginBottom: 8,
+        fontSize: 12,
+        color: "#1890ff",
+      }}
+    >
+      🔧 {info}
+    </div>
+  );
+}
+
+// 工具调用列表组件（显示历史工具调用）
+function ToolCallList({ toolCallsJson }: { toolCallsJson: string }) {
+  try {
+    const toolCalls = JSON.parse(toolCallsJson);
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
+
+    return (
+      <div
+        style={{
+          background: "#e6f7ff",
+          borderRadius: 4,
+          padding: 8,
+          marginBottom: 8,
+          fontSize: 12,
+        }}
+      >
+        <div style={{ marginBottom: 4, fontWeight: 500, color: "#1890ff" }}>🔧 工具调用</div>
+        {toolCalls.map((call: { name?: string; result?: string }, idx: number) => (
+          <div key={idx} style={{ color: "#595959", marginTop: 2 }}>
+            {call.name || "工具"}: {call.result?.substring(0, 100) || "..."}
+          </div>
+        ))}
+      </div>
+    );
+  } catch {
+    return null;
+  }
+}
+
+// 消息项组件
 const MessageItem = React.memo(function MessageItem({
   msg,
   isStreaming,
-  isCompleted,
-  streamingConfig,
+  reasoningContent,
+  toolCallInfo,
 }: {
   msg: Message;
   isStreaming: boolean;
-  isCompleted: boolean;
-  streamingConfig: { hasNextChunk: boolean; enableAnimation: boolean; tail: boolean };
+  reasoningContent?: string;
+  toolCallInfo?: string;
 }) {
+  // 历史消息的思考内容和工具调用（来自 msg 对象）
+  const historicalReasoning = msg.reasoning;
+  const historicalToolCalls = msg.toolCalls;
+
+  // 显示的思考内容：优先流式输出，其次历史记录
+  const displayReasoning = reasoningContent || historicalReasoning;
+
   return (
     <div
       style={{
@@ -76,18 +142,22 @@ const MessageItem = React.memo(function MessageItem({
       >
         {msg.role === "assistant" ? (
           <>
-            {/* 最终回答 */}
-            {msg.content === "" ? (
-              <ThinkingIndicator />
-            ) : isStreaming && !isCompleted ? (
-              <XMarkdown
-                content={msg.content}
-                streaming={streamingConfig}
-                className="markdown-body"
-              />
-            ) : (
+            {/* 工具调用：流式输出时显示实时提示，历史消息显示工具调用列表 */}
+            {isStreaming && toolCallInfo && <ToolCallIndicator info={toolCallInfo} />}
+            {!isStreaming && historicalToolCalls && <ToolCallList toolCallsJson={historicalToolCalls} />}
+
+            {/* 思考过程 */}
+            {displayReasoning && <ReasoningBlock content={displayReasoning} />}
+
+            {/* 正式回答 */}
+            {msg.content === "" && !displayReasoning && !toolCallInfo && !historicalToolCalls ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <LoadingOutlined spin style={{ color: "#1890ff" }} />
+                <Text type="secondary">AI 正在思考中...</Text>
+              </div>
+            ) : msg.content ? (
               <XMarkdown content={msg.content} className="markdown-body" />
-            )}
+            ) : null}
           </>
         ) : (
           <Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>
@@ -119,19 +189,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  // 记录已完成的消息 ID，用于切换渲染模式
-  const [completedMessageIds, setCompletedMessageIds] = useState<Set<string>>(new Set());
-
-  // 缓存 streaming 配置，避免每次渲染创建新对象导致 XMarkdown 无限循环
-  // 注意：禁用 enableAnimation 以避免动画触发无限循环
-  const streamingConfig = useMemo(
-    () => ({
-      hasNextChunk: true,
-      enableAnimation: false,  // 禁用动画，避免无限循环
-      tail: true,
-    }),
-    []
-  );
+  // 流式输出状态
+  const [reasoningContent, setReasoningContent] = useState<string>("");
+  const [toolCallInfo, setToolCallInfo] = useState<string>("");
 
   // 标题编辑状态
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
@@ -204,14 +264,12 @@ export default function ChatPage() {
     setLoadingMessages(true);
     setMessages([]);
     setStreamingMessageId(null);
-    setCompletedMessageIds(new Set());
+    setReasoningContent("");
+    setToolCallInfo("");
 
     try {
       const conversation = await getConversation(id);
       const msgs = conversation.messages || [];
-      // 历史消息全部标记为已完成
-      const completedIds = new Set(msgs.map((m) => m.messageId));
-      setCompletedMessageIds(completedIds);
       setMessages(msgs);
     } catch (error) {
       message.error("加载消息失败");
@@ -227,7 +285,8 @@ export default function ChatPage() {
       setActiveConversation(conv.conversationId);
       setMessages([]);
       setStreamingMessageId(null);
-      setCompletedMessageIds(new Set());
+      setReasoningContent("");
+      setToolCallInfo("");
       message.success("创建新对话");
     } catch (error) {
       message.error("创建会话失败");
@@ -308,6 +367,8 @@ export default function ChatPage() {
     setInput("");
     setStreaming(true);
     setStreamingMessageId(aiMessageId);
+    setReasoningContent("");
+    setToolCallInfo("");
 
     await chatStream(
       {
@@ -315,10 +376,12 @@ export default function ChatPage() {
         conversationId: activeConversation,
       },
       {
-        onReasoning: (reasoning) => {
-          // DeepSeek thinking mode - 如果需要可以处理
+        onReasoning: (chunk) => {
+          // 增量思考过程（累加）
+          setReasoningContent((prev) => prev + chunk);
         },
-        onChunk: (chunk) => {
+        onText: (chunk) => {
+          // 增量正式回答（累加）
           setMessages((prev) =>
             prev.map((msg) =>
               msg.messageId === aiMessageId
@@ -327,15 +390,20 @@ export default function ChatPage() {
             )
           );
         },
+        onToolCall: (info) => {
+          // 工具调用提示
+          setToolCallInfo(info);
+        },
         onDone: () => {
           setStreaming(false);
           setStreamingMessageId(null);
-          setCompletedMessageIds((prev) => new Set([...prev, aiMessageId]));
+          setReasoningContent("");
+          setToolCallInfo("");
 
-          // 自动生成标题（消息数达到 6 条且标题为"新对话"）
+          // 自动生成标题（基于消息数量）
           const currentConv = conversationsRef.current.find((c) => c.conversationId === activeConversation);
           if (currentConv && currentConv.title === "新对话") {
-            const totalMessages = messagesRef.current.length + 2;
+            const totalMessages = messagesRef.current.length;
             if (totalMessages >= 6) {
               generateTitle(activeConversation)
                 .then((updated) => {
@@ -556,8 +624,8 @@ export default function ChatPage() {
                         key={msg.messageId}
                         msg={msg}
                         isStreaming={msg.messageId === streamingMessageId}
-                        isCompleted={completedMessageIds.has(msg.messageId)}
-                        streamingConfig={streamingConfig}
+                        reasoningContent={msg.messageId === streamingMessageId ? reasoningContent : undefined}
+                        toolCallInfo={msg.messageId === streamingMessageId ? toolCallInfo : undefined}
                       />
                     ))}
                   </>

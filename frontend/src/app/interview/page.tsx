@@ -227,15 +227,57 @@ export default function InterviewPage() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
     // 在函数内部定义回调，使用局部变量 aiMsgId
-    const processChunk = (chunk: { type: string; content?: string }) => {
-      if (chunk.type === "token" && chunk.content) {
+    const processChunk = (chunk: { type: string; content?: string; score?: number; feedback?: string; message?: string; next_question?: string }) => {
+      // 处理评分结果
+      if (chunk.type === "score_result") {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
-              ? { ...msg, content: msg.content + chunk.content }
+              ? { ...msg, content: chunk.feedback || "已评分" }
               : msg
           )
         );
+      }
+      // 处理追问
+      if (chunk.type === "follow_up") {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? { ...msg, content: `得分: ${chunk.score}分，请继续深入回答这个问题...` }
+              : msg
+          )
+        );
+      }
+      // 处理强制下一题
+      if (chunk.type === "force_next") {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? { ...msg, content: chunk.message || "进入下一题" }
+              : msg
+          )
+        );
+        setShowNextButton(true);
+        setNextQuestionText(chunk.next_question || null);
+      }
+      // 处理下一题准备
+      if (chunk.type === "next_question_ready") {
+        setShowNextButton(true);
+        setNextQuestionText(chunk.next_question || null);
+      }
+      // 处理面试结束
+      if (chunk.type === "completed") {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === aiMsgId
+              ? { ...msg, content: chunk.message || "面试已结束" }
+              : msg
+          )
+        );
+      }
+      // 处理错误
+      if (chunk.type === "error") {
+        message.error(chunk.message || chunk.content || "发生错误");
       }
     };
 
@@ -351,7 +393,8 @@ export default function InterviewPage() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
     const processChunk = (chunk: { type: string; content?: string }) => {
-      if (chunk.type === "token" && chunk.content) {
+      // 处理文本内容（提示流）
+      if (chunk.type === "text" && chunk.content) {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === aiMsgId
@@ -359,6 +402,10 @@ export default function InterviewPage() {
               : msg
           )
         );
+      }
+      // 处理错误
+      if (chunk.type === "error") {
+        message.error(chunk.content || "发生错误");
       }
     };
 

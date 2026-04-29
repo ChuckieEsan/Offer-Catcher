@@ -115,18 +115,24 @@ export async function deleteConversation(id: string): Promise<void> {
 
 /**
  * 流式聊天 API
- * 使用 Fetch API 处理 SSE 流式响应
+ *
+ * 后端事件类型：
+ * - reasoning: 增量思考过程（累加显示）
+ * - text: 增量正式回答（累加显示）
+ * - tool_result: 工具调用提示
+ * - agent_result: Agent 结束信号
  */
 export async function chatStream(
   request: ChatRequest,
   callbacks: {
-    onChunk: (chunk: string) => void;
-    onReasoning?: (reasoning: string) => void;
+    onReasoning?: (chunk: string) => void;   // 增量思考过程
+    onText?: (chunk: string) => void;        // 增量正式回答
+    onToolCall?: (info: string) => void;     // 工具调用提示
     onDone: () => void;
     onError: (error: string) => void;
   }
 ): Promise<void> {
-  const { onChunk, onReasoning, onDone, onError } = callbacks;
+  const { onReasoning, onText, onToolCall, onDone, onError } = callbacks;
   let doneCalled = false;
 
   const safeOnDone = () => {
@@ -167,7 +173,7 @@ export async function chatStream(
 
       if (done) {
         if (buffer.trim()) {
-          processSSELine(buffer, onChunk, onReasoning, safeOnDone);
+          processSSELine(buffer, onReasoning, onText, onToolCall, safeOnDone);
         }
         break;
       }
@@ -179,7 +185,7 @@ export async function chatStream(
 
       for (const line of lines) {
         if (line.trim()) {
-          processSSELine(line, onChunk, onReasoning, safeOnDone);
+          processSSELine(line, onReasoning, onText, onToolCall, safeOnDone);
         }
       }
     }
@@ -191,41 +197,71 @@ export async function chatStream(
 }
 
 interface StreamEvent {
-  type: "token" | "reasoning" | "update" | "final" | "error";
+  type: "reasoning" | "text" | "tool_result" | "agent_result" | "error";
   content: string;
-  node?: string;
 }
 
+/**
+ * 处理 SSE 单行数据
+ */
 function processSSELine(
   line: string,
-  onChunk: (chunk: string) => void,
-  onReasoning: ((reasoning: string) => void) | undefined,
+  onReasoning: ((chunk: string) => void) | undefined,
+  onText: ((chunk: string) => void) | undefined,
+  onToolCall: ((info: string) => void) | undefined,
   onDone: () => void
 ): void {
-  if (line.startsWith("data: ")) {
-    const data = line.slice(6);
+  if (!line.startsWith("data:")) {
+    return;
+  }
 
-    if (data === "[DONE]") {
-      onDone();
-      return;
+  const data = line.startsWith("data: ") ? line.slice(6) : line.slice(5);
+
+  if (data === "[DONE]") {
+    onDone();
+    return;
+  }
+
+  if (!data.trim()) {
+    return;
+  }
+
+  try {
+    const event: StreamEvent = JSON.parse(data);
+
+    switch (event.type) {
+      case "reasoning":
+        // 增量思考过程
+        if (onReasoning && event.content) {
+          onReasoning(event.content);
+        }
+        break;
+
+      case "text":
+        // 增量正式回答
+        if (onText && event.content) {
+          onText(event.content);
+        }
+        break;
+
+      case "tool_result":
+        // 工具调用提示
+        if (onToolCall && event.content) {
+          onToolCall(event.content);
+        }
+        break;
+
+      case "agent_result":
+        // Agent 结束信号
+        break;
+
+      case "error":
+        console.error("Stream error:", event.content);
+        break;
     }
-
-    if (data.startsWith("[ERROR]")) {
-      console.error("Stream error:", data);
-      return;
-    }
-
-    try {
-      const parsedChunk: StreamEvent = JSON.parse(data);
-
-      if (parsedChunk.type === "reasoning" && onReasoning) {
-        onReasoning(parsedChunk.content);
-      } else if (parsedChunk.type === "token") {
-        onChunk(parsedChunk.content);
-      }
-    } catch (e) {
-      onChunk(data);
-    }
+  } catch (e) {
+    // 解析失败，忽略
+    console.warn("Failed to parse SSE data:", data);
   }
 }
 

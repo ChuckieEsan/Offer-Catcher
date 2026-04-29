@@ -6,6 +6,8 @@ export interface Message {
   messageId: string;  // Long 序列化为 String
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;      // AI 思考过程（仅 assistant 消息）
+  toolCalls?: string;      // 工具调用信息 JSON（仅 assistant 消息）
   createdAt: string;
 }
 
